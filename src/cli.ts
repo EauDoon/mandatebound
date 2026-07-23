@@ -13,17 +13,34 @@ import {
   type ApiServer,
   type PlatformEngine,
 } from "./api.js";
+import {
+  createMandateBoundCasePack,
+  verifyMandateBoundCasePack,
+  type CasePackVerificationAnchors,
+  type MandateBoundCasePack,
+} from "./casepack.js";
+import {
+  diffMandateBoundCasePacks,
+  unpackMandateBoundCasePack,
+} from "./casepack-tools.js";
+import { getConformanceStatement } from "./conformance.js";
 import type {
   AppealEvent,
   EvidenceBundle,
   EvaluationInput,
   LiabilityDecision,
 } from "./domain.js";
+import {
+  diffRulebooks,
+  testPolicyPack,
+  validatePolicyPack,
+} from "./policy-tools.js";
+import { createCaseReport, renderCaseReportHtml } from "./report.js";
 import { simulateScenario } from "./simulator.js";
 import { parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
-import { PROTOCOL_VERSION } from "./version.js";
+import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 
 export const CLI_EXIT = Object.freeze({
   SUCCESS: 0,
@@ -66,6 +83,7 @@ class CliError extends Error {
 const VALUE_OPTIONS = new Set(["--store", "--host", "--port", "--scenario", "--input", "--format"]);
 const FLAG_OPTIONS = new Set(["--allow-remote", "--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const first = argv[0];
@@ -156,6 +174,16 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function hasExactKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): boolean {
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => allowed.has(key));
+}
+
 async function storeFor(
   args: ParsedArgs,
   injected: DecisionAppealStore | undefined,
@@ -193,11 +221,13 @@ function requireSingleInput(args: ParsedArgs): string | undefined {
   return typeof option === "string" ? option : args.positionals[0];
 }
 
-function assertJsonFormat(args: ParsedArgs): void {
+function assertOutputFormat(args: ParsedArgs, allowed: readonly string[]): string {
   const format = args.options["format"];
-  if (format !== undefined && format !== "json") {
-    throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Only JSON output is supported.");
+  const resolved = typeof format === "string" ? format : allowed[0];
+  if (resolved === undefined || !allowed.includes(resolved)) {
+    throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Requested output format is not supported.");
   }
+  return resolved;
 }
 
 function assertAllowedOptions(args: ParsedArgs, allowed: readonly string[]): void {
@@ -219,6 +249,140 @@ function parsePort(value: string | boolean | undefined): number {
   return port;
 }
 
+function requireSubcommandInput(
+  args: ParsedArgs,
+  actions: readonly string[],
+): { readonly action: string; readonly path?: string } {
+  const action = args.positionals[0];
+  if (action === undefined || !actions.includes(action) || args.positionals.length > 2) {
+    throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Command action is missing or unsupported.");
+  }
+  const positionalPath = args.positionals[1];
+  const optionPath = args.options["input"];
+  if (positionalPath !== undefined && optionPath !== undefined) {
+    throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Command accepts at most one input path.");
+  }
+  const path = typeof optionPath === "string" ? optionPath : positionalPath;
+  return { action, ...(path === undefined ? {} : { path }) };
+}
+
+function decodeBase64(value: unknown): Uint8Array {
+  if (
+    typeof value !== "string"
+    || value.length === 0
+    || value.length > MAX_CLI_INPUT_BYTES * 2
+    || !BASE64_PATTERN.test(value)
+  ) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Encoded evidence bytes are invalid.");
+  }
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.toString("base64") !== value) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Encoded evidence bytes are invalid.");
+  }
+  return bytes;
+}
+
+function decodeCasePackAnchors(value: unknown): CasePackVerificationAnchors {
+  const record = asObject(value);
+  if (
+    !hasExactKeys(
+      record,
+      ["asOf", "coveragePolicyDigest", "coverageContractDigest"],
+      ["externalTrustSnapshotDigest", "rawEvidence"],
+    )
+    || typeof record["asOf"] !== "string"
+    || typeof record["coveragePolicyDigest"] !== "string"
+    || typeof record["coverageContractDigest"] !== "string"
+    || (
+      record["externalTrustSnapshotDigest"] !== undefined
+      && typeof record["externalTrustSnapshotDigest"] !== "string"
+    )
+  ) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack anchors are invalid.");
+  }
+  let rawEvidence: { readonly referenceId: string; readonly bytes: Uint8Array }[] | undefined;
+  if (record["rawEvidence"] !== undefined) {
+    if (!Array.isArray(record["rawEvidence"]) || record["rawEvidence"].length > 1_024) {
+      throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack raw evidence is invalid.");
+    }
+    rawEvidence = record["rawEvidence"].map((item) => {
+      const entry = asObject(item);
+      if (
+        !hasExactKeys(entry, ["referenceId", "bytesBase64"])
+        || typeof entry["referenceId"] !== "string"
+      ) {
+        throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack raw evidence is invalid.");
+      }
+      return {
+        referenceId: entry["referenceId"],
+        bytes: decodeBase64(entry["bytesBase64"]),
+      };
+    });
+  }
+  return {
+    asOf: record["asOf"],
+    coveragePolicyDigest: record["coveragePolicyDigest"] as CasePackVerificationAnchors["coveragePolicyDigest"],
+    coverageContractDigest: record["coverageContractDigest"] as CasePackVerificationAnchors["coverageContractDigest"],
+    ...(typeof record["externalTrustSnapshotDigest"] === "string"
+      ? {
+          externalTrustSnapshotDigest:
+            record["externalTrustSnapshotDigest"] as NonNullable<
+              CasePackVerificationAnchors["externalTrustSnapshotDigest"]
+            >,
+        }
+      : {}),
+    ...(rawEvidence === undefined ? {} : { rawEvidence }),
+  };
+}
+
+function decodeCasePackInvocation(value: unknown): {
+  readonly casePack: unknown;
+  readonly anchors: CasePackVerificationAnchors;
+} {
+  const record = asObject(value);
+  if (!hasExactKeys(record, ["casePack", "anchors"])) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack command input is invalid.");
+  }
+  return {
+    casePack: record["casePack"],
+    anchors: decodeCasePackAnchors(record["anchors"]),
+  };
+}
+
+function buildCasePack(value: unknown): MandateBoundCasePack {
+  const record = asObject(value);
+  const material = Object.hasOwn(record, "casePack")
+    ? (() => {
+        if (!hasExactKeys(record, ["casePack"])) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack build input is invalid.");
+        }
+        return asObject(record["casePack"]);
+      })()
+    : record;
+  if (Object.hasOwn(material, "casePackDigest")) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack build input is already sealed.");
+  }
+  const candidate = createMandateBoundCasePack(
+    material as unknown as Omit<MandateBoundCasePack, "casePackDigest">,
+  );
+  const contract = asObject(candidate.coverageContract);
+  const snapshot = candidate.externalTrustSnapshot;
+  const verification = verifyMandateBoundCasePack(candidate, {
+    asOf: candidate.createdAt,
+    coveragePolicyDigest:
+      contract["policyDigest"] as CasePackVerificationAnchors["coveragePolicyDigest"],
+    coverageContractDigest:
+      contract["contractDigest"] as CasePackVerificationAnchors["coverageContractDigest"],
+    ...(snapshot === undefined
+      ? {}
+      : { externalTrustSnapshotDigest: snapshot.snapshotDigest }),
+  });
+  if (verification.integrityStatus === "conflicting") {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack build input is invalid.");
+  }
+  return candidate;
+}
+
 export async function runCli(
   argv: readonly string[],
   io: CliIo = {},
@@ -230,24 +394,36 @@ export async function runCli(
   let ownedStore: DecisionAppealStore | undefined;
   try {
     const args = parseArgs(argv);
-    assertJsonFormat(args);
     if (args.command === "help" || args.options["help"] === true) {
+      assertOutputFormat(args, ["json"]);
       writeJson(stdout, {
         ok: true,
         result: {
           name: "MandateBound",
           version: PROTOCOL_VERSION,
-          usage: "mandatebound <verify|decide|explain|appeal|replay|simulate|serve> [--input PATH] [--format json]",
+          releaseVersion: RELEASE_VERSION,
+          engineVersion: ENGINE_VERSION,
+          usage: "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|conformance> [--input PATH] [--format json|html]",
         },
       });
       return CLI_EXIT.SUCCESS;
     }
     if (args.command === "version" || args.options["version"] === true) {
-      writeJson(stdout, { ok: true, result: { name: "MandateBound", version: PROTOCOL_VERSION } });
+      assertOutputFormat(args, ["json"]);
+      writeJson(stdout, {
+        ok: true,
+        result: {
+          name: "MandateBound",
+          version: PROTOCOL_VERSION,
+          releaseVersion: RELEASE_VERSION,
+          engineVersion: ENGINE_VERSION,
+        },
+      });
       return CLI_EXIT.SUCCESS;
     }
     switch (args.command) {
       case "verify": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const bundle = await readInput(requireSingleInput(args), stdin) as EvidenceBundle;
         const report = await engine.verifyEvidenceBundle(bundle);
@@ -255,6 +431,7 @@ export async function runCli(
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }
       case "decide": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input", "store"]);
         const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
         const decision = await engine.evaluateCase(input);
@@ -265,6 +442,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "explain": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const decision = await readInput(requireSingleInput(args), stdin) as LiabilityDecision;
         const explanation = await engine.explainDecision(decision);
@@ -272,6 +450,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "appeal": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input", "store"]);
         const input = await readInput(requireSingleInput(args), stdin);
         const record = asObject(input);
@@ -285,6 +464,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "replay": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const input = await readInput(requireSingleInput(args), stdin);
         const record = Array.isArray(input) ? { events: input } : asObject(input);
@@ -296,6 +476,7 @@ export async function runCli(
         return replay.issues.length === 0 ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
       }
       case "simulate": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["scenario"]);
         if (args.positionals.length > 1) {
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate accepts one scenario.");
@@ -307,6 +488,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "serve": {
+        assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["store", "host", "port", "allow-remote"]);
         if (args.positionals.length !== 0) {
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Serve does not accept an input path.");
@@ -334,11 +516,86 @@ export async function runCli(
           throw error;
         }
       }
+      case "casepack": {
+        assertOutputFormat(args, ["json"]);
+        assertAllowedOptions(args, ["input"]);
+        const invocation = requireSubcommandInput(args, ["build", "verify", "unpack", "diff"]);
+        const input = await readInput(invocation.path, stdin);
+        if (invocation.action === "build") {
+          writeJson(stdout, { ok: true, result: buildCasePack(input) });
+          return CLI_EXIT.SUCCESS;
+        }
+        if (invocation.action === "verify") {
+          const decoded = decodeCasePackInvocation(input);
+          const report = verifyMandateBoundCasePack(decoded.casePack, decoded.anchors);
+          writeJson(stdout, { ok: report.valid, result: report });
+          return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+        }
+        if (invocation.action === "unpack") {
+          const decoded = decodeCasePackInvocation(input);
+          const report = unpackMandateBoundCasePack(decoded.casePack, decoded.anchors);
+          writeJson(stdout, { ok: report.unpacked, result: report });
+          return report.unpacked ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+        }
+        const record = asObject(input);
+        if (!hasExactKeys(record, ["before", "after"])) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack diff input is invalid.");
+        }
+        const before = decodeCasePackInvocation(record["before"]);
+        const after = decodeCasePackInvocation(record["after"]);
+        const report = diffMandateBoundCasePacks(
+          before.casePack,
+          before.anchors,
+          after.casePack,
+          after.anchors,
+        );
+        writeJson(stdout, { ok: report.comparable, result: report });
+        return report.comparable ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+      }
+      case "policy": {
+        assertOutputFormat(args, ["json"]);
+        assertAllowedOptions(args, ["input"]);
+        const invocation = requireSubcommandInput(args, ["validate", "test", "diff"]);
+        const input = await readInput(invocation.path, stdin);
+        if (invocation.action === "validate") {
+          const report = validatePolicyPack(input);
+          writeJson(stdout, { ok: report.valid, result: report });
+          return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+        }
+        if (invocation.action === "test") {
+          const report = testPolicyPack(input);
+          writeJson(stdout, { ok: report.valid && report.passed, result: report });
+          if (!report.valid) return CLI_EXIT.INVALID;
+          return report.passed ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+        }
+        const report = diffRulebooks(input);
+        writeJson(stdout, { ok: report.valid, result: report });
+        return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+      }
+      case "case-report": {
+        assertAllowedOptions(args, ["input"]);
+        const format = assertOutputFormat(args, ["json", "html"]);
+        const input = await readInput(requireSingleInput(args), stdin);
+        const decoded = decodeCasePackInvocation(input);
+        const report = createCaseReport(decoded.casePack, decoded.anchors);
+        if (format === "html") stdout.write(renderCaseReportHtml(report));
+        else writeJson(stdout, { ok: report.valid, result: report });
+        return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+      }
+      case "conformance": {
+        assertOutputFormat(args, ["json"]);
+        assertAllowedOptions(args, []);
+        if (args.positionals.length !== 0) {
+          throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Conformance does not accept input.");
+        }
+        writeJson(stdout, { ok: true, result: getConformanceStatement() });
+        return CLI_EXIT.SUCCESS;
+      }
       default:
         throw new CliError(
           "ALB_CLI_USAGE",
           CLI_EXIT.USAGE,
-          "Command must be one of verify, decide, explain, appeal, replay, simulate, or serve.",
+          "Command is not supported.",
         );
     }
   } catch (error) {

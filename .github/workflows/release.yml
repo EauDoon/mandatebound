@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  package:
+    name: Verify, package, and attest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - name: Verify release tag and source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$package_version"
+          npm ci --ignore-scripts
+          npm run verify
+      - name: Build release artifacts and SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+          mkdir -p release
+          packed_name="$(npm pack --ignore-scripts --silent --pack-destination release)"
+          mv "release/$packed_name" "release/mandatebound-$package_version.tgz"
+          npm sbom --package-lock-only --omit=dev --sbom-format=spdx --sbom-type=library \
+            > "release/mandatebound-$package_version.spdx.json"
+          (
+            cd release
+            sha256sum "mandatebound-$package_version.tgz" \
+              "mandatebound-$package_version.spdx.json" > SHA256SUMS
+          )
+      - name: Attest package provenance and SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-path: release/*.tgz
+          sbom-path: release/*.spdx.json
+      - name: Upload immutable release artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" release/* --clobber

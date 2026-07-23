@@ -7,6 +7,8 @@
 - key roles and trust snapshots
 - policy and rulebook identity
 - evidence completeness and causation lineage
+- exact UCP HTTP bytes, AP2 compact tokens, and external key snapshots
+- CasePack coverage contracts, mapping traces, delegation context, and source checkpoints
 - replay and revocation state
 - deterministic decision bytes
 - immutable appeal history
@@ -22,10 +24,11 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 2. Schema and canonicalization
 3. Proof and trust verification
 4. Bundle closure and path handling
-5. Policy and evidence evaluation
-6. Store and appeal history
-7. API, CLI, logs, and errors
-8. Build, package, and public release
+5. External protocol import and CasePack verification
+6. Policy and evidence evaluation
+7. Store and appeal history
+8. API, CLI, logs, and errors
+9. Build, package, and public release
 
 ## Fail-closed invariants
 
@@ -38,6 +41,8 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 | Replay | Completed prior receipts count only when they bind the exact mandate, operator, policy, and nonce. Reused execution identity with changed content, or excess execution under a bounded mandate, is a replay violation and can select the operator branch. Contradictory receipt identities or bindings stay conflicted. Missing required replay state stays unresolved. |
 | Policy | Policy is selected by digest. Unknown facts or operators fail validation. No code, network, randomness, floating point, or ambient time is available. |
 | Evidence | The manifest is closed. Missing, extra, altered, equivocated, or conflicting evidence cannot yield a confident allocation. |
+| External protocols | UCP and AP2 versions, algorithms, signed components, raw bytes, compact tokens, audiences, nonces, expiry, constraints, and key snapshots are exact and fail closed. |
+| CasePack | Coverage is caller-pinned and policy-relative. External trust cannot auto-promote into native trust. Source truth stays unknown and global completeness stays not established. |
 | Causation | An attestation is an attributed assertion. Model-vendor allocation requires a complete causal gate and no valid conflict. |
 | Appeals | Events are append-only and chained. Original decisions are immutable. Forks, gaps, cycles, and truncation uncertainty remain visible. |
 | Privacy | Errors and logs do not echo artifact bodies, keys, environment values, control characters, or absolute paths. |
@@ -80,6 +85,17 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 - omitted, circular, future, or cross-case evidence references
 - conflicting authorized causation attestations
 
+### External protocols and CasePack
+
+- wrong UCP/AP2 version, VCT, issuer, audience, nonce, expiry, algorithm, curve, or key
+- one-byte raw-body, compact-token, disclosure, checkout, or signature mutation
+- DER versus raw ECDSA confusion and noncanonical JOSE encodings
+- missing required RFC 9421 signed components or RFC 9530 body digest
+- idempotency-key reuse with changed operation or body bytes
+- stale, unpinned, mismatched, or auto-promoted external trust
+- weakened coverage contracts, missing declared sources, checkpoint gaps, equivocation, and invalid inclusion proofs
+- delegation expiry, widened scope, or mismatched evidence references
+
 ### API and privacy
 
 - oversized, slow, malformed, duplicate-key, and deeply nested bodies
@@ -93,9 +109,9 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 
 - reordered, deleted, duplicated, forked, or truncated appeal events
 - unauthorized actor and cross-case reference
-- package allowlist and clean-install checks
+- package allowlist, clean-install, SPDX SBOM, and artifact-attestation checks
 - exact Git-tree privacy scan and remote-byte verification
 
 ## Residual risks
 
-The engine cannot prove evidence completeness, real-world events, honest identity binding, causal truth, legal authority, governing law, external log-tail completeness, or secure production key custody. These remain explicit governance requirements.
+The engine cannot prove evidence completeness, real-world events, honest identity binding, causal truth, legal authority, governing law, external log-tail completeness, upstream disclosure completeness, or secure production key custody. These remain explicit governance requirements.

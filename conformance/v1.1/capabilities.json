@@ -1,0 +1,17 @@
+{
+  "release": "1.1.0",
+  "claim": "bounded-evidence-profile",
+  "evidenceProfile": {
+    "id": "ucp-2026-04-08-rest+ap2-mandates-0.2.0",
+    "ucpVersion": "2026-04-08",
+    "ucpTransport": "REST",
+    "ap2Version": "0.2.0"
+  },
+  "fixtureTests": [
+    "test/v1-compatibility.test.mjs",
+    "test/casepack-v11.test.mjs",
+    "test/ucp-ap2.test.mjs",
+    "test/policy-tools-v11.test.mjs"
+  ],
+  "legalEffect": "not-determined"
+}

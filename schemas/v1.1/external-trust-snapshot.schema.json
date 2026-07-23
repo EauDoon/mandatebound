@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.1/external-trust-snapshot.schema.json",
+  "title": "ExternalTrustSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "snapshotId",
+    "issuedAt",
+    "expiresAt",
+    "trustEffect",
+    "nativeTrustPromotion",
+    "discoveryMaterials",
+    "keys",
+    "snapshotDigest"
+  ],
+  "properties": {
+    "format": {
+      "const": "MandateBoundExternalTrustSnapshot/v1"
+    },
+    "snapshotId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "issuedAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "expiresAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "trustEffect": {
+      "const": "discovery_only"
+    },
+    "nativeTrustPromotion": {
+      "const": "forbidden"
+    },
+    "discoveryMaterials": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["materialId", "mediaType", "rawEvidence"],
+        "properties": {
+          "materialId": {
+            "$ref": "common.schema.json#/$defs/asciiIdentifier"
+          },
+          "mediaType": {
+            "$ref": "common.schema.json#/$defs/mediaType"
+          },
+          "rawEvidence": {
+            "$ref": "common.schema.json#/$defs/rawEvidence"
+          }
+        }
+      }
+    },
+    "keys": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keyId", "sourceId", "publicJwk", "purposes", "validFrom", "validUntil"],
+        "properties": {
+          "keyId": {
+            "$ref": "common.schema.json#/$defs/asciiIdentifier"
+          },
+          "sourceId": {
+            "$ref": "common.schema.json#/$defs/asciiIdentifier"
+          },
+          "publicJwk": {
+            "$ref": "common.schema.json#/$defs/publicJwk"
+          },
+          "purposes": {
+            "const": ["source_checkpoint"]
+          },
+          "validFrom": {
+            "$ref": "common.schema.json#/$defs/timestamp"
+          },
+          "validUntil": {
+            "$ref": "common.schema.json#/$defs/timestamp"
+          }
+        }
+      }
+    },
+    "snapshotDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    }
+  }
+}

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { CLI_EXIT, runCli } from "../dist/cli.js";
+import { sha256Digest } from "../dist/canonical.js";
+import { buildScenario } from "../dist/simulator.js";
 import { MemoryStore, StoreError } from "../dist/store.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
@@ -199,6 +201,79 @@ test("help and version are stable JSON and use the public brand", async () => {
   const version = await invoke(["--version"], "");
   assert.equal(version.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(version.stdout).result.version, "1.0.0");
+  assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.1.0");
+  assert.equal(JSON.parse(version.stdout).result.engineVersion, "1.0.0");
+});
+
+test("v1.1 policy and conformance commands are deterministic and fail closed", async () => {
+  const rulebook = JSON.parse(await readFile(
+    new URL("../rulebooks/v1/mandate-to-liability.v1.json", import.meta.url),
+    "utf8",
+  ));
+  const policy = structuredClone(buildScenario("principal").input.policy.payload);
+  policy.rulebookRef = {
+    artifactType: "rulebook",
+    artifactId: rulebook.artifactId,
+    digest: sha256Digest(rulebook),
+  };
+
+  const validated = await invoke(
+    ["policy", "validate", "-"],
+    JSON.stringify({ policy, rulebook }),
+  );
+  assert.equal(validated.code, CLI_EXIT.SUCCESS);
+  assert.equal(JSON.parse(validated.stdout).result.valid, true);
+
+  const tested = await invoke(
+    ["policy", "test", "-"],
+    JSON.stringify({
+      policy,
+      rulebook,
+      cases: [{
+        id: "missing-evidence",
+        facts: {
+          input_state: "valid",
+          evidence_state: "missing",
+          policy_state: "active",
+          trust_state: "pinned",
+          mandate_state: "valid",
+          receipt_state: "missing",
+          execution_state: "missing",
+          operator_controls: "unknown",
+          operator_violation: "none",
+          model_provenance: "missing",
+          causation_state: "missing",
+        },
+        expected: { outcome: "unresolved" },
+      }],
+    }),
+  );
+  assert.equal(tested.code, CLI_EXIT.SUCCESS);
+  assert.equal(JSON.parse(tested.stdout).result.passed, true);
+
+  const diffed = await invoke(
+    ["policy", "diff", "-"],
+    JSON.stringify({ before: rulebook, after: rulebook }),
+  );
+  assert.equal(diffed.code, CLI_EXIT.SUCCESS);
+  assert.equal(JSON.parse(diffed.stdout).result.changed, false);
+
+  const conformance = await invoke(["conformance"], "");
+  assert.equal(conformance.code, CLI_EXIT.SUCCESS);
+  assert.equal(
+    JSON.parse(conformance.stdout).result.claim,
+    "bounded-evidence-profile",
+  );
+
+  for (const argv of [
+    ["policy", "unknown"],
+    ["casepack", "unknown"],
+    ["conformance", "unexpected"],
+    ["case-report", "-", "--format", "yaml"],
+  ]) {
+    const result = await invoke(argv, "{}");
+    assert.equal(result.code, CLI_EXIT.USAGE, argv.join(" "));
+  }
 });
 
 test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fail safely", async () => {

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.1/delegation-context.schema.json",
+  "title": "DelegationContext",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "delegationId",
+    "principalId",
+    "delegateId",
+    "mandateDigest",
+    "scopeDigest",
+    "validFrom",
+    "validUntil",
+    "evidenceReferences",
+    "legalEffect",
+    "contextDigest"
+  ],
+  "properties": {
+    "format": {
+      "const": "MandateBoundDelegationContext/v1"
+    },
+    "delegationId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "principalId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "delegateId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "mandateDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "scopeDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "validFrom": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "validUntil": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "evidenceReferences": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["digest", "reference"],
+        "properties": {
+          "digest": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          },
+          "reference": {
+            "$ref": "common.schema.json#/$defs/rawReference"
+          }
+        }
+      }
+    },
+    "legalEffect": {
+      "const": "not-determined"
+    },
+    "contextDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    }
+  }
+}

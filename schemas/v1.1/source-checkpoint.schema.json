@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.1/source-checkpoint.schema.json",
+  "title": "SourceCheckpoint",
+  "$defs": {
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromSequence", "toSequence", "reasonCode"],
+      "properties": {
+        "fromSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "toSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reasonCode": {
+          "$ref": "common.schema.json#/$defs/asciiIdentifier"
+        }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "keyId", "signedDigest", "signature"],
+      "properties": {
+        "suite": {
+          "const": "Ed25519"
+        },
+        "keyId": {
+          "$ref": "common.schema.json#/$defs/asciiIdentifier"
+        },
+        "signedDigest": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "checkpointId",
+    "sourceId",
+    "epoch",
+    "issuedAt",
+    "windowStart",
+    "windowEnd",
+    "firstSequence",
+    "lastSequence",
+    "eventCount",
+    "merkleRoot",
+    "declaredGaps",
+    "checkpointDigest",
+    "proofs"
+  ],
+  "properties": {
+    "format": {
+      "const": "MandateBoundSourceCheckpoint/v1"
+    },
+    "checkpointId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "sourceId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "epoch": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "issuedAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "windowStart": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "windowEnd": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "firstSequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "lastSequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "eventCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "merkleRoot": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "previousCheckpointDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "declaredGaps": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/gap"
+      }
+    },
+    "checkpointDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "proofs": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/proof"
+      }
+    }
+  }
+}

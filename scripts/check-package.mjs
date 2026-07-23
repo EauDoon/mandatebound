@@ -37,6 +37,8 @@ if (!packageReport || !Array.isArray(packageReport.files)) {
 
 const allowedExact = new Set([
   "BRIEF.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
   "DISCLAIMER.md",
   "LICENSE",
   "NOTICE",
@@ -45,7 +47,7 @@ const allowedExact = new Set([
   "SUMMARY.md",
   "package.json",
 ]);
-const allowedPrefixes = ["dist/", "openapi/", "rulebooks/", "schemas/"];
+const allowedPrefixes = ["conformance/", "dist/", "docs/", "openapi/", "rulebooks/", "schemas/"];
 const required = new Set([
   "DISCLAIMER.md",
   "LICENSE",

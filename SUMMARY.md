@@ -2,55 +2,99 @@
 
 ## In one sentence
 
-MandateBound is an open-source Agent Loss Allocation Protocol and AI agent liability policy engine that verifies autonomous-agent transaction evidence and applies a versioned policy to produce a reproducible, non-binding loss-allocation recommendation.
+MandateBound is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce that preserves a UCP/AP2 transaction record, exposes evidence gaps, and replays a non-binding policy branch offline.
 
-## Why it exists
+## v1.1 focus
 
-Agent systems can authenticate, receive mandates, and execute payments, but post-transaction responsibility is still handled through fragmented logs and institution-specific judgment. A mandate can show what was authorized. A receipt can show what an operator says it executed. Runtime telemetry can show which controls fired. None of those artifacts, alone, answers who should absorb a loss.
+MandateBound v1.1 implements one exact target:
 
-The missing bridge is an evidence discipline plus an explicit allocation rule.
+**UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile**
 
-## The solution
+This is a version-pinned evidence-import claim. It is not generic UCP compliance, generic AP2 compliance, legal adjudication, or production-service certification.
 
-The project provides:
+## The problem
 
-- a canonical evidence model for mandates, runtime events, execution receipts, incidents, and causal attestations
-- strict validation, canonicalization, signatures, digests, trust snapshots, replay checks, and revocation checks
-- a deterministic reference rulebook with principal, operator, model-vendor, and unresolved outcomes
-- an explainable decision that separates verified facts, attributed claims, policy conclusions, and legal effect
-- a portable, tamper-evident bundle that can be verified offline
-- immutable decisions and append-only appeals
-- a CLI, localhost API, simulator, OpenAPI contract, and synthetic test suite
+A disputed agent transaction may span signed checkout exchanges, mandates, payment evidence, order events, refund events, runtime controls, and changing trust material. A signature check alone does not show whether the full record exists, whether a signer was trusted for a particular role, or whether the same case can be reproduced later.
 
-## The core policy
+MandateBound makes that evidence state explicit before policy is applied.
 
-1. Valid execution inside a valid mandate selects the principal branch.
-2. Trustworthy evidence of execution outside a valid mandate selects the operator branch.
-3. The model-vendor branch requires sufficient, trusted, non-conflicting causal evidence and otherwise compliant operator controls.
-4. Missing, invalid, tampered, contradictory, or multi-causal evidence stays unresolved.
+## What v1.1 adds
 
-This is configurable reference policy, not current law.
+- exact preservation and verification of supported UCP/AP2 source evidence
+- checkout-to-order/refund lifecycle capture for supplied artifacts
+- `DelegationContext` for a digest-bound principal-to-delegate mandate, scope, validity window, and evidence references
+- `ExternalTrustSnapshot` for pinned discovery material and source-checkpoint keys that cannot auto-promote into native trust
+- separate `upstreamValid` and `evidenceEligible` judgments
+- readiness states for `satisfied`, `missing`, `conflicting`, `unsupported`, `unknown`, and `not_applicable` requirements
+- an outer `CasePack` that preserves the existing v1 `.albx.json` evidence bundle
+- source checkpoints, policy-relative coverage contracts, policy-pack test and diff tools, and a versioned conformance statement
+- CLI workflows for CasePack build, verify, unpack, diff, JSON or HTML review reports, policy tools, and the bounded conformance statement
+- deterministic offline replay under identical source, trust, policy, schema, rulebook, time, and engine pins
 
-## Design principles
+CasePack verification, unpacking, and reporting consume `{casePack, anchors}`. Raw evidence uses `{referenceId, bytesBase64}` at the JSON CLI boundary. Build seals the outer CasePack only after nested components have been sealed through the SDK.
 
-- **Fail closed:** uncertainty produces an unresolved result, not a guessed party.
-- **Deterministic:** evaluation uses explicit time and exact content digests, with no live lookup.
-- **Portable:** a single evidence bundle carries the case material for offline verification and deterministic replay; allocation additionally requires exact external caller pins.
-- **Historically honest:** later policy or trust changes cannot silently alter an earlier decision.
-- **Privacy-minimizing:** core artifacts favor digests and classified metadata, while raw prompts and personal data are excluded by default and still require deployment-level controls.
-- **Legally bounded:** every decision states that legal effect is not determined.
+## The central distinction
 
-## Intended users
+`upstreamValid` means an artifact passed the exact source-profile checks.
 
-- teams designing agent transaction controls and post-incident evidence
-- policy, assurance, risk, and dispute teams testing allocation logic
-- standards and infrastructure builders evaluating interoperable evidence formats
-- researchers simulating how mandate evidence could connect to loss-allocation policy
+`evidenceEligible` means it may also contribute to this MandateBound case under pinned local trust, role, timing, support, and case-binding rules.
 
-## Not included
+An authentic artifact can still be ineligible. Neither result proves real-world identity, authority, truth, causation, loss, or legal responsibility.
 
-The project does not create legal personhood, provide agent-native credit, underwrite insurance, settle claims, replace legal counsel, or certify compliance with AP2, SAFR, or any regulatory framework.
+## Evidence readiness
 
-## Release standard
+MandateBound reports each expected evidence item as:
 
-The public release is required to pass strict type checking, schema tests, security and property tests, API and CLI tests, coverage thresholds, package-content review, dependency audit, privacy scan, exact Git-tree scan, and independent remote verification.
+- `satisfied`
+- `missing`
+- `conflicting`
+- `unsupported`
+- `unknown`
+- `not_applicable`
+
+The report is scoped to the exact profile and requested lifecycle. It does not claim that every relevant fact was disclosed.
+
+Artifact failures remain separate and visible through `upstreamValid`, `evidenceEligible`, and bounded issue codes. Invalid or ineligible material does not satisfy a coverage requirement.
+
+Every report keeps global completeness as not established and source truth as unknown. Source checkpoints prove only bounded inclusion under their declared source, window, sequence, and gap record.
+
+## Compatibility
+
+The v1.1 `CasePack` is an outer case layer. It binds source evidence, external trust, delegation context, readiness, and replay inputs around the native v1 bundle.
+
+The inner v1 bundle remains byte-preserved and independently verifiable. v1.1 does not silently rewrite v1 artifacts or merge external and native trust.
+
+## Policy boundary
+
+The native engine still emits principal, operator, model-vendor, or unresolved policy branches. Missing, unsupported, contradictory, and multi-causal evidence fails closed.
+
+Every policy result retains:
+
+```json
+{
+  "legalEffect": "not-determined"
+}
+```
+
+MandateBound does not determine liability, damages, enforceability, insurance coverage, or an amount owed.
+
+## Deliberate v1.1 limits
+
+v1.1 does not include:
+
+- multi-party dollar waterfalls or contribution percentages
+- full A2A, MCP, Visa Trusted Agent Protocol, or x402 adapters
+- automated dispute or claims submission
+- a hosted, authenticated, multi-tenant production service
+
+Dollar waterfalls are deferred because the implemented UCP/AP2 profile does not supply the contractual caps, priorities, exclusions, valuation, contribution, and governing terms needed for a defensible calculation.
+
+## Intended use
+
+The strongest first use is shadow evidence capture. Merchant, agent-platform, payment, risk, assurance, and dispute teams can test whether a transaction produces a reviewable record without changing authorization, settlement, or claims decisions.
+
+Any real deployment requires separately governed trust, privacy, retention, security, legal, contractual, and reviewer-authority decisions.
+
+## Project
+
+MandateBound is published by Oonyl under the Apache License 2.0. Examples are synthetic. The repository is not affiliated with or endorsed by UCP, AP2, a payment network, regulator, insurer, or model provider.

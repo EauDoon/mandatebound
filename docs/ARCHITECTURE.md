@@ -2,14 +2,16 @@
 
 ## Goal
 
-The system converts a self-contained evidence snapshot into a reproducible policy recommendation without making a network request or claiming legal effect.
+The system imports exact protocol evidence, preserves it in a policy-relative CasePack, and converts the nested native evidence snapshot into a reproducible policy recommendation without making a network request or claiming legal effect.
 
 ## Components
 
 ```mermaid
 flowchart TD
-  U["Hostile JSON or bundle input"] --> J["Strict JSON parser"]
-  J --> S["JSON Schema validation"]
+  U["Hostile JSON, raw protocol bytes, or bundle input"] --> J["Strict parsing and exact-byte verification"]
+  J --> X["Version-pinned UCP/AP2 evidence import"]
+  X --> K["CasePack mapping, coverage, delegation, and checkpoints"]
+  K --> S["Native JSON Schema validation"]
   S --> C["Canonical bytes and content digests"]
   C --> T["Pinned trust and proof verification"]
   T --> B["Closed bundle verification"]
@@ -40,6 +42,14 @@ An evaluation receives a trust snapshot and an exact pinned digest. The engine n
 
 A closed manifest lists every accepted artifact. Each entry is content-addressed. A deterministic Merkle tree and manifest digest produce a portable bundle root.
 
+### Evidence-import and CasePack layer
+
+The UCP/AP2 adapter verifies the exact supported REST and Mandates profile without modifying native v1 semantics. It preserves raw bodies, compact tokens, source digests, pinned external key snapshots, and verification outcomes.
+
+`MandateBoundCasePack/v1` wraps an unchanged native `EvidenceBundle/v1` with protocol evidence envelopes, deterministic mapping traces, a delegation context, a caller-pinned coverage contract, optional external discovery trust, and optional signed source checkpoints. Its verifier reports integrity, bounded coverage, source truth, upstream validity, evidence eligibility, external trust, and delegation separately.
+
+External trust remains discovery-only and cannot enter native `TrustSnapshot/v1` automatically. A successful CasePack check does not establish global completeness.
+
 ### Policy layer
 
 The policy engine reads only enumerated typed facts. Its rule language is data-only and bounded. It cannot run scripts, use regular expressions, access arbitrary paths, fetch a resource, or read ambient time.
@@ -66,6 +76,7 @@ The local store is append-only and single-writer. An appeal adds events and can 
 domain and strict parsing
   -> canonical, validation, crypto, trust
   -> bundle, policy, engine
+  -> ucp-ap2, casepack, casepack-tools, report, conformance
   -> store, appeals
   -> API, CLI, simulator
 ```

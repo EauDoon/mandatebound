@@ -1,9 +1,11 @@
 {
   "name": "@oonyl/mandatebound",
-  "version": "1.0.0",
-  "description": "Evidence-bound loss allocation for autonomous AI agent transactions.",
+  "version": "1.1.0",
+  "description": "Evidence-to-policy tooling for verifiable AI agent transactions and non-binding loss allocation.",
   "type": "module",
-  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "private": false,
   "license": "Apache-2.0",
   "author": "Oonyl",
   "keywords": [
@@ -18,15 +20,23 @@
     "policy-engine",
     "agentic-ai",
     "digital-signatures",
-    "evidence-bundle"
+    "evidence-bundle",
+    "casepack",
+    "ucp",
+    "ap2",
+    "agentic-commerce",
+    "transaction-audit"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Oonyl/mandatebound.git"
+    "url": "git+https://github.com/oonyl/mandatebound.git"
   },
-  "homepage": "https://github.com/Oonyl/mandatebound#readme",
+  "homepage": "https://github.com/oonyl/mandatebound#readme",
   "bugs": {
-    "url": "https://github.com/Oonyl/mandatebound/issues"
+    "url": "https://github.com/oonyl/mandatebound/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "sideEffects": false,
   "engines": {
@@ -36,7 +46,28 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./casepack": {
+      "types": "./dist/casepack.d.ts",
+      "import": "./dist/casepack.js"
+    },
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "import": "./dist/conformance.js"
+    },
+    "./policy-tools": {
+      "types": "./dist/policy-tools.d.ts",
+      "import": "./dist/policy-tools.js"
+    },
+    "./report": {
+      "types": "./dist/report.d.ts",
+      "import": "./dist/report.js"
+    },
+    "./ucp-ap2": {
+      "types": "./dist/ucp-ap2.d.ts",
+      "import": "./dist/ucp-ap2.js"
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "mandatebound": "./dist/cli.js",
@@ -45,10 +76,14 @@
   "files": [
     "dist",
     "schemas",
+    "conformance",
     "rulebooks",
     "openapi",
     "README.md",
     "BRIEF.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "docs",
     "SUMMARY.md",
     "DISCLAIMER.md",
     "NOTICE",
@@ -61,6 +96,7 @@
     "lint": "node scripts/lint.mjs",
     "licenses": "node scripts/check-licenses.mjs",
     "test": "npm run build && node --test",
+    "conformance": "npm run build && node --test test/v1-compatibility.test.mjs test/casepack-v11.test.mjs test/ucp-ap2.test.mjs test/policy-tools-v11.test.mjs test/conformance-v11.test.mjs",
     "test:coverage": "npm run build && node --experimental-test-coverage --test --test-coverage-include=dist/**/*.js --test-coverage-exclude=dist/cli.js --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85",
     "demo": "npm run build && node dist/cli.js simulate --scenario all",
     "package:check": "node scripts/check-package.mjs",

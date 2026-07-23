@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest `1.0.x` release while v1 remains maintained.
+Security fixes are provided for the latest `1.1.x` release. Native v1 wire compatibility remains covered by frozen-schema and golden-derivation tests.
 
 ## Reporting a vulnerability
 
@@ -26,9 +26,12 @@ The trusted core assumes:
 - private keys remain outside the evaluator
 - artifact inputs are hostile until strict parsing, schema validation, digest verification, and proof verification pass
 - cryptographic validity does not establish real-world truth, authority, causation, or legal effect
+- UCP/AP2 evidence is accepted only under the exact version-pinned evidence-import profile
+- external discovery material and source-checkpoint keys never enter native `TrustSnapshot/v1` automatically
+- CasePack coverage is relative to caller-pinned declared sources and windows; source truth and global completeness remain unestablished
 - the reference API is local development infrastructure, not a production security boundary
 
-The engine performs no live key, schema, policy, DID, DNS, revocation, timestamp, or network resolution.
+The engine, CasePack verifier, and UCP/AP2 adapter perform no live key, schema, policy, DID, DNS, revocation, timestamp, profile, or network resolution.
 
 ## Production gaps
 
@@ -44,6 +47,7 @@ The repository contains no tracked private keys. Simulator and test keys are gen
 - Dependency lifecycle scripts are disabled in the documented install, packaging, and CI commands.
 - `npm run verify` must pass before release.
 - The packed package is checked against an explicit content allowlist.
+- The release workflow produces an SPDX SBOM and a GitHub artifact attestation for the package tarball.
 - Public release bytes receive a separate exact Git-tree privacy and secret scan.
 
 See [Threat model](docs/THREAT_MODEL.md) for attack classes and fail-closed invariants.

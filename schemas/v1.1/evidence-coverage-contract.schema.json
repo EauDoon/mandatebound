@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.1/evidence-coverage-contract.schema.json",
+  "title": "EvidenceCoverageContract",
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementId",
+        "sourceId",
+        "eventClass",
+        "mediaTypes",
+        "windowStart",
+        "windowEnd",
+        "minEnvelopes",
+        "checkpointRequirement"
+      ],
+      "properties": {
+        "requirementId": {
+          "$ref": "common.schema.json#/$defs/asciiIdentifier"
+        },
+        "sourceId": {
+          "$ref": "common.schema.json#/$defs/asciiIdentifier"
+        },
+        "eventClass": {
+          "$ref": "common.schema.json#/$defs/asciiIdentifier"
+        },
+        "mediaTypes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/mediaType"
+          }
+        },
+        "windowStart": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "windowEnd": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "minEnvelopes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "checkpointRequirement": {
+          "enum": ["required", "optional", "not_applicable"]
+        },
+        "maxCheckpointAgeSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31536000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "checkpointRequirement": {
+                "const": "not_applicable"
+              }
+            },
+            "required": ["checkpointRequirement"]
+          },
+          "then": {
+            "properties": {
+              "maxCheckpointAgeSeconds": false
+            }
+          },
+          "else": {
+            "properties": {
+              "maxCheckpointAgeSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31536000
+              }
+            },
+            "required": ["maxCheckpointAgeSeconds"]
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "contractId",
+    "issuedAt",
+    "validFrom",
+    "validUntil",
+    "coverageScope",
+    "policyDigest",
+    "nativeBundleRootDigest",
+    "requirements",
+    "contractDigest"
+  ],
+  "properties": {
+    "format": {
+      "const": "MandateBoundEvidenceCoverageContract/v1"
+    },
+    "contractId": {
+      "$ref": "common.schema.json#/$defs/asciiIdentifier"
+    },
+    "issuedAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "validFrom": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "validUntil": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "coverageScope": {
+      "const": "declared_sources_and_windows_only"
+    },
+    "policyDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "nativeBundleRootDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/requirement"
+      }
+    },
+    "contractDigest": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    }
+  }
+}

@@ -2,193 +2,258 @@
 
 ## Executive brief
 
-Autonomous agents increasingly receive signed mandates, invoke tools, and initiate economic actions. When an action causes loss, existing infrastructure can often answer fragments of the story: who issued a key, what a mandate allowed, what an operator logged, or whether a transaction settled. The fragments do not produce a reproducible allocation rule.
+MandateBound v1.1 is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce.
 
-MandateBound is an open-source reference implementation of that evidence-to-policy bridge. It accepts a closed bundle of signed artifacts, verifies their integrity and authority against pinned snapshots, derives a bounded fact set, applies a versioned rulebook, and emits a non-binding recommendation for institutional or human review.
+Its first external profile is deliberately exact:
 
-The v1 goal is not to declare who is legally liable. The goal is to make the policy reasoning explicit, testable, replayable, and difficult to manipulate silently.
+**UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile**
 
-## 1. The gap
+MandateBound preserves the signed source record from checkout through order and refund review, reports what is ready or missing, seals the case around the existing v1 evidence bundle, and replays a non-binding policy branch offline.
 
-Payment authorization and settlement answer whether value can move. Identity and signing answer whether a key produced an artifact. Runtime controls answer whether configured checks ran. Post-transaction allocation asks a different set of questions:
+The product does not decide legal liability. Every policy result keeps `legalEffect: "not-determined"`.
 
-- Was the execution inside the exact mandate?
-- Was the mandate valid at the relevant time?
-- Did the operator follow the controls it represented?
-- Was a nonce replayed or a trust root substituted?
-- Is a causal allegation supported by an authorized, method-bound attestation?
-- Is the evidence complete enough to apply a policy at all?
+## 1. The institutional gap
 
-Without a common model, the answer tends to depend on mutable dashboards, private logs, current configuration, and undocumented discretion. That is weak evidence engineering even before legal doctrine begins.
+Authorization, payment, order, and dispute systems answer different questions. Together they may produce:
 
-## 2. Product definition
+- signed checkout terms
+- user and agent mandate material
+- payment receipts
+- order and refund state
+- runtime control evidence
+- incident and causation assertions
 
-MandateBound has five parts.
+Those records are often stored in different formats under changing trust assumptions. A later review can fail even when the transaction succeeded because the exact signed bytes, key context, profile version, lifecycle links, or evidence obligations were not preserved.
 
-### Evidence protocol
+The problem is not only verification. It is evidence readiness:
 
-Versioned schemas define mandates, runtime events, execution receipts, incident reports, causation attestations, policies, rulebooks, trust snapshots, decisions, bundles, and appeals. Unknown properties fail validation. Amounts use integer minor units. Times are explicit UTC values.
+- Is the expected record present?
+- Did it pass the exact source profile?
+- Is it eligible under the local trust and policy?
+- Is a required lifecycle link missing?
+- Does accepted evidence contradict another record?
+- Can the same case be replayed without live infrastructure?
 
-### Verification pipeline
+## 2. Product decision
 
-The verifier performs strict JSON parsing, canonicalization, digest checks, Ed25519 proof checks, signer-role checks, time checks, revocation checks, replay checks, scope comparison, and closed-manifest verification. It performs no network lookup.
+v1.1 focuses on a narrow, operational wedge: prepare one UCP/AP2 transaction record for later dispute review while the evidence is still available.
 
-### Policy engine
+This is stronger than a broad "agent liability" claim because it solves a concrete precursor problem. A policy engine cannot produce a defensible result from evidence that was never captured, cannot be verified, or cannot be replayed.
 
-The engine converts accepted evidence into a small set of typed facts. A bounded data-only rulebook evaluates those facts. Rules cannot execute code, call a network, use floating point, inspect arbitrary JSON paths, or read system time.
+The product therefore leads with:
 
-### Decision and explanation
+1. exact source preservation
+2. profile-scoped verification
+3. local evidence eligibility
+4. lifecycle readiness
+5. deterministic offline replay
 
-The result records:
+Loss-allocation policy remains a bounded downstream use of the evidence, not the headline legal claim.
 
-- cryptographically verified facts
-- attributed attestations
-- rejected evidence and reasons
-- missing or conflicting evidence
-- matched rule and deterministic trace
-- exact policy, trust, schema, rulebook, and bundle digests, plus the engine semantics version
-- policy outcome and legal-effect boundary
+## 3. v1.1 system
 
-### History and appeal
+### Exact evidence import
 
-Decisions are immutable. Appeals append schema-validated, actor-attributed events to a hash chain and may reference a genuine superseding decision. The original result remains available and replayable under its original inputs. Production deployments must authenticate appeal actors at their own trust boundary.
+The importer targets only UCP 2026-04-08 REST with the UCP AP2 Mandates Extension and AP2 v0.2.0.
 
-## 3. Reference allocation logic
+It preserves raw signed HTTP material and exact compact AP2 token representations where source signatures, content digests, disclosures, or artifact hashes depend on those bytes. It pins the applicable profile and schema material instead of tracking a default branch or "latest" version.
 
-The bundled rulebook implements a narrow provisional skeleton.
+### Delegation context
 
-### Principal branch
+`DelegationContext` binds a principal, delegate, mandate digest, scope digest, validity window, and evidence references used to interpret the source record.
 
-Use when a valid principal mandate covers the executed action kind, target, amount, asset, counterparty, validity window, nonce, and usage limit, and when required operator controls complied.
+It makes the evaluator's delegation assumptions inspectable and keeps legal effect not determined. It does not prove real-world identity, legal capacity, informed consent, or enforceability.
 
-### Operator branch
+### External trust
 
-Use when a trustworthy operator receipt proves that the operator executed despite a mandate being out of scope, expired, revoked, replayed, or otherwise invalid for that execution. An invalid bundle by itself is not enough to select the operator.
+`ExternalTrustSnapshot` freezes external discovery material and the public keys authorized only to verify bounded source checkpoints.
 
-### Model-vendor branch
+It has discovery-only trust effect and forbids automatic promotion into the native v1 trust snapshot. This separation prevents an upstream key or discovered profile from silently acquiring authority inside the native policy engine.
 
-Use only when all required conditions hold:
+### Two-stage decision
 
-1. model provenance matches the mandate, execution receipt, and signed runtime evidence
-2. operator controls otherwise complied
-3. an authorized independent attestor used a policy-allowed method
-4. the attestation binds the case, transaction, model, and cited evidence
-5. causal evidence is marked sufficient
-6. no valid conflicting or superseding cause remains
+MandateBound separates:
 
-A forged mandate or failed signature does not establish model-vendor fault.
+- `upstreamValid`: the artifact passed the exact upstream profile
+- `evidenceEligible`: the artifact may contribute evidence to this case under pinned local trust, role, timing, support, and case-binding rules
 
-### Unresolved branch
+A valid upstream signature is not enough. An artifact can be authentic to a key yet unsupported, out of role, unrelated to the case, stale, contradicted, or otherwise ineligible.
 
-Use when evidence is missing, stale, invalid, tampered, contradictory, equivocated, multi-causal, or outside the rulebook's supported facts. Unresolved is a correct output, not an engine failure.
+### Evidence readiness
 
-## 4. Trust and historical determinism
+Each expected requirement is reported as `satisfied`, `missing`, `conflicting`, `unsupported`, `unknown`, or `not_applicable`. Artifact-level validation failures remain visible through `upstreamValid`, `evidenceEligible`, and bounded issue codes.
 
-Every evaluation receives explicit policy and trust snapshots. Their exact digests are pinned into the decision. Keys have roles, scopes, validity windows, and invalidation times. Artifacts cannot introduce their own trusted key.
+The report is scoped to the exact profile and lifecycle. It is not a universal completeness score and cannot prove that a party disclosed every relevant fact.
 
-The engine does not resolve a DID, fetch a key, download a schema, check a current revocation service, or select a policy named “latest.” This prevents silent state changes from altering a historical result.
+### CasePack
 
-Later evidence or a new revocation position can support an appeal. It cannot rewrite what the earlier engine concluded from the earlier accepted inputs.
+The outer `CasePack` binds:
 
-## 5. Evidence bundle
+- source evidence and import results
+- lifecycle state and correlations
+- `DelegationContext`
+- `ExternalTrustSnapshot`
+- readiness output
+- the existing v1 evidence bundle
+- the inputs required for offline replay
 
-The portable `.albx.json` format is a canonical JSON document with a closed manifest. Each entry records a safe relative path, media type, classification, optional schema identifier, size, and content digest. Proof headers bind artifacts to exact schema digests. Entries are sorted and committed into a deterministic Merkle root. The bundle root binds the manifest digest and Merkle root.
+The inner `.albx.json` bundle remains unchanged and independently verifiable. v1.1 does not rewrite v1 evidence or merge external and native trust.
 
-The format avoids archive extraction in the trusted path. Absolute paths, parent traversal, backslashes, case-fold collisions, duplicate entries, and unlisted attachments are rejected.
+Source checkpoints can bind event inclusion to a declared source, time window, sequence range, Merkle root, and explicit gaps. Evidence-coverage contracts make the required source classes, windows, media types, and minimum envelope counts policy-relative. Neither mechanism proves global completeness or source truth.
 
-The bundle can show integrity. It cannot prove that a claimant disclosed every relevant fact. Completeness remains a governance and adjudication question.
+### Offline replay
 
-## 6. Privacy model
+Replay uses the same accepted bytes, explicit time, source profile, external trust, delegation context, native trust, policy, schemas, rulebook, and engine semantics.
 
-The core protocol prefers digests, classifications, and bounded metadata. Raw prompts, full model conversations, credentials, personal data, and full transaction payloads are excluded by default.
+It performs no live key, schema, policy, revocation, identity, or clock lookup. Identical accepted inputs produce the same policy result.
 
-The v1 bundle embeds only canonical protocol JSON. Raw private attachments remain outside the reference format. A production adapter may add separately governed digest commitments, access controls, retention, and redaction lineage without weakening the core verifier.
+### Policy and conformance tools
 
-Logs and errors do not echo artifact bodies, absolute paths, environment values, or key material.
+Policy-pack tools validate a policy against its exact rulebook, run closed-fact fixtures, and report deterministic structural and case-level behavior changes between rulebooks.
 
-## 7. Interoperability
+The CLI exposes `casepack build`, `casepack verify`, `casepack unpack`, and `casepack diff`; `policy validate`, `policy test`, and `policy diff`; JSON or HTML `case-report`; and the versioned `conformance` statement. CasePack verification, unpacking, and reporting require an explicit `{casePack, anchors}` input. Raw evidence crosses the JSON boundary only as `{referenceId, bytesBase64}`.
 
-The native format is deliberately protocol-neutral.
+CasePack build seals only the outer object after its native bundle, mapping traces, evidence envelopes, trust snapshot, delegation context, coverage contract, and checkpoints have been sealed through SDK helpers. The conformance fixture suite is a bounded implementation check, not a third-party certification.
 
-AP2 can provide upstream mandate artifacts, but an adapter must pin the exact AP2 version, profile, `vct`, and schema digest. Compact JWT and SD-JWT material must retain its exact serialization for upstream hash verification. This project does not claim AP2 conformance.
+## 4. Lifecycle covered
 
-SAFR-style mandate, policy, risk-boundary, validation, and audit checkpoints can map into runtime evidence. The public framework is treated as a source of design concepts, not a published machine protocol or certification target. This project does not claim SAFR compliance or MAS endorsement.
+The v1.1 case layer covers evidence supplied across:
 
-Transport signatures, including RFC 9421 profiles, protect an HTTP exchange. They do not replace signed evidence artifacts inside the bundle.
+1. checkout creation and updates
+2. Checkout Mandate and Payment Mandate material
+3. payment handoff and result evidence
+4. order creation and status evidence
+5. refund, return, cancellation, and price-adjustment evidence
 
-## 8. Adoption path
+Capture means preservation, linking, verification, and readiness assessment. MandateBound does not operate the checkout, move funds, monitor the merchant, confirm settlement independently, or submit a dispute.
 
-### Stage 1: simulation
+## 5. Native policy boundary
 
-Use synthetic scenarios to test whether an institution's proposed allocation policy produces expected outcomes and appropriately unresolved cases.
+The v1 engine still applies a bounded, data-only rulebook to accepted evidence:
 
-### Stage 2: shadow evidence
+- valid in-scope execution can select the principal branch
+- trustworthy evidence of out-of-mandate operator execution can select the operator branch
+- the model-vendor branch requires trusted, sufficient, non-conflicting causal evidence plus otherwise compliant controls
+- missing, invalid, unsupported, contradictory, or multi-causal evidence stays unresolved
 
-Generate native evidence alongside an existing agent transaction flow without changing authorization or claims decisions. Compare evidence completeness, operational cost, and review time.
+These are policy branches. They are not findings of legal liability, fault, damages, or insurance coverage.
 
-### Stage 3: contractual pilot
+A signature authenticates a protected statement under accepted trust assumptions. It does not establish that the statement is true.
 
-If legal and commercial owners choose to proceed, bind a policy version and evidence obligations into a controlled bilateral pilot. Independent legal and insurance review is required.
+## 6. Intended users
 
-### Stage 4: institution-specific adapters
+MandateBound is intended for:
 
-Add version-pinned mandate, receipt, trust, and evidence-store adapters. Keep the core rule engine independent of any payment rail or vendor.
+- merchant and agent-platform teams capturing transaction evidence
+- payment, risk, assurance, and dispute teams preparing reviewable cases
+- policy owners testing evidence obligations and decision branches
+- infrastructure and standards teams building version-pinned adapters
+- researchers studying post-transaction accountability
 
-## 9. Risks
+The first adoption mode should be shadow evidence capture. MandateBound can run alongside an existing transaction flow without changing authorization, settlement, or claims decisions.
+
+## 7. Adoption path
+
+### Stage 1: synthetic conformance
+
+Run intact, incomplete, mutated, contradictory, and out-of-mandate fixtures against the exact profile.
+
+### Stage 2: shadow capture
+
+Preserve evidence beside an existing UCP/AP2 flow. Measure missing artifacts, rejected source material, unsupported features, and review effort without making production decisions.
+
+### Stage 3: governed pilot
+
+Bind profile, evidence obligations, trust distribution, retention, reviewer authority, and policy versions into a controlled bilateral pilot. Obtain independent legal, security, privacy, compliance, insurance, and operational review.
+
+### Stage 4: institution-specific integration
+
+Add governed trust and policy mappings. Keep source import, native evidence, and legal decision-making as separate boundaries.
+
+## 8. Success measures
+
+A v1.1 pilot should measure:
+
+- percentage of required evidence items captured before dispute
+- number and cause of rejected or unsupported artifacts
+- time to produce a review-ready case
+- percentage of sealed cases replayed without network access
+- rate of byte-identical policy replay under identical pins
+- frequency of unresolved results caused by missing or contradictory evidence
+- operational and privacy cost of retaining the required source record
+
+The project should not use transaction volume, damages allocated, or "liability accuracy" as a success metric without independent ground truth and a governed legal basis.
+
+## 9. Risks and controls
 
 ### False legal confidence
 
-The largest risk is semantic, not cryptographic. A technically valid decision can be mistaken for a legal judgment. The project counters this through machine-readable legal-effect fields, visible disclaimers, unresolved states, and separated fact categories.
+Risk: a policy branch is mistaken for a legal decision.
 
-### Evidence capture failure
+Control: visible disclaimers, machine-readable `legalEffect: "not-determined"`, neutral branch language, and explicit unsupported legal questions.
 
-An engine cannot evaluate evidence that was never captured. Shadow deployments should measure missing artifacts and timestamp reliability before policy use.
+### Valid signature, wrong meaning
 
-### Trust-root governance
+Risk: cryptographic validity is treated as proof of authority or truth.
 
-Pinned trust improves reproducibility but moves responsibility to trust-root distribution, key custody, revocation semantics, and snapshot approval.
+Control: separate `upstreamValid` from `evidenceEligible`, bind signer roles and scope, and preserve attributed assertions as assertions.
 
-### Causation quality
+### Evidence omission
 
-A signature authenticates an attestor's statement, not the truth of the statement. Policies must define allowed methods and reviewers, and must preserve conflicting evidence.
+Risk: a case appears complete because undisclosed material is absent.
 
-### Policy gaming
+Control: profile-scoped readiness states, no universal completeness percentage, explicit missing items, and no completeness guarantee.
 
-Parties may optimize behavior around amount, timing, counterparty, scope, and usage boundaries. Property tests and adversarial fixtures should accompany every rulebook change.
+### Historical drift
 
-### Demand risk
+Risk: newer keys, schemas, policies, or revocation positions change an old result.
 
-The infrastructure is only useful if autonomous economic activity produces losses worth allocating. The reference implementation intentionally avoids claims about market size or commercial readiness.
+Control: discovery-only `ExternalTrustSnapshot`, native trust snapshots, digest pins, explicit time, and offline replay.
 
-## 10. Success criteria
+### Source normalization error
 
-The v1 release succeeds if it can:
+Risk: parsed or reserialized data no longer matches signed bytes.
 
-- reproduce the four reference outcomes from synthetic evidence
-- fail closed on missing and conflicting evidence
-- detect any mutation to canonical bundle content or committed metadata
-- reject replay, scope expansion, policy substitution, and trust substitution
-- replay a historical decision byte for byte
-- append an appeal without mutating the original
-- run offline after dependency installation
-- pass type, schema, property, security, API, CLI, privacy, package, and release-tree checks
-- explain its limits in the first screen of the README and every machine decision
+Control: preserve exact source representations where upstream verification depends on them and keep native canonicalization separate.
 
-## 11. Non-goals
+### Sensitive-data accumulation
 
-The v1 project does not:
+Risk: a dispute case becomes a high-value collection of personal and commercial data.
 
-- create or recognize agent legal personhood
-- extend credit or custody value
-- underwrite insurance or settle claims
-- replace payment authorization or identity systems
-- apportion shared fault across many actors
-- decide governing law or evidentiary standards
-- certify external protocol or regulatory compliance
-- operate as a production multi-tenant service
+Control: minimization, classifications, access control, encryption, retention limits, redaction lineage, and deployment-specific privacy review.
+
+## 10. Deliberate deferrals
+
+### Multi-party dollar waterfalls
+
+v1.1 does not compute dollar amounts or contribution percentages.
+
+A defensible waterfall would require explicit contractual terms for caps, deductibles, aggregate limits, exclusions, priority, subrogation, valuation, allocation basis, and governing-law exceptions. UCP and AP2 evidence does not establish those inputs. Inventing percentages would create false precision and conflict with the engine's unresolved treatment of multi-causal evidence.
+
+Any future simulator must accept explicit, signed terms, expose every assumption and unallocated remainder, retain `legalEffect: "not-determined"`, and avoid terms such as "amount owed."
+
+### Additional protocol families
+
+UCP over A2A and MCP is deferred. Visa Trusted Agent Protocol and x402 adapters are unsupported in v1.1. Each would require an exact versioned profile, source-preservation rules, trust semantics, mutation fixtures, and a narrow conformance claim.
+
+### Hosted service
+
+Authentication, tenant isolation, production key management, TLS termination, distributed replay protection, retention operations, monitoring, and incident response remain deployment responsibilities.
+
+## 11. Public claim
+
+The supported public claim is:
+
+> MandateBound v1.1 implements the UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile for evidence readiness and deterministic offline dispute replay.
+
+The unsupported claim is:
+
+> MandateBound is UCP compliant, AP2 compliant, legally determines liability, or is production ready.
+
+The profile is pinned to the [UCP 2026-04-08 specification](https://ucp.dev/2026-04-08/specification/overview/), the [UCP AP2 Mandates Extension](https://ucp.dev/specification/ap2-mandates/), and the [AP2 v0.2.0 release](https://github.com/google-agentic-commerce/AP2/releases/tag/v0.2.0).
 
 ## 12. Open-source posture
 
-The reference implementation is released under Apache License 2.0 to encourage review and extension while providing an explicit patent grant. Public examples are synthetic. Product direction, requirements, and evaluation are attributed to Oonyl, with AI-assisted implementation disclosed plainly.
+MandateBound is published by Oonyl under Apache License 2.0. Public examples use synthetic identities and data.
 
-External projects may adopt the schemas or code without adopting the reference allocation rule. Any production policy should be separately governed, versioned, reviewed, and contractually grounded.
+External teams can adopt the evidence model without adopting the reference policy. Any real trust model, policy, contract, retention rule, reviewer authority, or dispute procedure must be separately governed.
