@@ -1,0 +1,44 @@
+name: Bug report
+description: Report reproducible incorrect behavior using synthetic data.
+title: "bug: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: Do not include real evidence, credentials, personal data, private keys, or production paths.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Describe the output without including sensitive input bytes.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal synthetic reproduction
+      description: Include the smallest safe fixture or command that reproduces the issue.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: This report contains synthetic data only.
+          required: true
+        - label: This is not a private security vulnerability.
+          required: true

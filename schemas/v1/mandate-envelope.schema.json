@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/mandate-envelope.schema.json",
+  "title": "MandateEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "revision", "issuedAt", "validFrom", "expiresAt", "nonce", "principal", "operator", "agent", "policyRef", "rulebookRef", "scope", "requiredControls"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "validFrom": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "expiresAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "nonce": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "principal": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "operator": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "agent": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "modelVendor": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "policyRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "rulebookRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actions", "maxExecutions", "delegation"],
+      "properties": {
+        "actions": {
+          "type": "array", "minItems": 1, "maxItems": 256,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "targets"],
+            "properties": {
+              "kind": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+              "targets": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+              "counterparties": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+              "asset": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+              "maxMinorUnits": { "$ref": "common.schema.json#/$defs/minorUnits" }
+            }
+          }
+        },
+        "maxExecutions": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "delegation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "maxDepth", "delegates"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "maxDepth": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "delegates": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } }
+          }
+        }
+      }
+    },
+    "requiredControls": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/appeal-event.schema.json",
+  "title": "AppealEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "appealId", "decisionId", "sequence", "eventType", "actor", "occurredAt", "reasonCodes"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "appealId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "decisionId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "sequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "previousEventDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "eventType": { "enum": ["filed", "evidence_added", "review_started", "upheld", "reversed", "withdrawn"] },
+    "actor": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "occurredAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "reasonCodes": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "evidenceBundleDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "supersedingDecisionId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" }
+  },
+  "allOf": [
+    { "if": { "properties": { "sequence": { "type": "integer", "minimum": 2 } }, "required": ["sequence"] }, "then": { "required": ["previousEventDigest"], "properties": { "previousEventDigest": { "$ref": "common.schema.json#/$defs/sha256" } } } },
+    { "if": { "properties": { "eventType": { "const": "evidence_added" } }, "required": ["eventType"] }, "then": { "required": ["evidenceBundleDigest"], "properties": { "evidenceBundleDigest": { "$ref": "common.schema.json#/$defs/sha256" } } } },
+    { "if": { "properties": { "eventType": { "const": "reversed" } }, "required": ["eventType"] }, "then": { "required": ["supersedingDecisionId"], "properties": { "supersedingDecisionId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } } } }
+  ]
+}

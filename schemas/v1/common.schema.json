@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/common.schema.json",
+  "$defs": {
+    "asciiIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "maxLength": 128
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "maxLength": 8192
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^urn:agent-liability:jwk:[A-Za-z0-9_-]{43}$"
+    },
+    "minorUnits": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,77})$",
+      "maxLength": 78
+    },
+    "actorRole": {
+      "enum": ["principal", "operator", "agent", "model_vendor", "causation_attestor", "reviewer", "rulebook_publisher", "trust_publisher", "bundle_assembler"]
+    },
+    "proofPurpose": {
+      "enum": ["artifact_issuance", "mandate_authorization", "runtime_observation", "execution_attestation", "incident_filing", "causation_attestation", "policy_acceptance", "decision_issuance", "trust_snapshot_issuance", "bundle_assembly", "appeal_event", "rulebook_issuance"]
+    },
+    "artifactType": {
+      "enum": ["mandate_envelope", "runtime_event", "execution_receipt", "incident_report", "causation_attestation", "liability_policy", "liability_decision", "evidence_bundle", "trust_snapshot", "appeal_event", "rulebook"]
+    },
+    "actorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role"],
+      "properties": {
+        "id": { "$ref": "#/$defs/asciiIdentifier" },
+        "role": { "$ref": "#/$defs/actorRole" }
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactType", "artifactId", "digest"],
+      "properties": {
+        "artifactType": { "$ref": "#/$defs/artifactType" },
+        "artifactId": { "$ref": "#/$defs/asciiIdentifier" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset", "minorUnits"],
+      "properties": {
+        "asset": { "$ref": "#/$defs/asciiIdentifier" },
+        "minorUnits": { "$ref": "#/$defs/minorUnits" }
+      }
+    },
+    "actionDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target", "parametersDigest"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/asciiIdentifier" },
+        "target": { "$ref": "#/$defs/asciiIdentifier" },
+        "parametersDigest": { "$ref": "#/$defs/sha256" },
+        "counterparty": { "$ref": "#/$defs/asciiIdentifier" },
+        "quantity": { "$ref": "#/$defs/quantity" }
+      }
+    },
+    "controlResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlId", "result", "eventId"],
+      "properties": {
+        "controlId": { "$ref": "#/$defs/asciiIdentifier" },
+        "result": { "enum": ["pass", "fail", "not_applicable"] },
+        "eventId": { "$ref": "#/$defs/asciiIdentifier" }
+      }
+    },
+    "publicJwk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kty", "crv", "x"],
+      "properties": {
+        "kty": { "const": "OKP" },
+        "crv": { "const": "Ed25519" },
+        "x": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "alg": { "const": "EdDSA" },
+        "use": { "const": "sig" },
+        "key_ops": { "const": ["verify"] }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protected", "signature"],
+      "properties": {
+        "protected": { "$ref": "#/$defs/base64url" },
+        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+      }
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0.0",
+  "artifactId": "rulebook-mandate-to-liability-v1",
+  "revision": 1,
+  "semanticsVersion": "mandate-to-liability-v1",
+  "issuedAt": "2026-07-23T00:00:00.000Z",
+  "rules": [
+    {
+      "id": "invalid-input-or-evidence",
+      "priority": 1000,
+      "when": {
+        "op": "any",
+        "conditions": [
+          { "op": "eq", "fact": "input_state", "value": "invalid" },
+          { "op": "eq", "fact": "evidence_state", "value": "tampered" },
+          { "op": "eq", "fact": "policy_state", "value": "invalid" },
+          { "op": "in", "fact": "trust_state", "values": ["mismatch", "invalid"] }
+        ]
+      },
+      "outcome": "unresolved",
+      "reasonCode": "invalid_evidence"
+    },
+    {
+      "id": "conflicting-or-multi-causal-evidence",
+      "priority": 900,
+      "when": {
+        "op": "any",
+        "conditions": [
+          { "op": "eq", "fact": "evidence_state", "value": "contradictory" },
+          { "op": "in", "fact": "causation_state", "values": ["conflicting", "multi_causal"] }
+        ]
+      },
+      "outcome": "unresolved",
+      "reasonCode": "conflicting_evidence"
+    },
+    {
+      "id": "trusted-operator-violation",
+      "priority": 800,
+      "when": {
+        "op": "all",
+        "conditions": [
+          { "op": "eq", "fact": "receipt_state", "value": "trusted" },
+          {
+            "op": "in",
+            "fact": "operator_violation",
+            "values": [
+              "invalid_mandate",
+              "expired_mandate",
+              "revoked_mandate",
+              "replayed_execution",
+              "out_of_scope",
+              "control_failure"
+            ]
+          }
+        ]
+      },
+      "outcome": "operator",
+      "reasonCode": "operator_executed_outside_valid_mandate"
+    },
+    {
+      "id": "proven-model-vendor-causation",
+      "priority": 700,
+      "when": {
+        "op": "all",
+        "conditions": [
+          { "op": "eq", "fact": "evidence_state", "value": "sufficient" },
+          { "op": "eq", "fact": "mandate_state", "value": "valid" },
+          { "op": "eq", "fact": "receipt_state", "value": "trusted" },
+          { "op": "eq", "fact": "execution_state", "value": "compliant" },
+          { "op": "eq", "fact": "operator_controls", "value": "compliant" },
+          { "op": "eq", "fact": "operator_violation", "value": "none" },
+          { "op": "eq", "fact": "model_provenance", "value": "matched" },
+          { "op": "eq", "fact": "causation_state", "value": "sufficient" }
+        ]
+      },
+      "outcome": "model_vendor",
+      "reasonCode": "trusted_model_vendor_causation"
+    },
+    {
+      "id": "valid-authorized-execution",
+      "priority": 600,
+      "when": {
+        "op": "all",
+        "conditions": [
+          { "op": "eq", "fact": "evidence_state", "value": "sufficient" },
+          { "op": "eq", "fact": "policy_state", "value": "active" },
+          { "op": "eq", "fact": "trust_state", "value": "pinned" },
+          { "op": "eq", "fact": "mandate_state", "value": "valid" },
+          { "op": "eq", "fact": "receipt_state", "value": "trusted" },
+          { "op": "eq", "fact": "execution_state", "value": "compliant" },
+          { "op": "eq", "fact": "operator_controls", "value": "compliant" },
+          { "op": "eq", "fact": "operator_violation", "value": "none" }
+        ]
+      },
+      "outcome": "principal",
+      "reasonCode": "principal_authorized_compliant_execution"
+    },
+    {
+      "id": "missing-required-evidence",
+      "priority": 500,
+      "when": {
+        "op": "any",
+        "conditions": [
+          { "op": "eq", "fact": "evidence_state", "value": "missing" },
+          { "op": "eq", "fact": "mandate_state", "value": "missing" },
+          { "op": "eq", "fact": "receipt_state", "value": "missing" },
+          { "op": "eq", "fact": "execution_state", "value": "missing" }
+        ]
+      },
+      "outcome": "unresolved",
+      "reasonCode": "missing_required_evidence"
+    }
+  ],
+  "defaultOutcome": "unresolved"
+}

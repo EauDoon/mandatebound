@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/rulebook.schema.json",
+  "title": "Rulebook",
+  "$defs": {
+    "factScalar": { "oneOf": [{ "type": "null" }, { "type": "boolean" }, { "type": "string" }, { "type": "integer" }] },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "fact", "value"],
+          "properties": {
+            "op": { "const": "eq" },
+            "fact": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+            "value": { "$ref": "#/$defs/factScalar" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "fact", "values"],
+          "properties": {
+            "op": { "const": "in" },
+            "fact": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+            "values": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "#/$defs/factScalar" } }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "conditions"],
+          "properties": {
+            "op": { "enum": ["all", "any"] },
+            "conditions": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/condition" } }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["op", "condition"],
+          "properties": { "op": { "const": "not" }, "condition": { "$ref": "#/$defs/condition" } }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "revision", "semanticsVersion", "issuedAt", "rules", "defaultOutcome"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "semanticsVersion": { "const": "mandate-to-liability-v1" },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "rules": {
+      "type": "array", "minItems": 1, "maxItems": 1024,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "priority", "when", "outcome", "reasonCode"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+          "when": { "$ref": "#/$defs/condition" },
+          "outcome": { "enum": ["principal", "operator", "model_vendor", "unresolved"] },
+          "reasonCode": { "$ref": "common.schema.json#/$defs/asciiIdentifier" }
+        }
+      }
+    },
+    "defaultOutcome": { "const": "unresolved" }
+  }
+}

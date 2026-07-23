@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/runtime-event.schema.json",
+  "title": "RuntimeEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "executionId", "sequence", "eventType", "actor", "observedAt", "actionDigest", "parentEventIds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "executionId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "sequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "eventType": { "enum": ["request_received", "mandate_revoked", "mandate_checked", "policy_checked", "human_approved", "model_invoked", "tool_called", "execution_attempted", "execution_completed", "execution_failed", "rollback_completed"] },
+    "actor": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "observedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "effectiveAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "mandateRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "actionDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "parentEventIds": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "contentDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "controlId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "controlResult": { "enum": ["pass", "fail", "not_applicable"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "eventType": { "const": "mandate_revoked" } }, "required": ["eventType"] },
+      "then": {
+        "required": ["effectiveAt", "mandateRef"],
+        "properties": {
+          "effectiveAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+          "mandateRef": { "$ref": "common.schema.json#/$defs/artifactRef" }
+        }
+      }
+    }
+  ]
+}

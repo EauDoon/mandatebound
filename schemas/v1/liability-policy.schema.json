@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/liability-policy.schema.json",
+  "title": "LiabilityPolicy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "revision", "issuedAt", "effectiveFrom", "effectiveUntil", "attributionProfile", "principalId", "operatorId", "modelVendorIds", "rulebookRef", "trustSnapshotRef", "causation", "appeal", "legalEffect"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "effectiveFrom": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "effectiveUntil": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "attributionProfile": { "const": "mandate-to-liability-v1" },
+    "principalId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "operatorId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "modelVendorIds": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "rulebookRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "trustSnapshotRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "causation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requiredForVendorOutcome", "independentAttestorRequired", "allowedMethods", "acceptedAttestorRoles"],
+      "properties": {
+        "requiredForVendorOutcome": { "const": true },
+        "independentAttestorRequired": { "const": true },
+        "allowedMethods": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["counterfactual_replay", "controlled_reproduction", "signed_provider_admission"] } },
+        "acceptedAttestorRoles": { "const": ["causation_attestor"] }
+      }
+    },
+    "appeal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reviewerIds", "maxAppealEvents"],
+      "properties": {
+        "reviewerIds": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+        "maxAppealEvents": { "type": "integer", "minimum": 1, "maximum": 10000 }
+      }
+    },
+    "legalEffect": { "const": "not-determined" }
+  }
+}

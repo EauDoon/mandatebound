@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.mandatebound/
+.env
+.env.*
+*.log
+*.tgz
+*.pem
+*.key
+*.p8
+tmp/
+work/

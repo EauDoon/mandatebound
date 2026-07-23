@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/causation-attestation.schema.json",
+  "title": "CausationAttestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "incidentRef", "subject", "modelDigest", "attestor", "method", "conclusion", "failureCode", "causalEventIds", "competingCauseIds", "issuedAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "incidentRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "subject": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "modelDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "attestor": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "method": { "enum": ["counterfactual_replay", "controlled_reproduction", "signed_provider_admission"] },
+    "conclusion": { "enum": ["sufficient", "insufficient", "conflicting"] },
+    "failureCode": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "causalEventIds": { "type": "array", "minItems": 1, "maxItems": 1024, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "counterfactual": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baselineDigest", "interventionDigest", "resultDigest", "repetitions"],
+      "properties": {
+        "baselineDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "interventionDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "resultDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "repetitions": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "reproductionDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "competingCauseIds": { "type": "array", "maxItems": 1024, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "issuedAt": { "$ref": "common.schema.json#/$defs/timestamp" }
+  },
+  "allOf": [
+    { "if": { "properties": { "method": { "const": "counterfactual_replay" } }, "required": ["method"] }, "then": { "required": ["counterfactual"], "properties": { "counterfactual": true } } },
+    { "if": { "properties": { "method": { "const": "controlled_reproduction" } }, "required": ["method"] }, "then": { "required": ["reproductionDigest"], "properties": { "reproductionDigest": { "$ref": "common.schema.json#/$defs/sha256" } } } }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/signed-artifact.schema.json",
+  "title": "SignedArtifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "artifactType", "schemaId", "payload", "payloadDigest", "proofs"],
+  "properties": {
+    "format": { "const": "agent-liability-signed-artifact/v1" },
+    "artifactType": { "$ref": "common.schema.json#/$defs/artifactType" },
+    "schemaId": { "type": "string", "format": "uri", "maxLength": 512 },
+    "payload": true,
+    "payloadDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "proofs": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "common.schema.json#/$defs/proof" } }
+  }
+}

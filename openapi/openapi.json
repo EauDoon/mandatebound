@@ -1,0 +1,484 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MandateBound API",
+    "version": "1.0.0",
+    "summary": "Agent Loss Allocation Protocol for deterministic evidence verification and policy allocation",
+    "description": "A localhost-first reference API for evidence integrity, deterministic policy allocation, append-only appeals, and synthetic simulations. Outputs are technical policy allocations with legalEffect set to not-determined. They are not legal judgments, insurance determinations, or proof of identity, authority, intent, or causation."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "Explicit local development port; the reference server defaults to an ephemeral loopback port when embedded."
+    }
+  ],
+  "tags": [
+    { "name": "Verification" },
+    { "name": "Evaluations" },
+    { "name": "Appeals" },
+    { "name": "Simulations" },
+    { "name": "Operations" }
+  ],
+  "paths": {
+    "/v1/verify": {
+      "post": {
+        "operationId": "verifyEvidenceBundle",
+        "tags": ["Verification"],
+        "summary": "Verify the internal integrity of an evidence bundle",
+        "description": "Checks the closed manifest, entry digests, Merkle root, and bundle identity. Internal manifest pins do not establish external authenticity.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/EvidenceBundle" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification report, including valid false for a well-formed but tampered bundle",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BundleVerificationReport" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "408": { "$ref": "#/components/responses/RequestTimeout" },
+          "413": { "$ref": "#/components/responses/BodyTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMedia" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/evaluations": {
+      "post": {
+        "operationId": "createEvaluation",
+        "tags": ["Evaluations"],
+        "summary": "Evaluate a case against externally supplied pins",
+        "description": "Requires caller-provided pins or trust anchors. An unresolved policy allocation is a successful 201 response.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/EvaluationCase" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stored deterministic decision, including unresolved outcomes",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LiabilityDecision" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "408": { "$ref": "#/components/responses/RequestTimeout" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/BodyTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMedia" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/decisions/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Identifier" }],
+      "get": {
+        "operationId": "getDecision",
+        "tags": ["Evaluations"],
+        "summary": "Get an immutable decision by artifact identifier",
+        "responses": {
+          "200": {
+            "description": "Decision",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LiabilityDecision" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/appeals": {
+      "post": {
+        "operationId": "createAppeal",
+        "tags": ["Appeals"],
+        "summary": "Append the filed event for an existing decision",
+        "description": "The decision-bound appeal event cap is enforced. Reviewer events are checked against the decision-bound reviewer allowlist; actor fields are assertions and deployments must authenticate them.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealEvent" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Appeal history",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "408": { "$ref": "#/components/responses/RequestTimeout" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/BodyTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMedia" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/appeals/{id}/events": {
+      "parameters": [{ "$ref": "#/components/parameters/Identifier" }],
+      "post": {
+        "operationId": "appendAppealEvent",
+        "tags": ["Appeals"],
+        "summary": "Append one event at the current appeal head",
+        "description": "The decision-bound appeal event cap is enforced. review_started, upheld, and reversed require an asserted reviewer role and reviewer ID allowed by the original decision. Deployments must authenticate that assertion.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealEvent" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Updated appeal history",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "408": { "$ref": "#/components/responses/RequestTimeout" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/BodyTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMedia" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/appeals/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Identifier" }],
+      "get": {
+        "operationId": "getAppeal",
+        "tags": ["Appeals"],
+        "summary": "Get an append-only appeal history",
+        "responses": {
+          "200": {
+            "description": "Appeal history with explicit checkpoint completeness state",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v1/simulations": {
+      "post": {
+        "operationId": "runSimulation",
+        "tags": ["Simulations"],
+        "summary": "Run a synthetic scenario using ephemeral keys",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SimulationRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Synthetic simulation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/SimulationResult" },
+                    { "type": "array", "items": { "$ref": "#/components/schemas/SimulationResult" } }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "408": { "$ref": "#/components/responses/RequestTimeout" },
+          "413": { "$ref": "#/components/responses/BodyTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMedia" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "tags": ["Operations"],
+        "summary": "Get this OpenAPI document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 document",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "healthCheck",
+        "tags": ["Operations"],
+        "summary": "Process liveness probe",
+        "responses": {
+          "200": { "description": "Process is alive", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readinessCheck",
+        "tags": ["Operations"],
+        "summary": "Store-chain readiness probe",
+        "responses": {
+          "200": { "description": "Service is ready", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": {
+            "description": "Store chain is not ready or the service is unavailable",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Status" } },
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Identifier": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:@+-]{1,160}$" }
+      }
+    },
+    "responses": {
+      "BadRequest": { "description": "Malformed JSON or request", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "NotFound": { "description": "Resource not found", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "Conflict": { "description": "Replay, fork, duplicate, or immutable-state conflict", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "RequestTimeout": { "description": "Request body was not completed within the configured timeout", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "BodyTooLarge": { "description": "Body or bounded JSON structure exceeds configured limits", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "UnsupportedMedia": { "description": "JSON media type required; compressed request bodies are unsupported", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "Unprocessable": { "description": "Request is JSON but not a valid protocol artifact or transition", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "ServiceUnavailable": { "description": "Concurrency, storage, or engine service is unavailable", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } }
+    },
+    "schemas": {
+      "ProblemDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "title", "status", "detail", "code", "requestId"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "detail": { "type": "string" },
+          "code": { "type": "string", "pattern": "^ALB_[A-Z0-9_]+$" },
+          "requestId": { "type": "string", "format": "uuid" }
+        }
+      },
+      "EvidenceBundle": {
+        "type": "object",
+        "description": "Closed MandateBound evidence bundle. Stable wire-format identifiers retain the agent-liability protocol namespace. Detailed artifact schemas are distributed with the package.",
+        "required": ["schemaVersion", "artifactId", "bundleId", "rootDigest", "manifest", "objects", "proofs"]
+      },
+      "EvaluationCase": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Evaluation input with caller-provided external pins. Self-referential manifest pins alone are insufficient.",
+        "required": ["caseId", "asOf", "pins", "runtimeEvents", "priorReceipts", "causationAttestations", "policy", "rulebook", "trustSnapshot"],
+        "properties": {
+          "caseId": { "type": "string" },
+          "asOf": { "type": "string", "format": "date-time" },
+          "pins": {
+            "type": "object",
+            "required": ["asOf", "policyDigest", "trustSnapshotDigest", "rulebookDigest", "schemaDigests", "engineVersion"]
+          },
+          "trustRootJwk": { "type": "object" },
+          "mandate": { "type": "object" },
+          "runtimeEvents": { "type": "array", "items": { "type": "object" } },
+          "executionReceipt": { "type": "object" },
+          "priorReceipts": { "type": "array", "items": { "type": "object" } },
+          "incidentReport": { "type": "object" },
+          "causationAttestations": { "type": "array", "items": { "type": "object" } },
+          "policy": { "type": "object" },
+          "rulebook": { "type": "object" },
+          "trustSnapshot": { "type": "object" },
+          "evidenceBundle": { "$ref": "#/components/schemas/EvidenceBundle" },
+          "priorDecision": { "type": "object" },
+          "appealId": { "type": "string" }
+        }
+      },
+      "BundleVerificationReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["valid", "verifiedEntries", "totalEntries", "trustChecked", "issues"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "bundleId": { "type": "string" },
+          "manifestDigest": { "type": "string" },
+          "merkleRoot": { "type": "string" },
+          "verifiedEntries": { "type": "integer", "minimum": 0 },
+          "totalEntries": { "type": "integer", "minimum": 0 },
+          "trustChecked": { "type": "boolean" },
+          "issues": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "LiabilityDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Deterministic technical policy allocation. The normative JSON Schema is schemas/v1/liability-decision.schema.json; legalEffect is always not-determined.",
+        "required": [
+          "schemaVersion", "artifactId", "caseId", "evaluatedAt", "evidenceBundleId", "evidenceBundleDigest",
+          "policyRef", "rulebookRef", "trustSnapshotRef", "engineVersion", "outcome", "disposition",
+          "policyOutcome", "appealPolicy", "reasonCodes", "trace", "missingEvidence", "conflictingEvidence",
+          "cryptographicFacts", "verifiedFacts", "attributedAttestations", "policyConclusions",
+          "rejectedEvidence", "deterministicTrace", "pins", "externalAuthenticity", "legalEffect"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "1.0.0" },
+          "artifactId": { "type": "string" },
+          "caseId": { "type": "string" },
+          "evaluatedAt": { "type": "string", "format": "date-time" },
+          "evidenceBundleId": { "type": "string" },
+          "evidenceBundleDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "policyRef": { "type": "object" },
+          "rulebookRef": { "type": "object" },
+          "trustSnapshotRef": { "type": "object" },
+          "engineVersion": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["principal", "operator", "model_vendor", "unresolved"] },
+          "disposition": { "type": "string", "enum": ["allocated", "indeterminate", "conflicted", "invalid"] },
+          "policyOutcome": { "type": "string", "enum": ["principal", "operator", "model_vendor", "unresolved"] },
+          "appealPolicy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reviewerIds", "maxAppealEvents"],
+            "properties": {
+              "reviewerIds": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "type": "string" } },
+              "maxAppealEvents": { "type": "integer", "minimum": 0, "maximum": 10000 }
+            }
+          },
+          "allocation": { "type": "object" },
+          "reasonCodes": { "type": "array", "items": { "type": "string" } },
+          "trace": { "type": "array", "items": { "type": "object" } },
+          "missingEvidence": { "type": "array", "items": { "type": "string" } },
+          "conflictingEvidence": { "type": "array", "items": { "type": "string" } },
+          "cryptographicFacts": { "type": "array", "items": { "type": "object" } },
+          "verifiedFacts": { "type": "array", "items": { "type": "object" } },
+          "attributedAttestations": { "type": "array", "items": { "type": "object" } },
+          "policyConclusions": { "type": "array", "items": { "type": "object" } },
+          "rejectedEvidence": { "type": "array", "items": { "type": "object" } },
+          "deterministicTrace": { "type": "array", "items": { "type": "object" } },
+          "pins": { "type": "object" },
+          "externalAuthenticity": { "type": "string", "enum": ["established_by_caller_pins", "unestablished"] },
+          "supersedesDecisionId": { "type": "string" },
+          "appealId": { "type": "string" },
+          "legalEffect": { "const": "not-determined" }
+        }
+      },
+      "ActorRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "maxLength": 128
+          },
+          "role": {
+            "type": "string",
+            "enum": ["principal", "operator", "agent", "model_vendor", "causation_attestor", "reviewer", "rulebook_publisher", "trust_publisher", "bundle_assembler"]
+          }
+        }
+      },
+      "AppealEvent": {
+        "type": "object",
+        "description": "Actor-attributed hash-chain event. The actor field is an assertion; the reference API does not authenticate that identity.",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "artifactId", "appealId", "decisionId", "sequence", "eventType", "actor", "occurredAt", "reasonCodes"],
+        "properties": {
+          "schemaVersion": { "const": "1.0.0" },
+          "artifactId": { "type": "string" },
+          "appealId": { "type": "string" },
+          "decisionId": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "previousEventDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "eventType": { "type": "string", "enum": ["filed", "evidence_added", "review_started", "upheld", "reversed", "withdrawn"] },
+          "actor": { "$ref": "#/components/schemas/ActorRef" },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "reasonCodes": { "type": "array", "items": { "type": "string" } },
+          "evidenceBundleDigest": { "type": "string" },
+          "supersedingDecisionId": { "type": "string" }
+        },
+        "allOf": [
+          { "if": { "properties": { "sequence": { "minimum": 2 } }, "required": ["sequence"] }, "then": { "required": ["previousEventDigest"] } },
+          { "if": { "properties": { "eventType": { "const": "evidence_added" } }, "required": ["eventType"] }, "then": { "required": ["evidenceBundleDigest"] } },
+          { "if": { "properties": { "eventType": { "const": "reversed" } }, "required": ["eventType"] }, "then": { "required": ["supersedingDecisionId"] } }
+        ]
+      },
+      "AppealHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appealId", "decisionId", "status", "events", "completeness", "issues"],
+        "properties": {
+          "appealId": { "type": "string" },
+          "decisionId": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "upheld", "reversed", "withdrawn", "conflicted"] },
+          "events": { "type": "array", "items": { "$ref": "#/components/schemas/AppealEvent" } },
+          "headDigest": { "type": "string" },
+          "completeness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["state"],
+            "properties": {
+              "state": { "type": "string", "enum": ["unproven", "verified", "mismatch"] },
+              "checkpoint": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sequence", "headDigest"],
+                "properties": {
+                  "sequence": { "type": "integer", "minimum": 1 },
+                  "headDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+                }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "message"],
+              "properties": { "code": { "type": "string" }, "message": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "SimulationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario"],
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "enum": ["all", "principal", "operator", "model_vendor", "unresolved", "expiry", "replay", "tamper", "conflict", "appeal"]
+          }
+        }
+      },
+      "SimulationResult": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["scenario", "expected", "observed", "passed", "legalEffect"],
+        "properties": {
+          "scenario": { "type": "string", "enum": ["principal", "operator", "model_vendor", "unresolved", "expiry", "replay", "tamper", "conflict", "appeal"] },
+          "expected": { "type": "string" },
+          "observed": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "legalEffect": { "const": "not-determined" }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "enum": ["ok", "ready", "not_ready"] } }
+      }
+    }
+  }
+}

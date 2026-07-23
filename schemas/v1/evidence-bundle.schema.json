@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/evidence-bundle.schema.json",
+  "title": "EvidenceBundle",
+  "$defs": {
+    "path": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]{0,239}$", "maxLength": 240, "not": { "pattern": "(^|/)\\.\\.(/|$)|\\\\" } },
+    "pins": {
+      "type": "object", "additionalProperties": false,
+      "required": ["asOf", "policyDigest", "trustSnapshotDigest", "rulebookDigest", "schemaDigests", "engineVersion"],
+      "properties": {
+        "asOf": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "policyDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "trustSnapshotDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "rulebookDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "schemaDigests": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/sha256" } },
+        "engineVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$", "maxLength": 32 }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "bundleId", "rootDigest", "manifest", "objects", "proofs"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "bundleId": { "type": "string", "pattern": "^urn:agent-liability:bundle:[a-f0-9]{64}$" },
+    "rootDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "manifest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["format", "evidenceCutoff", "pins", "entries", "manifestDigest", "merkleRoot"],
+      "properties": {
+        "format": { "const": "agent-liability-bundle-manifest/v1" },
+        "evidenceCutoff": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "pins": { "$ref": "#/$defs/pins" },
+        "entries": {
+          "type": "array", "minItems": 1, "maxItems": 10000,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "mediaType", "size", "classification", "digest"],
+            "properties": {
+              "path": { "$ref": "#/$defs/path" },
+              "mediaType": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]+$", "maxLength": 160 },
+              "schemaId": { "type": "string", "format": "uri", "maxLength": 512 },
+              "size": { "type": "integer", "minimum": 0, "maximum": 16777216 },
+              "classification": { "enum": ["public", "internal", "confidential", "restricted"] },
+              "digest": { "$ref": "common.schema.json#/$defs/sha256" }
+            }
+          }
+        },
+        "manifestDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "merkleRoot": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "objects": {
+      "type": "array", "minItems": 1, "maxItems": 10000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "encoding", "content"],
+        "properties": { "path": { "$ref": "#/$defs/path" }, "encoding": { "const": "jcs-json" }, "content": true }
+      }
+    },
+    "proofs": { "type": "array", "maxItems": 0 }
+  }
+}

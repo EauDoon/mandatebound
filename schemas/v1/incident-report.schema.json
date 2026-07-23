@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/incident-report.schema.json",
+  "title": "IncidentReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "executionReceiptRef", "reporter", "filedAt", "discoveredAt", "allegedBranch", "harmCodes", "summaryDigest", "evidenceRefs"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "executionReceiptRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "reporter": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "filedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "discoveredAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "allegedBranch": { "enum": ["principal", "operator", "model_vendor", "unresolved"] },
+    "harmCodes": { "type": "array", "minItems": 1, "maxItems": 128, "uniqueItems": true, "items": { "$ref": "common.schema.json#/$defs/asciiIdentifier" } },
+    "summaryDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "evidenceRefs": { "type": "array", "maxItems": 1024, "items": { "$ref": "common.schema.json#/$defs/artifactRef" } }
+  }
+}

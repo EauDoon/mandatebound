@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a bounded evidence, policy, interoperability, or tooling improvement.
+title: "feature: "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What evidence or review problem is not handled today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Evidence schema
+        - Verification or trust
+        - Policy or rulebook
+        - Bundle or replay
+        - Appeal history
+        - API or CLI
+        - Interoperability adapter
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and safety
+      description: Explain determinism, privacy, legal-confidence, and historical-replay effects.
+    validations:
+      required: true

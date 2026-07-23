@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1/execution-receipt.schema.json",
+  "title": "ExecutionReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifactId", "executionId", "mandateRef", "policyRef", "authorizationNonce", "idempotencyKey", "operator", "action", "toolManifestDigest", "deploymentDigest", "disposition", "executedAt", "controlResults", "eventRootDigest"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "executionId": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "mandateRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "policyRef": { "$ref": "common.schema.json#/$defs/artifactRef" },
+    "authorizationNonce": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "idempotencyKey": { "$ref": "common.schema.json#/$defs/asciiIdentifier" },
+    "operator": { "$ref": "common.schema.json#/$defs/actorRef" },
+    "action": { "$ref": "common.schema.json#/$defs/actionDescriptor" },
+    "modelDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "toolManifestDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "deploymentDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "disposition": { "enum": ["authorized", "denied", "executed", "failed", "rolled_back"] },
+    "executedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "controlResults": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "common.schema.json#/$defs/controlResult" } },
+    "eventRootDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "actualEffectDigest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "previousReceiptDigest": { "$ref": "common.schema.json#/$defs/sha256" }
+  }
+}

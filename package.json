@@ -1,0 +1,78 @@
+{
+  "name": "@oonyl/mandatebound",
+  "version": "1.0.0",
+  "description": "Evidence-bound loss allocation for autonomous AI agent transactions.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Oonyl",
+  "keywords": [
+    "mandatebound",
+    "ai-agent-liability",
+    "ai-liability",
+    "agent-accountability",
+    "agent-risk",
+    "autonomous-agents",
+    "agent-loss-allocation",
+    "loss-allocation",
+    "policy-engine",
+    "agentic-ai",
+    "digital-signatures",
+    "evidence-bundle"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oonyl/mandatebound.git"
+  },
+  "homepage": "https://github.com/Oonyl/mandatebound#readme",
+  "bugs": {
+    "url": "https://github.com/Oonyl/mandatebound/issues"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "mandatebound": "./dist/cli.js",
+    "alb": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "rulebooks",
+    "openapi",
+    "README.md",
+    "BRIEF.md",
+    "SUMMARY.md",
+    "DISCLAIMER.md",
+    "NOTICE",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "node scripts/lint.mjs",
+    "licenses": "node scripts/check-licenses.mjs",
+    "test": "npm run build && node --test",
+    "test:coverage": "npm run build && node --experimental-test-coverage --test --test-coverage-include=dist/**/*.js --test-coverage-exclude=dist/cli.js --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85",
+    "demo": "npm run build && node dist/cli.js simulate --scenario all",
+    "package:check": "node scripts/check-package.mjs",
+    "verify": "npm run lint && npm run licenses && npm run typecheck && npm run test:coverage && npm run package:check"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "fast-check": "4.9.0",
+    "typescript": "7.0.2"
+  }
+}
