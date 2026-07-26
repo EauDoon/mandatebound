@@ -2,6 +2,40 @@
 
 All notable changes are documented here.
 
+## 1.2.0
+
+### Added
+
+- Added a deterministic AP2 v0.2.0 Evidence Pack and dispute evidence resolver pinned to upstream commit `b4587ac1d055888a73b4b21750973cffba961793`.
+- Added protocol-neutral, caller-supplied retrieval adapters plus an offline materialized-source assembler.
+- Added exact four-artifact selection for Checkout Mandate, Checkout Receipt, Payment Mandate, and Payment Receipt evidence.
+- Added strict direct and Delegate SD-JWT chain verification, terminal closed-Mandate Receipt references, required `checkout.line_items` and `payment.reference` constraints, and closed Payment schema checks.
+- Bound `checkout.allowed_merchants` to the merchant in the signed Checkout JWT, with any caller expected-merchant value treated only as an additional pin.
+- Added bounded merchant Checkout JWT schema and signature verification, cross-artifact transaction binding, AP2 Receipt JWT verification, and exact Receipt-reference checks.
+- Added duplicate-source deduplication and fail-closed conflict detection without last-response-wins behavior.
+- Added `MandateBoundAp2DisputeEvidenceResolution/v1`, its JSON Schema, content digest, integrity gates, coverage, retrieval attempts, and bounded issue codes.
+- Added sensitive `MandateBoundAp2EvidencePack/v1`, independently retained digest anchored Pack verification, exact Checkout-version binding, imported reported-revocation snapshots, and metadata-only deterministic HTML timelines that recompute verification.
+- Restricted Pack verification plans to closed public EC JWK shapes so private, symmetric, and unrelated key members fail before serialization.
+- Added schemas for the Evidence Pack and Pack-verification report.
+- Added the `@oonyl/mandatebound/ap2-dispute` package export and `mandatebound ap2-dispute resolve|pack|verify|render` CLI commands.
+- Added official AP2 v0.2.0 SDK-generated frozen vectors plus adversarial fixtures for missing, stale, future-captured, oversized, malformed, mutated, mismatched, conflicting, forged, empty, and failed retrieval cases.
+- Added the v1.2 boundary guide in [`docs/V1_2.md`](docs/V1_2.md) and the design decision in [ADR 0002](docs/adr/0002-ap2-dispute-resolver-boundary.md).
+
+### Compatibility
+
+- Preserved native v1 schemas, bundle roots, rulebooks, decision bytes, protocol version `1.0.0`, and engine version `1.0.0`.
+- Preserved v1.1 CasePack and UCP/AP2 evidence-import APIs.
+- Kept every resolver output non-binding with `disputeOutcome: "not-determined"` and `legalEffect: "not-determined"`.
+
+### Scope
+
+- The positive `evidence_verified` result establishes only integrity under the named profile. It does not decide a claim, refund, chargeback, fraud allegation, liability, causation, damages, settlement, or legal right.
+- Retrieval authentication, authorization, endpoints, transport security, privacy, and retention remain caller responsibilities.
+- Revocation snapshots are imported reports, not authenticated revocation facts. The library performs no revocation-service lookup.
+- Evidence Packs contain raw sensitive artifacts. Resolution and timeline outputs omit them.
+- Positive Pack verification requires an expected Pack digest retained outside the Pack; timeline renderers do not trust supplied verification reports.
+- Complete upstream history and general AP2 conformance remain unestablished.
+
 ## 1.1.0
 
 ### Added

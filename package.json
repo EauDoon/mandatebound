@@ -1,6 +1,6 @@
 {
   "name": "@oonyl/mandatebound",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Evidence-to-policy tooling for verifiable AI agent transactions and non-binding loss allocation.",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,6 +24,7 @@
     "casepack",
     "ucp",
     "ap2",
+    "dispute-evidence",
     "agentic-commerce",
     "transaction-audit"
   ],
@@ -67,6 +68,10 @@
       "types": "./dist/ucp-ap2.d.ts",
       "import": "./dist/ucp-ap2.js"
     },
+    "./ap2-dispute": {
+      "types": "./dist/ap2-dispute.d.ts",
+      "import": "./dist/ap2-dispute.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -96,7 +101,7 @@
     "lint": "node scripts/lint.mjs",
     "licenses": "node scripts/check-licenses.mjs",
     "test": "npm run build && node --test",
-    "conformance": "npm run build && node --test test/v1-compatibility.test.mjs test/casepack-v11.test.mjs test/ucp-ap2.test.mjs test/policy-tools-v11.test.mjs test/conformance-v11.test.mjs",
+    "conformance": "npm run build && node --test test/v1-compatibility.test.mjs test/casepack-v11.test.mjs test/ucp-ap2.test.mjs test/ap2-dispute-v12.test.mjs test/policy-tools-v11.test.mjs test/conformance-v12.test.mjs",
     "test:coverage": "npm run build && node --experimental-test-coverage --test --test-coverage-include=dist/**/*.js --test-coverage-exclude=dist/cli.js --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85",
     "demo": "npm run build && node dist/cli.js simulate --scenario all",
     "package:check": "node scripts/check-package.mjs",

@@ -1,0 +1,428 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.2/ap2-dispute-evidence-resolution.schema.json",
+  "title": "MandateBound AP2 Dispute Evidence Resolution v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaId",
+    "releaseVersion",
+    "profile",
+    "transactionId",
+    "asOf",
+    "status",
+    "selectedArtifacts",
+    "retrievalAttempts",
+    "gates",
+    "coverage",
+    "issues",
+    "historyCompleteness",
+    "legalEffect",
+    "disputeOutcome",
+    "resolutionDigest"
+  ],
+  "properties": {
+    "schemaId": {
+      "const": "MandateBoundAp2DisputeEvidenceResolution/v1"
+    },
+    "releaseVersion": {
+      "const": "1.2.0"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ap2Version",
+        "ap2ReleaseCommit",
+        "mandateProfileId",
+        "receiptReferenceProfile",
+        "retrievalTransport",
+        "builtInNetworkAccess"
+      ],
+      "properties": {
+        "id": {
+          "const": "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "ap2Version": {
+          "const": "0.2.0"
+        },
+        "ap2ReleaseCommit": {
+          "const": "b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "mandateProfileId": {
+          "const": "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "receiptReferenceProfile": {
+          "const": "sha256-terminal-compact-jws"
+        },
+        "retrievalTransport": {
+          "const": "caller-supplied"
+        },
+        "builtInNetworkAccess": {
+          "const": false
+        }
+      }
+    },
+    "transactionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "evidence_verified",
+        "unresolved"
+      ]
+    },
+    "selectedArtifacts": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/selectedArtifact"
+      }
+    },
+    "retrievalAttempts": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/retrievalAttempt"
+      }
+    },
+    "gates": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/coverage"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/issue"
+      }
+    },
+    "historyCompleteness": {
+      "const": "unknown"
+    },
+    "legalEffect": {
+      "const": "not-determined"
+    },
+    "disputeOutcome": {
+      "const": "not-determined"
+    },
+    "resolutionDigest": {
+      "$ref": "#/$defs/sha256Digest"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "evidence_verified"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selectedArtifacts": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "issues": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifactKind": {
+      "enum": [
+        "checkout_mandate",
+        "checkout_receipt",
+        "payment_mandate",
+        "payment_receipt"
+      ]
+    },
+    "sourceRole": {
+      "enum": [
+        "shopping_agent",
+        "merchant",
+        "credential_provider",
+        "network",
+        "merchant_payment_processor"
+      ]
+    },
+    "sourceId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sourceRefs": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/sourceId"
+      }
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "selectedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "digest",
+        "sourceRefs",
+        "issuer",
+        "issuerKid"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/artifactKind"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "sourceRefs": {
+          "$ref": "#/$defs/sourceRefs"
+        },
+        "issuer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "issuerKid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mandateVct": {
+          "enum": [
+            "mandate.checkout.1",
+            "mandate.payment.1"
+          ]
+        },
+        "receiptStatus": {
+          "enum": [
+            "Success",
+            "Error"
+          ]
+        },
+        "issuedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "checkout_mandate"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mandateVct"
+            ],
+            "properties": {
+              "mandateVct": {
+                "const": "mandate.checkout.1"
+              },
+              "receiptStatus": false,
+              "issuedAt": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "payment_mandate"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mandateVct"
+            ],
+            "properties": {
+              "mandateVct": {
+                "const": "mandate.payment.1"
+              },
+              "receiptStatus": false,
+              "issuedAt": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "checkout_receipt",
+                  "payment_receipt"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "receiptStatus",
+              "issuedAt"
+            ],
+            "properties": {
+              "mandateVct": false
+            }
+          }
+        }
+      ]
+    },
+    "retrievalAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "role",
+        "status",
+        "artifactKinds"
+      ],
+      "properties": {
+        "sourceId": {
+          "$ref": "#/$defs/sourceId"
+        },
+        "role": {
+          "$ref": "#/$defs/sourceRole"
+        },
+        "status": {
+          "enum": [
+            "provided",
+            "empty",
+            "failed"
+          ]
+        },
+        "artifactKinds": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifactKind"
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate",
+        "state",
+        "sourceRefs"
+      ],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "passed",
+            "failed",
+            "unknown"
+          ]
+        },
+        "sourceRefs": {
+          "$ref": "#/$defs/sourceRefs"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "state",
+        "sourceRefs"
+      ],
+      "properties": {
+        "requirement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "satisfied",
+            "missing",
+            "conflicting",
+            "unsupported",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "sourceRefs": {
+          "$ref": "#/$defs/sourceRefs"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "path",
+        "message",
+        "impact",
+        "sourceRefs"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "impact": {
+          "enum": [
+            "missing",
+            "conflicting",
+            "invalid",
+            "unsupported",
+            "retrieval",
+            "eligibility"
+          ]
+        },
+        "sourceRefs": {
+          "$ref": "#/$defs/sourceRefs"
+        }
+      }
+    }
+  }
+}

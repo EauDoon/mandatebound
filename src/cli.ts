@@ -23,12 +23,23 @@ import {
   diffMandateBoundCasePacks,
   unpackMandateBoundCasePack,
 } from "./casepack-tools.js";
+import {
+  assembleAp2DisputeEvidence,
+  createAp2EvidenceTimeline,
+  packAp2DisputeEvidence,
+  renderAp2EvidenceTimelineHtml,
+  verifyAp2DisputeEvidencePack,
+  type AssembleAp2DisputeEvidenceInput,
+  type PackAp2DisputeEvidenceInput,
+} from "./ap2-dispute.js";
+import { isSha256Digest } from "./canonical.js";
 import { getConformanceStatement } from "./conformance.js";
 import type {
   AppealEvent,
   EvidenceBundle,
   EvaluationInput,
   LiabilityDecision,
+  Sha256Digest,
 } from "./domain.js";
 import {
   diffRulebooks,
@@ -80,9 +91,18 @@ class CliError extends Error {
   }
 }
 
-const VALUE_OPTIONS = new Set(["--store", "--host", "--port", "--scenario", "--input", "--format"]);
+const VALUE_OPTIONS = new Set([
+  "--store",
+  "--host",
+  "--port",
+  "--scenario",
+  "--input",
+  "--format",
+  "--expected-pack-digest",
+]);
 const FLAG_OPTIONS = new Set(["--allow-remote", "--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
+const MAX_AP2_CLI_INPUT_BYTES = 17 * 1024 * 1024;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -126,13 +146,13 @@ function writeJson(stream: Pick<Writable, "write">, value: unknown): void {
   stream.write(`${JSON.stringify(value)}\n`);
 }
 
-async function readStdin(stream: Readable): Promise<string> {
+async function readStdin(stream: Readable, maxBytes: number): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunkValue of stream) {
     const chunk = Buffer.isBuffer(chunkValue) ? chunkValue : Buffer.from(chunkValue as Uint8Array);
     size += chunk.length;
-    if (size > MAX_CLI_INPUT_BYTES) {
+    if (size > maxBytes) {
       throw new CliError("ALB_CLI_INPUT_LIMIT", CLI_EXIT.INVALID, "Input exceeds the configured limit.");
     }
     chunks.push(chunk);
@@ -140,15 +160,19 @@ async function readStdin(stream: Readable): Promise<string> {
   return Buffer.concat(chunks, size).toString("utf8");
 }
 
-async function readInput(pathValue: string | undefined, stdin: Readable): Promise<unknown> {
+async function readInput(
+  pathValue: string | undefined,
+  stdin: Readable,
+  maxBytes = MAX_CLI_INPUT_BYTES,
+): Promise<unknown> {
   const path = pathValue ?? "-";
   let text: string;
   if (path === "-") {
-    text = await readStdin(stdin);
+    text = await readStdin(stdin, maxBytes);
   } else {
     try {
       const metadata = await lstat(path);
-      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_CLI_INPUT_BYTES) {
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > maxBytes) {
         throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file is not accepted.");
       }
       text = await readFile(path, "utf8");
@@ -158,7 +182,7 @@ async function readInput(pathValue: string | undefined, stdin: Readable): Promis
     }
   }
   try {
-    return parseStrictJson(text, { maxBytes: MAX_CLI_INPUT_BYTES });
+    return parseStrictJson(text, { maxBytes });
   } catch (error) {
     if (error instanceof StrictJsonError) {
       throw new CliError(error.code, CLI_EXIT.INVALID, "Input JSON is invalid.");
@@ -235,6 +259,18 @@ function assertAllowedOptions(args: ParsedArgs, allowed: readonly string[]): voi
   if (Object.keys(args.options).some((name) => !allowlist.has(name))) {
     throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Command option is not valid for this command.");
   }
+}
+
+function requireExpectedPackDigest(args: ParsedArgs): Sha256Digest {
+  const value = args.options["expected-pack-digest"];
+  if (typeof value !== "string" || !isSha256Digest(value)) {
+    throw new CliError(
+      "ALB_CLI_USAGE",
+      CLI_EXIT.USAGE,
+      "AP2 Pack verification requires --expected-pack-digest with a valid sha256 digest.",
+    );
+  }
+  return value;
 }
 
 function parsePort(value: string | boolean | undefined): number {
@@ -403,7 +439,7 @@ export async function runCli(
           version: PROTOCOL_VERSION,
           releaseVersion: RELEASE_VERSION,
           engineVersion: ENGINE_VERSION,
-          usage: "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|conformance> [--input PATH] [--format json|html]",
+          usage: "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]",
         },
       });
       return CLI_EXIT.SUCCESS;
@@ -581,6 +617,94 @@ export async function runCli(
         if (format === "html") stdout.write(renderCaseReportHtml(report));
         else writeJson(stdout, { ok: report.valid, result: report });
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+      }
+      case "ap2-dispute": {
+        const invocation = requireSubcommandInput(args, ["resolve", "pack", "verify", "render"]);
+        const needsPackAnchor = invocation.action === "verify" || invocation.action === "render";
+        assertAllowedOptions(
+          args,
+          needsPackAnchor ? ["input", "expected-pack-digest"] : ["input"],
+        );
+        const verificationOptions = needsPackAnchor
+          ? { expectedPackDigest: requireExpectedPackDigest(args) }
+          : null;
+        const format = assertOutputFormat(
+          args,
+          invocation.action === "render" ? ["json", "html"] : ["json"],
+        );
+        const input = asObject(await readInput(invocation.path, stdin, MAX_AP2_CLI_INPUT_BYTES));
+        if (invocation.action === "resolve") {
+          if (
+            !hasExactKeys(input, ["transactionId", "asOf", "verificationPlan", "sources"])
+            || typeof input["transactionId"] !== "string"
+            || typeof input["asOf"] !== "string"
+            || typeof input["verificationPlan"] !== "object"
+            || input["verificationPlan"] === null
+            || !Array.isArray(input["sources"])
+          ) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 dispute input is invalid.");
+          }
+          const result = assembleAp2DisputeEvidence(
+            input as unknown as AssembleAp2DisputeEvidenceInput,
+          );
+          writeJson(stdout, { ok: result.status === "evidence_verified", result });
+          return result.status === "evidence_verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+        }
+        if (invocation.action === "pack") {
+          if (
+            !hasExactKeys(input, [
+              "transactionId",
+              "asOf",
+              "createdAt",
+              "verificationPlan",
+              "sources",
+              "checkoutVersions",
+              "revocations",
+            ])
+          ) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Evidence Pack input is invalid.");
+          }
+          const pack = packAp2DisputeEvidence(input as unknown as PackAp2DisputeEvidenceInput);
+          writeJson(stdout, { ok: true, result: pack });
+          return CLI_EXIT.SUCCESS;
+        }
+        if (verificationOptions === null) {
+          throw new CliError("ALB_INTERNAL", CLI_EXIT.INTERNAL, "Command could not be completed.");
+        }
+        const packInput = hasExactKeys(input, ["ok", "result"]) && input["ok"] === true
+          ? input["result"]
+          : input;
+        const verification = verifyAp2DisputeEvidencePack(packInput, verificationOptions);
+        if (invocation.action === "verify") {
+          writeJson(stdout, { ok: verification.status === "verified", result: verification });
+          if (verification.packDigest === null) return CLI_EXIT.INVALID;
+          return verification.status === "verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+        }
+        if (format === "html") {
+          if (verification.packDigest === null) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Evidence Pack input is invalid.");
+          }
+          stdout.write(renderAp2EvidenceTimelineHtml(
+            packInput as Parameters<typeof renderAp2EvidenceTimelineHtml>[0],
+            verificationOptions,
+          ));
+        } else {
+          if (verification.packDigest === null) {
+            writeJson(stdout, { ok: false, result: verification });
+            return CLI_EXIT.INVALID;
+          }
+          writeJson(stdout, {
+            ok: verification.status === "verified",
+            result: {
+              verification,
+              timeline: createAp2EvidenceTimeline(
+                packInput as Parameters<typeof createAp2EvidenceTimeline>[0],
+                verificationOptions,
+              ),
+            },
+          });
+        }
+        return verification.status === "verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
       }
       case "conformance": {
         assertOutputFormat(args, ["json"]);

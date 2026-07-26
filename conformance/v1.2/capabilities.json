@@ -1,0 +1,34 @@
+{
+  "release": "1.2.0",
+  "claim": "bounded-evidence-profile",
+  "evidenceProfile": {
+    "id": "ucp-2026-04-08-rest+ap2-mandates-0.2.0",
+    "ucpVersion": "2026-04-08",
+    "ucpTransport": "REST",
+    "ap2Version": "0.2.0"
+  },
+  "disputeProfile": {
+    "id": "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793",
+    "ap2ReleaseCommit": "b4587ac1d055888a73b4b21750973cffba961793",
+    "mandateProfileId": "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
+    "receiptReferenceProfile": "sha256-terminal-compact-jws",
+    "operations": [
+      "resolve",
+      "pack",
+      "verify",
+      "render"
+    ],
+    "revocationEvidence": "imported-reported-state",
+    "builtInNetworkAccess": false,
+    "legalEffect": "not-determined"
+  },
+  "fixtureTests": [
+    "test/v1-compatibility.test.mjs",
+    "test/casepack-v11.test.mjs",
+    "test/ucp-ap2.test.mjs",
+    "test/ap2-dispute-v12.test.mjs",
+    "test/policy-tools-v11.test.mjs",
+    "test/conformance-v12.test.mjs"
+  ],
+  "legalEffect": "not-determined"
+}

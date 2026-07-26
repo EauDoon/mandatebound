@@ -2,7 +2,15 @@
 
 ## In one sentence
 
-MandateBound is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce that preserves a UCP/AP2 transaction record, exposes evidence gaps, and replays a non-binding policy branch offline.
+MandateBound is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce that preserves a UCP/AP2 transaction record, verifies bounded AP2 dispute evidence, exposes evidence gaps, and replays a non-binding policy branch offline.
+
+## v1.2 addition
+
+MandateBound v1.2 retrieves through caller-supplied adapters or assembles materialized responses for the four AP2 v0.2.0 dispute artifacts. It verifies direct and delegated Mandates, required autonomous constraints, the merchant Checkout JWT, Receipt signatures and terminal-Mandate references, historical key pins, and cross-source consistency.
+
+The Evidence Pack workflow is `pack -> verify -> render`. The sensitive Pack preserves exact Mandates, Checkout versions, Receipts, caller pins, and imported revocation snapshot bytes. Independent verification requires an expected Pack digest retained outside the Pack and recomputes every digest and evidence gate. The metadata-only HTML timeline omits the raw artifacts and recomputes verification instead of trusting a supplied report.
+
+The resolver emits `evidence_verified` only when every integrity gate passes. Pack verification emits `verified` only when the Pack matches its independently retained expected digest, the exact Checkout version is bound, both Mandates have reported revocation coverage, every report says `not_revoked`, and the embedded resolution passes. Revocation state is imported evidence, not an authenticated protocol fact. Missing, stale, unsupported, mismatched, conflicting, forged, empty, unknown, or failed evidence emits `unresolved`. `historyCompleteness`, the dispute outcome, and legal effect remain unknown or not determined.
 
 ## v1.1 focus
 
@@ -78,9 +86,9 @@ Every policy result retains:
 
 MandateBound does not determine liability, damages, enforceability, insurance coverage, or an amount owed.
 
-## Deliberate v1.1 limits
+## Deliberate limits
 
-v1.1 does not include:
+MandateBound does not include:
 
 - multi-party dollar waterfalls or contribution percentages
 - full A2A, MCP, Visa Trusted Agent Protocol, or x402 adapters

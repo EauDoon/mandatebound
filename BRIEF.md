@@ -2,13 +2,15 @@
 
 ## Executive brief
 
-MandateBound v1.1 is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce.
+MandateBound v1.2 is an open-source evidence-readiness and deterministic dispute-replay toolkit for agentic commerce.
 
 Its first external profile is deliberately exact:
 
 **UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile**
 
 MandateBound preserves the signed source record from checkout through order and refund review, reports what is ready or missing, seals the case around the existing v1 evidence bundle, and replays a non-binding policy branch offline.
+
+v1.2 also resolves one bounded AP2 evidence question before policy: whether exact Checkout Mandate, Checkout Receipt, Payment Mandate, and Payment Receipt artifacts form one cryptographically consistent record under caller-owned historical trust pins. Its `pack -> verify -> render` workflow preserves exact evidence in a sensitive Pack and produces a metadata-only review timeline. Retrieval is caller-supplied, conflicting bytes fail closed, and the dispute outcome remains not determined.
 
 The product does not decide legal liability. Every policy result keeps `legalEffect: "not-determined"`.
 
@@ -50,7 +52,19 @@ The product therefore leads with:
 
 Loss-allocation policy remains a bounded downstream use of the evidence, not the headline legal claim.
 
-## 3. v1.1 system
+## 3. v1.1 evidence system and v1.2 Evidence Pack
+
+### AP2 dispute evidence resolution
+
+The v1.2 resolver uses AP2 `transaction_id` only as a correlation key. It does not treat that identifier as retrieval authority. Materialized sources or caller-supplied adapters provide exact tokens; MandateBound verifies direct and delegated Mandates, required autonomous constraints, issuer and merchant signatures, Checkout bindings, both terminal-Mandate Receipt references, and cross-source consistency.
+
+The positive `evidence_verified` status is an integrity statement under the named AP2 v0.2.0 profile. It is not a claim result, proof of complete history, or legal finding.
+
+### Evidence Pack and timeline
+
+The sensitive Pack stores exact Mandates, Checkout versions, Receipts, caller-owned public verification pins, and imported revocation snapshot bytes. Independent verification requires an expected Pack digest retained outside the Pack, recomputes the Pack and sub-artifact digests, reruns the resolver, binds the expected Checkout version, and treats revocation state only as reported evidence.
+
+The HTML timeline omits raw tokens and snapshots and recomputes anchored verification rather than accepting a supplied report. A positive Pack result requires reported coverage for both closed Mandates and only `not_revoked` reports, but this is not an authenticated revocation-protocol claim.
 
 ### Exact evidence import
 
@@ -234,7 +248,7 @@ Any future simulator must accept explicit, signed terms, expose every assumption
 
 ### Additional protocol families
 
-UCP over A2A and MCP is deferred. Visa Trusted Agent Protocol and x402 adapters are unsupported in v1.1. Each would require an exact versioned profile, source-preservation rules, trust semantics, mutation fixtures, and a narrow conformance claim.
+UCP over A2A and MCP is deferred. Visa Trusted Agent Protocol and x402 adapters are unsupported in v1.2. Each would require an exact versioned profile, source-preservation rules, trust semantics, mutation fixtures, and a narrow conformance claim.
 
 ### Hosted service
 
@@ -244,7 +258,7 @@ Authentication, tenant isolation, production key management, TLS termination, di
 
 The supported public claim is:
 
-> MandateBound v1.1 implements the UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile for evidence readiness and deterministic offline dispute replay.
+> MandateBound v1.2 implements the UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence-import profile and a bounded AP2 dispute evidence resolver for evidence readiness and deterministic offline replay.
 
 The unsupported claim is:
 

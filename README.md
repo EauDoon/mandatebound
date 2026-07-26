@@ -21,6 +21,22 @@ A later reviewer needs more than a successful signature check:
 
 MandateBound makes those questions explicit and machine-readable.
 
+## What v1.2 adds
+
+MandateBound v1.2 closes one gap left explicitly outside AP2 v0.2.0: preserving, assembling, and reviewing the four dispute artifacts as one independently verifiable evidence record.
+
+- `assembleAp2DisputeEvidence` verifies materialized source responses offline.
+- `resolveAp2DisputeEvidence` invokes caller-supplied retrieval adapters; the core defines no endpoint and performs no built-in network access.
+- `packAp2DisputeEvidence` seals exact Mandates, Checkout versions, Receipts, caller pins, and imported revocation snapshots into a sensitive content-addressed Pack.
+- `verifyAp2DisputeEvidencePack` requires an independently retained expected Pack digest, recomputes every stored digest, and reruns all AP2 gates; `renderAp2EvidenceTimelineHtml` recomputes that anchored verification before producing a metadata-only review timeline.
+- Caller-owned verification plans keep historical keys, source pins, expected issuers, audiences, nonces, and time outside untrusted source responses.
+- Direct and delegated Mandates, required autonomous constraints, the merchant-signed Checkout JWT, both Receipts, and cross-artifact bindings are checked under one immutable AP2 release pin.
+- Duplicate exact copies retain all source references. Conflicting bytes never use last-response-wins selection.
+- Resolver and timeline outputs contain digests, gates, coverage, and bounded issues, not raw tokens, snapshot bytes, or provider exception text.
+- Revocation states are imported reports, not authenticated facts. Every result keeps the dispute outcome and legal effect not determined.
+
+The exact boundary and Receipt-reference interpretation are documented in [`docs/V1_2.md`](docs/V1_2.md) and [ADR 0002](docs/adr/0002-ap2-dispute-resolver-boundary.md).
+
 ## What v1.1 provides
 
 MandateBound v1.1 adds an evidence-import and case-readiness layer around the existing v1 evidence and policy engine:
@@ -172,6 +188,17 @@ node dist/cli.js serve --host 127.0.0.1 --port 8787
 
 An unresolved policy result is a successful evaluation and exits with code `0`.
 
+### AP2 Evidence Pack and dispute resolution
+
+```bash
+mandatebound ap2-dispute resolve --input ap2-dispute-input.json
+mandatebound ap2-dispute pack --input ap2-pack-input.json > ap2-pack.json
+mandatebound ap2-dispute verify --input ap2-pack.json --expected-pack-digest sha256:<64-hex-characters>
+mandatebound ap2-dispute render --input ap2-pack.json --expected-pack-digest sha256:<64-hex-characters> --format html
+```
+
+The commands consume materialized sources and a separate caller-owned verification plan. They do not contact merchants, agents, providers, networks, or revocation services. Retain `result.packDigest` from `pack` in a separate trusted case record, then provide it to `verify` and `render`; the Pack cannot authenticate itself. The Pack contains raw sensitive evidence; the rendered timeline does not. A positive resolver or Pack verification exits with code `0`; an evidence gap returns the conflict exit class and a bounded `unresolved` result. See [`docs/V1_2.md`](docs/V1_2.md) for the exact contract.
+
 ## A dispute replay, in plain language
 
 For a synthetic autonomous purchase:
@@ -207,6 +234,7 @@ Status describes this repository's implementation, not certification or producti
 | --- | --- | --- |
 | Native v1 strict parsing, signatures, policy evaluation, bundle verification, and appeals | Implemented | Reference implementation with synthetic tests |
 | UCP 2026-04-08 REST + AP2 Mandates Extension / AP2 v0.2.0 evidence import | Implemented | Exact profile only, not generic compliance |
+| AP2 v0.2.0 Evidence Pack and dispute resolver | Implemented | Exact-byte `pack`, out-of-band digest anchored `verify`, recomputing metadata-only `render`, and caller-supplied retrieval; no claim outcome or authenticated revocation claim |
 | Checkout-to-order/refund evidence capture, including returns, cancellations, and price adjustments | Implemented | Processes supplied evidence, not live transaction operations |
 | `DelegationContext` and `ExternalTrustSnapshot` | Implemented | Digest-bound delegation plus discovery-only external trust, not proof of legal authority or identity |
 | Readiness states and `upstreamValid` versus `evidenceEligible` | Implemented | Profile-scoped evidence assessment |
@@ -254,11 +282,14 @@ Before real use, obtain independent legal, security, privacy, compliance, insura
 | --- | --- |
 | [`schemas/v1`](schemas/v1) | Normative native artifact schemas |
 | [`schemas/v1.1`](schemas/v1.1) | Additive `CasePack`, coverage, delegation, and external-trust schemas |
+| [`schemas/v1.2`](schemas/v1.2) | AP2 dispute resolution, sensitive Evidence Pack, and Pack-verification schemas |
 | [`conformance/v1.1`](conformance/v1.1) | Exact-profile capability declaration and conformance notes |
+| [`conformance/v1.2`](conformance/v1.2) | AP2 dispute-integrity capability declaration and fixtures |
 | [`rulebooks/v1`](rulebooks/v1) | Reference policy |
 | [`src`](src) | Engine, evidence import, CasePack, API, CLI, and simulator source |
 | [`test`](test) | Unit, property, security, API, CLI, and end-to-end tests |
 | [`docs/V1_1.md`](docs/V1_1.md) | v1.1 profile, data model, lifecycle, and replay guide |
+| [`docs/V1_2.md`](docs/V1_2.md) | v1.2 AP2 Evidence Pack, resolver, and timeline contract |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture and trust boundaries |
 | [`docs/INTEROPERABILITY.md`](docs/INTEROPERABILITY.md) | External protocol boundary |
 | [`docs/LEGAL_BOUNDARY.md`](docs/LEGAL_BOUNDARY.md) | Legal meaning and non-meaning |
@@ -288,6 +319,7 @@ The evidence-import profile is pinned to:
 - [UCP 2026-04-08 specification](https://ucp.dev/2026-04-08/specification/overview/)
 - [UCP AP2 Mandates Extension](https://ucp.dev/specification/ap2-mandates/)
 - [AP2 v0.2.0 release](https://github.com/google-agentic-commerce/AP2/releases/tag/v0.2.0)
+- [AP2 v0.2.0 immutable specification commit](https://github.com/google-agentic-commerce/AP2/blob/b4587ac1d055888a73b4b21750973cffba961793/docs/ap2/specification.md)
 - [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421)
 - [RFC 9530 Content-Digest](https://www.rfc-editor.org/rfc/rfc9530)
 

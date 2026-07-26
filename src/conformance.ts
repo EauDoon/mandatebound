@@ -8,7 +8,7 @@ export interface CapabilityDeclaration {
 }
 
 export interface ConformanceStatement {
-  readonly release: "1.1.0";
+  readonly release: "1.2.0";
   readonly legalEffect: "not-determined";
   readonly evidenceProfile: {
     readonly id: "ucp-2026-04-08-rest+ap2-mandates-0.2.0";
@@ -53,6 +53,18 @@ const CAPABILITIES: readonly CapabilityDeclaration[] = Object.freeze([
     boundary: "A correlated snapshot does not prove that every lifecycle event was captured.",
   }),
   Object.freeze({
+    id: "ap2_0_2_0_dispute_evidence_resolution",
+    status: "supported",
+    scope: "Retrieve through caller-supplied adapters, assemble, and verify direct or delegated AP2 dispute artifacts for one transaction.",
+    boundary: "Resolution establishes bounded evidence integrity only, never a claim outcome, legal finding, or complete upstream history.",
+  }),
+  Object.freeze({
+    id: "ap2_0_2_0_evidence_pack",
+    status: "supported",
+    scope: "Pack exact AP2 evidence, independently verify digests and gates, and render a metadata-only deterministic timeline.",
+    boundary: "The Pack is sensitive, and imported revocation states are reports rather than authenticated protocol facts.",
+  }),
+  Object.freeze({
     id: "ucp_mcp_transport",
     status: "deferred",
     scope: "UCP transport over MCP.",
@@ -85,7 +97,7 @@ const CAPABILITIES: readonly CapabilityDeclaration[] = Object.freeze([
 ]);
 
 const STATEMENT: ConformanceStatement = Object.freeze({
-  release: "1.1.0",
+  release: "1.2.0",
   legalEffect: "not-determined",
   evidenceProfile: Object.freeze({
     id: UCP_AP2_EVIDENCE_PROFILE.id,

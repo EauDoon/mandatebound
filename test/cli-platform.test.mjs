@@ -201,11 +201,11 @@ test("help and version are stable JSON and use the public brand", async () => {
   const version = await invoke(["--version"], "");
   assert.equal(version.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(version.stdout).result.version, "1.0.0");
-  assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.1.0");
+  assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.2.0");
   assert.equal(JSON.parse(version.stdout).result.engineVersion, "1.0.0");
 });
 
-test("v1.1 policy and conformance commands are deterministic and fail closed", async () => {
+test("v1.2 policy and conformance commands are deterministic and fail closed", async () => {
   const rulebook = JSON.parse(await readFile(
     new URL("../rulebooks/v1/mandate-to-liability.v1.json", import.meta.url),
     "utf8",
@@ -274,6 +274,157 @@ test("v1.1 policy and conformance commands are deterministic and fail closed", a
     const result = await invoke(argv, "{}");
     assert.equal(result.code, CLI_EXIT.USAGE, argv.join(" "));
   }
+});
+
+test("AP2 dispute CLI resolves materialized evidence and uses conflict exit for gaps", async () => {
+  const unresolved = await invoke(
+    ["ap2-dispute", "resolve", "-"],
+    JSON.stringify({
+      transactionId: Buffer.alloc(32).toString("base64url"),
+      asOf: "2026-07-23T00:00:00.000Z",
+      verificationPlan: {},
+      sources: [],
+    }),
+  );
+  assert.equal(unresolved.code, CLI_EXIT.CONFLICT);
+  assert.equal(JSON.parse(unresolved.stdout).ok, false);
+  assert.equal(JSON.parse(unresolved.stdout).result.status, "unresolved");
+
+  const invalid = await invoke(
+    ["ap2-dispute", "resolve", "-"],
+    JSON.stringify({ transactionId: "invalid" }),
+  );
+  assert.equal(invalid.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(invalid.stdout).error.code, "ALB_CLI_INPUT");
+
+  const missingAnchor = await invoke(["ap2-dispute", "verify", "-"], "{}");
+  assert.equal(missingAnchor.code, CLI_EXIT.USAGE);
+  assert.equal(JSON.parse(missingAnchor.stdout).error.code, "ALB_CLI_USAGE");
+
+  const invalidPack = await invoke(
+    ["ap2-dispute", "verify", "-", "--expected-pack-digest", DIGEST],
+    "{}",
+  );
+  assert.equal(invalidPack.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(invalidPack.stdout).result.packDigest, null);
+});
+
+test("AP2 dispute CLI exposes pack, independent verify, and timeline render", async () => {
+  const snapshot = {
+    kid: "synthetic-key",
+    jwk: {
+      kty: "EC",
+      crv: "P-256",
+      x: Buffer.alloc(32, 1).toString("base64url"),
+      y: Buffer.alloc(32, 2).toString("base64url"),
+    },
+    sourceDigest: DIGEST,
+    capturedAt: "2026-07-22T00:00:00.000Z",
+    validUntil: "2027-07-22T00:00:00.000Z",
+  };
+  const mandatePlan = {
+    issuerKeySnapshot: snapshot,
+    expectedIssuerKeySourceDigest: DIGEST,
+    expectedIssuer: "https://issuer.example",
+    expectedAudience: "https://audience.example",
+    expectedNonce: "synthetic-nonce",
+  };
+  const receiptPlan = {
+    issuerKeySnapshot: snapshot,
+    expectedIssuerKeySourceDigest: DIGEST,
+    expectedIssuer: "https://issuer.example",
+  };
+  const input = {
+    transactionId: Buffer.alloc(32).toString("base64url"),
+    asOf: "2026-07-23T00:00:00.000Z",
+    createdAt: "2026-07-23T00:00:00.000Z",
+    verificationPlan: {
+      checkoutMandate: mandatePlan,
+      checkoutJwt: {
+        merchantKeySnapshot: snapshot,
+        expectedMerchantKeySourceDigest: DIGEST,
+      },
+      checkoutReceipt: receiptPlan,
+      paymentMandate: mandatePlan,
+      paymentReceipt: receiptPlan,
+    },
+    sources: [{
+      sourceId: "synthetic-source",
+      role: "merchant",
+      retrievedAt: "2026-07-22T23:59:00.000Z",
+      artifacts: [],
+    }],
+    checkoutVersions: [{
+      versionId: "synthetic-version",
+      sourceId: "synthetic-source",
+      observedAt: "2026-07-22T23:58:00.000Z",
+      checkoutJwt: "synthetic-checkout-jwt",
+    }],
+    revocations: [{
+      recordId: "synthetic-checkout-revocation",
+      mandateKind: "checkout_mandate",
+      sourceId: "synthetic-source",
+      checkedAt: "2026-07-22T23:59:10.000Z",
+      reportedStatus: "not_revoked",
+      snapshotBase64: Buffer.from("checkout not revoked", "utf8").toString("base64"),
+    }, {
+      recordId: "synthetic-payment-revocation",
+      mandateKind: "payment_mandate",
+      sourceId: "synthetic-source",
+      checkedAt: "2026-07-22T23:59:20.000Z",
+      reportedStatus: "not_revoked",
+      snapshotBase64: Buffer.from("payment not revoked", "utf8").toString("base64"),
+    }],
+  };
+
+  const packed = await invoke(["ap2-dispute", "pack", "-"], JSON.stringify(input));
+  assert.equal(packed.code, CLI_EXIT.SUCCESS, packed.stdout);
+  const pack = JSON.parse(packed.stdout).result;
+  assert.equal(pack.schemaId, "MandateBoundAp2EvidencePack/v1");
+
+  const verifyArgs = [
+    "ap2-dispute",
+    "verify",
+    "-",
+    "--expected-pack-digest",
+    pack.packDigest,
+  ];
+  const verified = await invoke(verifyArgs, packed.stdout);
+  assert.equal(verified.code, CLI_EXIT.CONFLICT);
+  assert.equal(JSON.parse(verified.stdout).result.status, "unresolved");
+  assert.equal(JSON.parse(verified.stdout).result.anchorMatched, true);
+
+  const overLegacyLimit = `${" ".repeat((4 * 1024 * 1024) + 1)}${packed.stdout}`;
+  const largeVerified = await invoke(verifyArgs, overLegacyLimit);
+  assert.equal(largeVerified.code, CLI_EXIT.CONFLICT);
+  assert.notEqual(JSON.parse(largeVerified.stdout).error?.code, "ALB_CLI_INPUT_LIMIT");
+
+  const renderArgs = [
+    "ap2-dispute",
+    "render",
+    "-",
+    "--expected-pack-digest",
+    pack.packDigest,
+  ];
+  const renderedJson = await invoke(renderArgs, packed.stdout);
+  assert.equal(renderedJson.code, CLI_EXIT.CONFLICT);
+  assert.equal(Array.isArray(JSON.parse(renderedJson.stdout).result.timeline), true);
+
+  const renderedHtml = await invoke(
+    [
+      "ap2-dispute",
+      "render",
+      "-",
+      "--format",
+      "html",
+      "--expected-pack-digest",
+      pack.packDigest,
+    ],
+    packed.stdout,
+  );
+  assert.equal(renderedHtml.code, CLI_EXIT.CONFLICT);
+  assert.match(renderedHtml.stdout, /AP2 Evidence Timeline/);
+  assert.doesNotMatch(renderedHtml.stdout, /synthetic-checkout-jwt/);
 });
 
 test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fail safely", async () => {

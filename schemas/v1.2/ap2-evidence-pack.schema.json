@@ -1,0 +1,594 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oonyl/mandatebound/schemas/v1.2/ap2-evidence-pack.schema.json",
+  "title": "MandateBound AP2 Evidence Pack v1",
+  "description": "Sensitive exact-byte evidence container. It may contain Mandate, Receipt, Checkout, and imported revocation snapshot bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaId",
+    "releaseVersion",
+    "profile",
+    "transactionId",
+    "asOf",
+    "createdAt",
+    "verificationPlan",
+    "sources",
+    "checkoutVersions",
+    "revocations",
+    "legalEffect",
+    "packDigest"
+  ],
+  "properties": {
+    "schemaId": {
+      "const": "MandateBoundAp2EvidencePack/v1"
+    },
+    "releaseVersion": {
+      "const": "1.2.0"
+    },
+    "profile": {
+      "$ref": "#/$defs/profile"
+    },
+    "transactionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verificationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkoutMandate",
+        "checkoutJwt",
+        "checkoutReceipt",
+        "paymentMandate",
+        "paymentReceipt"
+      ],
+      "properties": {
+        "checkoutMandate": {
+          "$ref": "#/$defs/mandatePlan"
+        },
+        "checkoutJwt": {
+          "$ref": "#/$defs/checkoutJwtPlan"
+        },
+        "checkoutReceipt": {
+          "$ref": "#/$defs/receiptPlan"
+        },
+        "paymentMandate": {
+          "$ref": "#/$defs/mandatePlan"
+        },
+        "paymentReceipt": {
+          "$ref": "#/$defs/receiptPlan"
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "checkoutVersions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/checkoutVersion"
+      }
+    },
+    "revocations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/revocation"
+      }
+    },
+    "legalEffect": {
+      "const": "not-determined"
+    },
+    "packDigest": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "ecPublicJwkBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kty",
+        "crv",
+        "x",
+        "y"
+      ],
+      "properties": {
+        "kty": {
+          "const": "EC"
+        },
+        "crv": {
+          "enum": [
+            "P-256",
+            "P-384",
+            "P-521"
+          ]
+        },
+        "x": {
+          "type": "string"
+        },
+        "y": {
+          "type": "string"
+        },
+        "kid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "alg": {
+          "enum": [
+            "ES256",
+            "ES384",
+            "ES512"
+          ]
+        },
+        "use": {
+          "const": "sig"
+        },
+        "key_ops": {
+          "const": [
+            "verify"
+          ]
+        }
+      }
+    },
+    "ecPublicJwk": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ecPublicJwkBase"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "crv": {
+                  "type": "string",
+                  "const": "P-256"
+                },
+                "x": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "y": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "alg": {
+                  "type": "string",
+                  "const": "ES256"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ecPublicJwkBase"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "crv": {
+                  "type": "string",
+                  "const": "P-384"
+                },
+                "x": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{64}$"
+                },
+                "y": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{64}$"
+                },
+                "alg": {
+                  "type": "string",
+                  "const": "ES384"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ecPublicJwkBase"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "crv": {
+                  "type": "string",
+                  "const": "P-521"
+                },
+                "x": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{88}$"
+                },
+                "y": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{88}$"
+                },
+                "alg": {
+                  "type": "string",
+                  "const": "ES512"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "keySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kid",
+        "jwk",
+        "sourceDigest",
+        "capturedAt",
+        "validUntil"
+      ],
+      "properties": {
+        "kid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jwk": {
+          "$ref": "#/$defs/ecPublicJwk"
+        },
+        "sourceDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validFrom": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "invalidFrom": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "mandatePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issuerKeySnapshot",
+        "expectedIssuerKeySourceDigest",
+        "expectedIssuer",
+        "expectedAudience",
+        "expectedNonce"
+      ],
+      "properties": {
+        "issuerKeySnapshot": {
+          "$ref": "#/$defs/keySnapshot"
+        },
+        "expectedIssuerKeySourceDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "expectedIssuer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedAudience": {
+          "type": "string"
+        },
+        "expectedNonce": {
+          "type": "string"
+        },
+        "allowedAlgorithms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ES256",
+              "ES384",
+              "ES512"
+            ]
+          }
+        },
+        "requireKeyBinding": {
+          "type": "boolean"
+        },
+        "expectedAgentJwk": {
+          "$ref": "#/$defs/ecPublicJwk"
+        },
+        "expectedCheckoutJwt": {
+          "type": "string"
+        },
+        "expectedOpenCheckoutHash": {
+          "type": "string"
+        },
+        "expectedMerchant": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "website": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "receiptPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issuerKeySnapshot",
+        "expectedIssuerKeySourceDigest",
+        "expectedIssuer"
+      ],
+      "properties": {
+        "issuerKeySnapshot": {
+          "$ref": "#/$defs/keySnapshot"
+        },
+        "expectedIssuerKeySourceDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "expectedIssuer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowedAlgorithms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ES256",
+              "ES384",
+              "ES512"
+            ]
+          }
+        }
+      }
+    },
+    "checkoutJwtPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "merchantKeySnapshot",
+        "expectedMerchantKeySourceDigest"
+      ],
+      "properties": {
+        "merchantKeySnapshot": {
+          "$ref": "#/$defs/keySnapshot"
+        },
+        "expectedMerchantKeySourceDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "allowedAlgorithms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ES256",
+              "ES384",
+              "ES512"
+            ]
+          }
+        },
+        "expectedIssuer": {
+          "type": "string"
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ap2Version",
+        "ap2ReleaseCommit",
+        "mandateProfileId",
+        "receiptReferenceProfile",
+        "retrievalTransport",
+        "builtInNetworkAccess"
+      ],
+      "properties": {
+        "id": {
+          "const": "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "ap2Version": {
+          "const": "0.2.0"
+        },
+        "ap2ReleaseCommit": {
+          "const": "b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "mandateProfileId": {
+          "const": "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793"
+        },
+        "receiptReferenceProfile": {
+          "const": "sha256-terminal-compact-jws"
+        },
+        "retrievalTransport": {
+          "const": "caller-supplied"
+        },
+        "builtInNetworkAccess": {
+          "const": false
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "token"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "checkout_mandate",
+            "checkout_receipt",
+            "payment_mandate",
+            "payment_receipt"
+          ]
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1048576
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "role",
+        "retrievedAt",
+        "artifacts"
+      ],
+      "properties": {
+        "sourceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "enum": [
+            "shopping_agent",
+            "merchant",
+            "credential_provider",
+            "network",
+            "merchant_payment_processor"
+          ]
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      }
+    },
+    "checkoutVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "versionId",
+        "sourceId",
+        "observedAt",
+        "checkoutJwt",
+        "checkoutJwtDigest"
+      ],
+      "properties": {
+        "versionId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "sourceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "checkoutJwt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1048576
+        },
+        "checkoutJwtDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "revocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordId",
+        "mandateKind",
+        "sourceId",
+        "checkedAt",
+        "reportedStatus",
+        "snapshotBase64",
+        "snapshotDigest"
+      ],
+      "properties": {
+        "recordId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mandateKind": {
+          "enum": [
+            "checkout_mandate",
+            "payment_mandate"
+          ]
+        },
+        "sourceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "checkedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reportedStatus": {
+          "enum": [
+            "not_revoked",
+            "revoked",
+            "unknown"
+          ]
+        },
+        "snapshotBase64": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 1398104,
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+        },
+        "snapshotDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

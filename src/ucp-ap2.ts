@@ -26,6 +26,20 @@ export const UCP_AP2_EVIDENCE_PROFILE = Object.freeze({
   ap2Version: "0.2.0",
 } as const);
 
+/**
+ * Strict AP2 v0.2.0 Mandate profile used by the dispute resolver. Unlike the
+ * older additive adapter above, this profile accepts directly signed closed
+ * SD-JWTs and canonical Delegate SD-JWT chains, never a trailing plain KB-JWT.
+ */
+export const AP2_V020_MANDATE_CHAIN_PROFILE = Object.freeze({
+  id: "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
+  ap2Version: "0.2.0",
+  ap2ReleaseCommit: "b4587ac1d055888a73b4b21750973cffba961793",
+  serialization: "delegate-sd-jwt-chain",
+  chainSeparator: "~~",
+  receiptReference: "sha256-terminal-compact-jws",
+} as const);
+
 export const AP2_MANDATE_VCTS = Object.freeze([
   "mandate.checkout.1",
   "mandate.checkout.open.1",
@@ -33,7 +47,14 @@ export const AP2_MANDATE_VCTS = Object.freeze([
   "mandate.payment.open.1",
 ] as const);
 
+export const AP2_RECEIPT_KINDS = Object.freeze([
+  "checkout_receipt",
+  "payment_receipt",
+] as const);
+
 export type Ap2MandateVct = (typeof AP2_MANDATE_VCTS)[number];
+export type Ap2ReceiptKind = (typeof AP2_RECEIPT_KINDS)[number];
+export type Ap2ReceiptStatus = "Success" | "Error";
 export type JoseEcAlgorithm = "ES256" | "ES384" | "ES512";
 export type UcpHttpAlgorithm = "ES256" | "ES384";
 export type EvidenceCoverageState =
@@ -195,6 +216,8 @@ export interface VerifyAp2MandateOptions {
   readonly expectedAgentJwk?: EcPublicJwk;
   readonly expectedCheckoutJwt?: string;
   readonly expectedCheckoutHash?: string;
+  /** Exact AP2 sd_hash of the associated open Checkout Mandate. */
+  readonly expectedOpenCheckoutHash?: string;
   readonly expectedMerchant?: ExpectedMerchant;
 }
 
@@ -210,6 +233,65 @@ export interface VerifiedAp2Mandate {
   readonly keyBound: boolean;
   readonly checkoutHash?: string;
   /** AP2 evidence does not by itself establish a native MandateBound role. */
+  readonly authorizesNativeRole: false;
+}
+
+export interface VerifiedAp2MandateChain extends VerifiedAp2Mandate {
+  readonly chainProfileId: typeof AP2_V020_MANDATE_CHAIN_PROFILE.id;
+  readonly presentationMode: "human_present" | "human_not_present";
+  readonly chainDepth: number;
+  /** Exact compact JWS of the terminal closed Mandate, without disclosures. */
+  readonly terminalCompactJws: string;
+}
+
+export interface VerifyAp2ReceiptOptions {
+  /** Exact compact verifier-signed Receipt JWT. */
+  readonly token: string;
+  readonly kind: Ap2ReceiptKind;
+  readonly issuerKeySnapshot: PinnedEcKeySnapshot;
+  readonly expectedIssuerKeySourceDigest: Sha256Digest;
+  readonly expectedIssuer: string;
+  readonly asOf: string | number;
+  readonly allowedAlgorithms?: readonly JoseEcAlgorithm[];
+  /** Exact closed Mandate presentation to which the Receipt must bind. */
+  readonly expectedMandateToken?: string;
+}
+
+export interface VerifiedAp2Receipt {
+  readonly profileId: typeof UCP_AP2_EVIDENCE_PROFILE.id;
+  readonly ap2Version: typeof UCP_AP2_EVIDENCE_PROFILE.ap2Version;
+  readonly exactToken: string;
+  readonly kind: Ap2ReceiptKind;
+  readonly issuer: string;
+  readonly issuedAt: number;
+  readonly status: Ap2ReceiptStatus;
+  readonly reference: string;
+  readonly claims: JsonObject;
+  readonly issuerKid: string;
+  readonly issuerAlgorithm: JoseEcAlgorithm;
+  /** AP2 evidence does not by itself establish a native MandateBound role. */
+  readonly authorizesNativeRole: false;
+}
+
+export interface VerifyAp2CheckoutJwtOptions {
+  /** Exact merchant-signed Checkout JWT disclosed by the Checkout Mandate. */
+  readonly token: string;
+  readonly merchantKeySnapshot: PinnedEcKeySnapshot;
+  readonly expectedMerchantKeySourceDigest: Sha256Digest;
+  readonly asOf: string | number;
+  readonly allowedAlgorithms?: readonly JoseEcAlgorithm[];
+  readonly expectedIssuer?: string;
+}
+
+export interface VerifiedAp2CheckoutJwt {
+  readonly profileId: typeof UCP_AP2_EVIDENCE_PROFILE.id;
+  readonly ap2Version: typeof UCP_AP2_EVIDENCE_PROFILE.ap2Version;
+  readonly exactToken: string;
+  readonly claims: JsonObject;
+  readonly issuer: string | null;
+  readonly merchantKid: string;
+  readonly merchantAlgorithm: JoseEcAlgorithm;
+  /** Checkout contents remain evidence and never grant a native actor role. */
   readonly authorizesNativeRole: false;
 }
 
@@ -305,6 +387,8 @@ const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const RFC3339_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const RFC3339_PARTS_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 const JOSE_ALGORITHMS: Readonly<Record<JoseEcAlgorithm, {
   readonly curve: EcPublicJwk["crv"];
@@ -387,18 +471,35 @@ function parseEpoch(value: string | number, path: string): number {
     }
     return value;
   }
-  if (!RFC3339_PATTERN.test(value)) {
-    throw new UcpAp2ParseError(`Invalid RFC 3339 timestamp at ${path}`);
-  }
-  const millis = Date.parse(value);
-  if (!Number.isFinite(millis)) {
-    throw new UcpAp2ParseError(`Invalid RFC 3339 timestamp at ${path}`);
-  }
-  return Math.floor(millis / 1_000);
+  return Math.floor(parseTimestampMillis(value, path) / 1_000);
 }
 
 function parseTimestampMillis(value: string, path: string): number {
-  if (!RFC3339_PATTERN.test(value)) {
+  const match = RFC3339_PATTERN.test(value) ? RFC3339_PARTS_PATTERN.exec(value) : null;
+  if (match === null) {
+    throw new UcpAp2ParseError(`Invalid RFC 3339 timestamp at ${path}`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > (daysInMonth[month - 1] ?? 0) ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
+  ) {
     throw new UcpAp2ParseError(`Invalid RFC 3339 timestamp at ${path}`);
   }
   const parsed = Date.parse(value);
@@ -585,6 +686,13 @@ function checkKeySnapshot(
         "INTEROP_KEY_SNAPSHOT_WINDOW_INVALID",
         path,
         "Key snapshot capture time is after its validity limit",
+      ));
+    }
+    if (captured > at) {
+      issues.push(eligibilityIssue(
+        "INTEROP_KEY_SNAPSHOT_FROM_FUTURE",
+        path,
+        "Pinned key snapshot was captured after the evidence evaluation time",
       ));
     }
     if (at > validUntil) {
@@ -1114,6 +1222,514 @@ function materializeTopLevelDisclosures(
   return claims;
 }
 
+interface ParsedAp2MandateChainSegment {
+  readonly canonical: string;
+  readonly issuerJwt: ParsedJwt;
+  readonly disclosures: readonly ParsedSdJwtDisclosure[];
+  readonly claims: JsonObject;
+}
+
+const AP2_TERMINAL_TYPES = new Set(["kb+sd-jwt", "kb-sd-jwt"]);
+const AP2_INTERMEDIATE_TYPES = new Set(["kb+sd-jwt+kb", "kb-sd-jwt+kb"]);
+const AP2_ROOT_TYPES = new Set(["dc+sd-jwt", "example+sd-jwt"]);
+const AP2_INHERITANCE_EXCLUSIONS = new Set([
+  "vct",
+  "constraints",
+  "cnf",
+  "iat",
+  "exp",
+  "nbf",
+  "iss",
+]);
+
+function parseAp2MandateChainSegments(token: string): readonly ParsedAp2MandateChainSegment[] {
+  if (
+    typeof token !== "string" ||
+    token.length === 0 ||
+    Buffer.byteLength(token, "utf8") > 1_048_576
+  ) {
+    throw new UcpAp2ParseError("AP2 Mandate chain is empty or exceeds the byte limit");
+  }
+  const rawSegments = token.split("~~");
+  if (rawSegments.some((segment) => segment.length === 0)) {
+    throw new UcpAp2ParseError("AP2 Mandate chain contains an empty segment");
+  }
+  if (!token.endsWith("~")) {
+    throw new UcpAp2ParseError("AP2 Mandate chain must end with an SD-JWT separator");
+  }
+  return Object.freeze(rawSegments.map((raw, index) => {
+    const isLast = index === rawSegments.length - 1;
+    if ((!isLast && raw.endsWith("~")) || (isLast && !raw.endsWith("~"))) {
+      throw new UcpAp2ParseError("AP2 Mandate chain uses a non-canonical separator");
+    }
+    const canonical = isLast ? raw : `${raw}~`;
+    const parsed = parseCompactAp2Token(canonical);
+    if (parsed.keyBindingJwt !== null) {
+      throw new UcpAp2ParseError("AP2 v0.2.0 does not accept a trailing plain KB-JWT");
+    }
+    const algorithm = parsed.issuerJwt.claims._sd_alg;
+    if (algorithm !== undefined && algorithm !== "sha-256") {
+      throw new UcpAp2ParseError("AP2 Mandate chain supports only sha-256 SD-JWTs");
+    }
+    return Object.freeze({
+      canonical,
+      issuerJwt: parsed.issuerJwt,
+      disclosures: parsed.disclosures,
+      claims: parsed.issuerJwt.claims,
+    });
+  }));
+}
+
+function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObject {
+  const byDigest = new Map<string, ParsedSdJwtDisclosure>();
+  const byExact = new Map<string, ParsedSdJwtDisclosure>();
+  for (const disclosure of segment.disclosures) {
+    if (byDigest.has(disclosure.digest) || byExact.has(disclosure.exact)) {
+      throw new UcpAp2ParseError("AP2 SD-JWT contains duplicate disclosures");
+    }
+    byDigest.set(disclosure.digest, disclosure);
+    byExact.set(disclosure.exact, disclosure);
+  }
+  const used = new Set<string>();
+
+  const resolveDisclosure = (
+    disclosure: ParsedSdJwtDisclosure,
+    expectedLength: 2 | 3,
+  ): JsonValue => {
+    if (used.has(disclosure.digest)) {
+      throw new UcpAp2ParseError("AP2 SD-JWT disclosure is referenced more than once");
+    }
+    if (!Array.isArray(disclosure.decoded) || disclosure.decoded.length !== expectedLength) {
+      throw new UcpAp2ParseError("AP2 SD-JWT disclosure has the wrong contextual shape");
+    }
+    used.add(disclosure.digest);
+    return disclosure.decoded[expectedLength === 2 ? 1 : 2] as JsonValue;
+  };
+
+  const walk = (value: JsonValue, inDelegatePayload = false): JsonValue | undefined => {
+    if (Array.isArray(value)) {
+      const result: JsonValue[] = [];
+      for (const item of value) {
+        if (
+          isObject(item) &&
+          Object.keys(item).length === 1 &&
+          typeof item["..."] === "string"
+        ) {
+          const disclosure = byDigest.get(item["..."]);
+          if (disclosure === undefined) continue;
+          const resolved = walk(resolveDisclosure(disclosure, 2));
+          if (resolved !== undefined) result.push(resolved);
+          continue;
+        }
+        if (inDelegatePayload && typeof item === "string") {
+          const disclosure = byDigest.get(item) ?? byExact.get(item);
+          if (disclosure !== undefined) {
+            if (
+              !Array.isArray(disclosure.decoded) ||
+              (disclosure.decoded.length !== 2 && disclosure.decoded.length !== 3)
+            ) {
+              throw new UcpAp2ParseError("AP2 delegate disclosure is malformed");
+            }
+            const expectedLength = disclosure.decoded.length;
+            const resolved = walk(resolveDisclosure(disclosure, expectedLength));
+            if (resolved !== undefined) result.push(resolved);
+            continue;
+          }
+        }
+        const resolved = walk(item, false);
+        if (resolved !== undefined) result.push(resolved);
+      }
+      return result;
+    }
+    if (!isObject(value)) return value;
+    if (hasOwn(value, "...")) {
+      throw new UcpAp2ParseError("AP2 SD-JWT contains an invalid disclosure placeholder");
+    }
+    const result: Record<string, JsonValue> = Object.create(null) as Record<string, JsonValue>;
+    for (const [name, child] of Object.entries(value)) {
+      if (name === "_sd") continue;
+      const resolved = walk(child as JsonValue, name === "delegate_payload");
+      if (resolved !== undefined) result[name] = resolved;
+    }
+    const digests = value["_sd"];
+    if (digests !== undefined) {
+      if (!Array.isArray(digests) || digests.some((entry) => typeof entry !== "string")) {
+        throw new UcpAp2ParseError("AP2 SD-JWT _sd must contain digest strings");
+      }
+      if (new Set(digests).size !== digests.length) {
+        throw new UcpAp2ParseError("AP2 SD-JWT _sd contains duplicate digests");
+      }
+      for (const digest of digests as string[]) {
+        const disclosure = byDigest.get(digest);
+        if (disclosure === undefined) continue;
+        if (
+          !Array.isArray(disclosure.decoded) ||
+          disclosure.decoded.length !== 3 ||
+          typeof disclosure.decoded[1] !== "string"
+        ) {
+          throw new UcpAp2ParseError("AP2 object-property disclosure is malformed");
+        }
+        const name = disclosure.decoded[1];
+        if (hasOwn(result, name) || name === "__proto__" || name === "constructor") {
+          throw new UcpAp2ParseError("AP2 disclosure conflicts with an existing claim");
+        }
+        const resolved = walk(resolveDisclosure(disclosure, 3), name === "delegate_payload");
+        if (resolved !== undefined) result[name] = resolved;
+      }
+    }
+    return result;
+  };
+
+  const resolved = walk(segment.claims);
+  if (!isObject(resolved)) {
+    throw new UcpAp2ParseError("AP2 SD-JWT payload did not resolve to an object");
+  }
+  if (used.size !== segment.disclosures.length) {
+    throw new UcpAp2ParseError("AP2 SD-JWT contains an unbound disclosure");
+  }
+  return resolved as JsonObject;
+}
+
+function effectiveDelegatePayload(claims: JsonObject): JsonObject {
+  if (
+    !Array.isArray(claims.delegate_payload) ||
+    claims.delegate_payload.length !== 1 ||
+    !isObject(claims.delegate_payload[0])
+  ) {
+    throw new UcpAp2ParseError("AP2 Mandate segment must disclose exactly one delegate payload");
+  }
+  return claims.delegate_payload[0] as JsonObject;
+}
+
+function cnfJwkFromPayload(payload: JsonObject): EcPublicJwk | null {
+  if (payload.cnf === undefined) return null;
+  const cnf = requireJsonObject(payload.cnf, "delegate_payload.cnf");
+  return requireJsonObject(cnf.jwk, "delegate_payload.cnf.jwk") as unknown as EcPublicJwk;
+}
+
+function verifyAp2ChainTimeClaims(
+  claims: JsonObject,
+  asOf: number,
+  path: string,
+  requireIssuedAt: boolean,
+): void {
+  if (requireIssuedAt && claims.iat === undefined) {
+    throw new UcpAp2ParseError(`Missing iat at ${path}`);
+  }
+  if (claims.iat !== undefined) {
+    const issuedAt = requireSafeInteger(claims.iat, `${path}.iat`);
+    if (issuedAt < 0 || issuedAt > asOf + 60) {
+      throw new UcpAp2ParseError(`Invalid iat at ${path}`);
+    }
+  }
+  if (claims.nbf !== undefined) {
+    const notBefore = requireSafeInteger(claims.nbf, `${path}.nbf`);
+    if (notBefore < 0 || asOf < notBefore) {
+      throw new UcpAp2ParseError(`Invalid nbf at ${path}`);
+    }
+  }
+  if (claims.exp !== undefined) {
+    const expires = requireSafeInteger(claims.exp, `${path}.exp`);
+    if (expires < 0 || asOf >= expires) {
+      throw new UcpAp2ParseError(`Invalid exp at ${path}`);
+    }
+  }
+}
+
+function verifyAp2OpenInheritance(
+  openPayloads: readonly JsonObject[],
+  closed: JsonObject,
+  options: VerifyAp2MandateOptions,
+  issues: InteropIssue[],
+): void {
+  const expectedOpenVct = options.expectedVct === "mandate.checkout.1"
+    ? "mandate.checkout.open.1"
+    : "mandate.payment.open.1";
+  for (let index = 0; index < openPayloads.length; index += 1) {
+    const open = openPayloads[index] as JsonObject;
+    if (open.vct !== expectedOpenVct) {
+      issues.push(upstreamIssue(
+        "AP2_DELEGATION_VCT_MISMATCH",
+        `token.chain[${String(index)}].delegate_payload.vct`,
+        "Open Mandate type does not lead to the expected closed Mandate type",
+      ));
+    }
+    verifyConstraints(open, options, issues, closed, true);
+    for (const [name, value] of Object.entries(open)) {
+      if (AP2_INHERITANCE_EXCLUSIONS.has(name)) continue;
+      if (!hasOwn(closed, name) || canonicalize(closed[name] as JsonValue) !== canonicalize(value)) {
+        issues.push(upstreamIssue(
+          "AP2_DELEGATED_CLAIM_MISMATCH",
+          `token.chain[${String(index)}].delegate_payload.${name}`,
+          "A claim fixed by an open Mandate changed in the closed Mandate",
+        ));
+      }
+    }
+  }
+}
+
+function verifyAp2ClosedMandateClaims(
+  claims: JsonObject,
+  options: VerifyAp2MandateOptions,
+  issues: InteropIssue[],
+): string | undefined {
+  if (claims.iss !== undefined && claims.iss !== options.expectedIssuer) {
+    issues.push(upstreamIssue(
+      "AP2_ISSUER_MISMATCH",
+      "token.closedMandate.iss",
+      "Closed Mandate issuer does not match the caller-owned expected issuer",
+    ));
+  }
+  if (claims.vct !== options.expectedVct) {
+    issues.push(upstreamIssue(
+      "AP2_VCT_MISMATCH",
+      "token.closedMandate.vct",
+      "Closed Mandate vct does not exactly match the expected versioned type",
+    ));
+  }
+  if (options.expectedVct === "mandate.checkout.1") {
+    if (typeof claims.checkout_jwt !== "string" || typeof claims.checkout_hash !== "string") {
+      issues.push(upstreamIssue(
+        "AP2_CHECKOUT_BINDING_MISSING",
+        "token.closedMandate",
+        "Closed Checkout Mandate is missing checkout_jwt or checkout_hash",
+      ));
+      return undefined;
+    }
+    const checkoutHash = base64UrlSha256(claims.checkout_jwt);
+    if (claims.checkout_hash !== checkoutHash) {
+      issues.push(upstreamIssue(
+        "AP2_CHECKOUT_HASH_MISMATCH",
+        "token.closedMandate.checkout_hash",
+        "checkout_hash does not match the exact checkout_jwt field value",
+      ));
+    }
+    if (
+      options.expectedCheckoutJwt !== undefined &&
+      claims.checkout_jwt !== options.expectedCheckoutJwt
+    ) {
+      issues.push(upstreamIssue(
+        "AP2_CHECKOUT_JWT_MISMATCH",
+        "token.closedMandate.checkout_jwt",
+        "Mandate is bound to a different Checkout JWT",
+      ));
+    }
+    if (
+      options.expectedCheckoutHash !== undefined &&
+      claims.checkout_hash !== options.expectedCheckoutHash
+    ) {
+      issues.push(upstreamIssue(
+        "AP2_EXPECTED_CHECKOUT_HASH_MISMATCH",
+        "token.closedMandate.checkout_hash",
+        "Mandate checkout hash does not match the caller-owned expected value",
+      ));
+    }
+    return checkoutHash;
+  }
+  if (options.expectedVct !== "mandate.payment.1") {
+    issues.push(upstreamIssue(
+      "AP2_CLOSED_MANDATE_TYPE_UNSUPPORTED",
+      "expectedVct",
+      "The strict dispute profile accepts only closed Checkout or Payment Mandates",
+    ));
+    return undefined;
+  }
+  if (
+    typeof claims.transaction_id !== "string" ||
+    !isObject(claims.payee) ||
+    typeof claims.payee.id !== "string" ||
+    claims.payee.id.length === 0 ||
+    typeof claims.payee.name !== "string" ||
+    claims.payee.name.length === 0 ||
+    !isObject(claims.payment_amount) ||
+    !Number.isSafeInteger(claims.payment_amount.amount) ||
+    typeof claims.payment_amount.currency !== "string" ||
+    claims.payment_amount.currency.length === 0 ||
+    !isObject(claims.payment_instrument) ||
+    typeof claims.payment_instrument.id !== "string" ||
+    claims.payment_instrument.id.length === 0 ||
+    typeof claims.payment_instrument.type !== "string" ||
+    claims.payment_instrument.type.length === 0
+  ) {
+    issues.push(upstreamIssue(
+      "AP2_PAYMENT_MANDATE_SCHEMA_INVALID",
+      "token.closedMandate",
+      "Closed Payment Mandate is missing a required AP2 v0.2.0 field",
+    ));
+  }
+  if (
+    options.expectedCheckoutHash !== undefined &&
+    claims.transaction_id !== options.expectedCheckoutHash
+  ) {
+    issues.push(upstreamIssue(
+      "AP2_PAYMENT_CHECKOUT_BINDING_MISMATCH",
+      "token.closedMandate.transaction_id",
+      "Payment Mandate transaction_id is not the expected checkout hash",
+    ));
+  }
+  return typeof claims.transaction_id === "string" ? claims.transaction_id : undefined;
+}
+
+/**
+ * Verify an AP2 v0.2.0 directly signed closed Mandate or Delegate SD-JWT
+ * chain. This strict profile is used by the dispute resolver and deliberately
+ * does not accept the legacy trailing plain KB-JWT adapter shape.
+ */
+export function verifyAp2MandateChain(
+  options: VerifyAp2MandateOptions,
+): InteropVerification<VerifiedAp2MandateChain> {
+  const issues: InteropIssue[] = [];
+  checkKeySnapshot(
+    options.issuerKeySnapshot,
+    options.expectedIssuerKeySourceDigest,
+    options.asOf,
+    issues,
+    "issuerKeySnapshot",
+  );
+  try {
+    requireString(options.expectedIssuer, "expectedIssuer");
+    const segments = parseAp2MandateChainSegments(options.token);
+    const allowed = validateAllowedAlgorithms(options.allowedAlgorithms, ["ES256"]);
+    const asOf = parseEpoch(options.asOf, "asOf");
+    const root = segments[0] as ParsedAp2MandateChainSegment;
+    const rootTyp = root.issuerJwt.protectedHeader.typ;
+    if (
+      rootTyp !== undefined &&
+      (typeof rootTyp !== "string" || !AP2_ROOT_TYPES.has(rootTyp))
+    ) {
+      throw new UcpAp2ParseError("Root SD-JWT typ is not supported by the AP2 profile");
+    }
+    const rootHeader = verifyParsedJwtSignature(
+      root.issuerJwt,
+      options.issuerKeySnapshot.jwk,
+      allowed,
+      options.issuerKeySnapshot.kid,
+      "issuer",
+    );
+    const rootClaims = resolveAp2SegmentClaims(root);
+    if (rootClaims.iss !== undefined && rootClaims.iss !== options.expectedIssuer) {
+      issues.push(upstreamIssue(
+        "AP2_ISSUER_MISMATCH",
+        "token.chain[0].claims.iss",
+        "Root Mandate issuer does not match the caller-owned expected issuer",
+      ));
+    }
+    const payloads: JsonObject[] = [effectiveDelegatePayload(rootClaims)];
+    verifyAp2ChainTimeClaims(payloads[0] as JsonObject, asOf, "token.chain[0].delegate_payload", false);
+
+    let previous = root;
+    let previousPayload = payloads[0] as JsonObject;
+    if (segments.length > 1) {
+      requireString(options.expectedAudience, "expectedAudience");
+      requireString(options.expectedNonce, "expectedNonce");
+      verifyExpiryClaims(previousPayload, asOf, issues, "token.chain[0].delegate_payload");
+      const initialCnf = cnfJwkFromPayload(previousPayload);
+      if (initialCnf === null) {
+        throw new UcpAp2ParseError("Open root Mandate is missing cnf.jwk");
+      }
+      if (
+        options.expectedAgentJwk !== undefined &&
+        publicJwkIdentity(initialCnf) !== publicJwkIdentity(options.expectedAgentJwk)
+      ) {
+        throw new UcpAp2ParseError("Root cnf key does not match the expected agent key");
+      }
+      for (let index = 1; index < segments.length; index += 1) {
+        const current = segments[index] as ParsedAp2MandateChainSegment;
+        const isLast = index === segments.length - 1;
+        const typ = current.issuerJwt.protectedHeader.typ;
+        if (
+          typeof typ !== "string" ||
+          (isLast ? !AP2_TERMINAL_TYPES.has(typ) : !AP2_INTERMEDIATE_TYPES.has(typ))
+        ) {
+          throw new UcpAp2ParseError("Delegate SD-JWT hop has the wrong terminal shape");
+        }
+        const signingJwk = cnfJwkFromPayload(previousPayload);
+        if (signingJwk === null) {
+          throw new UcpAp2ParseError("Previous Delegate SD-JWT hop is missing cnf.jwk");
+        }
+        verifyParsedJwtSignature(
+          current.issuerJwt,
+          signingJwk,
+          allowed,
+          signingJwk.kid ?? null,
+          "key-binding",
+        );
+        const claims = resolveAp2SegmentClaims(current);
+        const hasSdHash = hasOwn(claims, "sd_hash");
+        const hasIssuerHash = hasOwn(claims, "issuer_jwt_hash");
+        if (hasSdHash === hasIssuerHash) {
+          throw new UcpAp2ParseError("Delegate hop must contain exactly one binding hash");
+        }
+        const expectedBinding = hasSdHash
+          ? base64UrlSha256(previous.canonical)
+          : base64UrlSha256(previous.issuerJwt.exactCompact);
+        if (claims[hasSdHash ? "sd_hash" : "issuer_jwt_hash"] !== expectedBinding) {
+          throw new UcpAp2ParseError("Delegate hop binding hash does not match the previous hop");
+        }
+        verifyAp2ChainTimeClaims(claims, asOf, `token.chain[${String(index)}].claims`, true);
+        const aud = requireString(claims.aud, `token.chain[${String(index)}].claims.aud`);
+        const nonce = requireString(claims.nonce, `token.chain[${String(index)}].claims.nonce`);
+        if (isLast && (aud !== options.expectedAudience || nonce !== options.expectedNonce)) {
+          throw new UcpAp2ParseError("Terminal Delegate SD-JWT audience or nonce does not match");
+        }
+        const payload = effectiveDelegatePayload(claims);
+        verifyAp2ChainTimeClaims(
+          payload,
+          asOf,
+          `token.chain[${String(index)}].delegate_payload`,
+          false,
+        );
+        const nextCnf = cnfJwkFromPayload(payload);
+        if ((isLast && nextCnf !== null) || (!isLast && nextCnf === null)) {
+          throw new UcpAp2ParseError("Delegate hop cnf does not match its protected typ");
+        }
+        payloads.push(payload);
+        previous = current;
+        previousPayload = payload;
+      }
+    } else {
+      if (options.requireKeyBinding === true) {
+        throw new UcpAp2ParseError("Caller requires a delegated, key-bound Mandate chain");
+      }
+      verifyExpiryClaims(previousPayload, asOf, issues, "token.chain[0].delegate_payload");
+      if (cnfJwkFromPayload(previousPayload) !== null) {
+        throw new UcpAp2ParseError("Directly signed closed Mandate must not remain open via cnf");
+      }
+    }
+
+    const closed = payloads[payloads.length - 1] as JsonObject;
+    if (segments.length > 1) {
+      verifyAp2OpenInheritance(payloads.slice(0, -1), closed, options, issues);
+    }
+    const checkoutHash = verifyAp2ClosedMandateClaims(closed, options, issues);
+    const result: VerifiedAp2MandateChain = Object.freeze({
+      profileId: UCP_AP2_EVIDENCE_PROFILE.id,
+      chainProfileId: AP2_V020_MANDATE_CHAIN_PROFILE.id,
+      ap2Version: UCP_AP2_EVIDENCE_PROFILE.ap2Version,
+      exactToken: options.token,
+      vct: options.expectedVct,
+      issuer: options.expectedIssuer,
+      claims: closed,
+      issuerKid: rootHeader.kid ?? options.issuerKeySnapshot.kid,
+      issuerAlgorithm: rootHeader.algorithm,
+      keyBound: segments.length > 1,
+      presentationMode: segments.length > 1 ? "human_not_present" : "human_present",
+      chainDepth: segments.length,
+      terminalCompactJws: previous.issuerJwt.exactCompact,
+      authorizesNativeRole: false,
+      ...(checkoutHash === undefined ? {} : { checkoutHash }),
+    });
+    return finish(result, issues);
+  } catch {
+    issues.push(upstreamIssue(
+      "AP2_MANDATE_CHAIN_INVALID",
+      "token",
+      "AP2 v0.2.0 Mandate chain failed strict bounded verification",
+    ));
+    return finish<VerifiedAp2MandateChain>(null, issues);
+  }
+}
+
 function verifyParsedJwtSignature(
   jwt: ParsedJwt,
   key: EcPublicJwk,
@@ -1207,20 +1823,216 @@ function verifyExpiryClaims(
 function verifyAllowedMerchantConstraint(
   constraint: JsonObject,
   expectedMerchant: ExpectedMerchant | undefined,
+  checkoutJwt: unknown,
+  requireBoundCheckoutMerchant: boolean,
 ): boolean {
-  if (expectedMerchant === undefined || !Array.isArray(constraint.allowed)) return false;
+  let merchant = expectedMerchant;
+  if (requireBoundCheckoutMerchant) {
+    if (typeof checkoutJwt !== "string") return false;
+    try {
+      const claims = parseJwtCompact(checkoutJwt, "checkoutJwt").claims;
+      if (!isObject(claims.merchant) || typeof claims.merchant.id !== "string") return false;
+      const boundMerchant: ExpectedMerchant = Object.freeze({
+        id: claims.merchant.id,
+        ...(typeof claims.merchant.website === "string"
+          ? { website: claims.merchant.website }
+          : {}),
+      });
+      if (
+        expectedMerchant !== undefined && (
+          expectedMerchant.id !== boundMerchant.id ||
+          (
+            expectedMerchant.website !== undefined &&
+            expectedMerchant.website !== boundMerchant.website
+          )
+        )
+      ) {
+        return false;
+      }
+      merchant = boundMerchant;
+    } catch {
+      return false;
+    }
+  }
+  if (merchant === undefined || !Array.isArray(constraint.allowed)) return false;
   return constraint.allowed.some((candidate) => {
-    if (!isObject(candidate) || candidate.id !== expectedMerchant.id) return false;
-    return expectedMerchant.website === undefined || candidate.website === expectedMerchant.website;
+    if (!isObject(candidate) || candidate.id !== merchant.id) return false;
+    return requireBoundCheckoutMerchant ||
+      merchant.website === undefined ||
+      candidate.website === merchant.website;
   });
+}
+
+interface FlowEdge {
+  readonly to: number;
+  readonly reverse: number;
+  capacity: number;
+}
+
+function addFlowEdge(graph: FlowEdge[][], from: number, to: number, capacity: number): void {
+  const forward: FlowEdge = { to, reverse: graph[to]?.length ?? 0, capacity };
+  const reverse: FlowEdge = { to: from, reverse: graph[from]?.length ?? 0, capacity: 0 };
+  graph[from]?.push(forward);
+  graph[to]?.push(reverse);
+}
+
+function boundedMaxFlow(graph: FlowEdge[][], source: number, sink: number): number {
+  let total = 0;
+  while (true) {
+    const parentNode = new Array<number>(graph.length).fill(-1);
+    const parentEdge = new Array<number>(graph.length).fill(-1);
+    const queue: number[] = [source];
+    parentNode[source] = source;
+    for (let cursor = 0; cursor < queue.length && parentNode[sink] === -1; cursor += 1) {
+      const node = queue[cursor] as number;
+      const edges = graph[node] ?? [];
+      for (let index = 0; index < edges.length; index += 1) {
+        const edge = edges[index] as FlowEdge;
+        if (edge.capacity <= 0 || parentNode[edge.to] !== -1) continue;
+        parentNode[edge.to] = node;
+        parentEdge[edge.to] = index;
+        queue.push(edge.to);
+        if (edge.to === sink) break;
+      }
+    }
+    if (parentNode[sink] === -1) return total;
+    let pushed = Number.MAX_SAFE_INTEGER;
+    for (let node = sink; node !== source; node = parentNode[node] as number) {
+      const previous = parentNode[node] as number;
+      const edge = graph[previous]?.[parentEdge[node] as number];
+      if (edge === undefined) throw new UcpAp2ParseError("Invalid AP2 line-item flow state");
+      pushed = Math.min(pushed, edge.capacity);
+    }
+    for (let node = sink; node !== source; node = parentNode[node] as number) {
+      const previous = parentNode[node] as number;
+      const edge = graph[previous]?.[parentEdge[node] as number];
+      if (edge === undefined) throw new UcpAp2ParseError("Invalid AP2 line-item flow state");
+      edge.capacity -= pushed;
+      const reverse = graph[node]?.[edge.reverse];
+      if (reverse === undefined) throw new UcpAp2ParseError("Invalid AP2 line-item flow state");
+      reverse.capacity += pushed;
+    }
+    total += pushed;
+  }
+}
+
+function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown): boolean {
+  if (typeof checkoutJwt !== "string") return false;
+  let checkoutClaims: JsonObject;
+  try {
+    checkoutClaims = parseJwtCompact(checkoutJwt, "checkoutJwt").claims;
+  } catch {
+    return false;
+  }
+  if (
+    !Array.isArray(constraint.items) ||
+    constraint.items.length === 0 ||
+    constraint.items.length > 128 ||
+    !Array.isArray(checkoutClaims.line_items) ||
+    checkoutClaims.line_items.length === 0 ||
+    checkoutClaims.line_items.length > 128
+  ) {
+    return false;
+  }
+
+  const requirements: { readonly acceptable: ReadonlySet<string>; readonly quantity: number }[] = [];
+  for (const requirement of constraint.items) {
+    if (
+      !isObject(requirement) ||
+      typeof requirement.id !== "string" ||
+      requirement.id.length === 0 ||
+      !Array.isArray(requirement.acceptable_items) ||
+      !Number.isSafeInteger(requirement.quantity) ||
+      (requirement.quantity as number) <= 0
+    ) {
+      return false;
+    }
+    const acceptable = new Set<string>();
+    for (const item of requirement.acceptable_items) {
+      if (
+        !isObject(item) ||
+        typeof item.id !== "string" ||
+        item.id.length === 0 ||
+        typeof item.title !== "string" ||
+        item.title.length === 0
+      ) {
+        return false;
+      }
+      acceptable.add(item.id);
+    }
+    requirements.push({ acceptable, quantity: requirement.quantity as number });
+  }
+
+  const cart = new Map<string, number>();
+  for (const lineItem of checkoutClaims.line_items) {
+    if (
+      !isObject(lineItem) ||
+      !isObject(lineItem.item) ||
+      typeof lineItem.item.id !== "string" ||
+      lineItem.item.id.length === 0 ||
+      typeof lineItem.item.title !== "string" ||
+      lineItem.item.title.length === 0 ||
+      !Number.isSafeInteger(lineItem.quantity) ||
+      (lineItem.quantity as number) <= 0
+    ) {
+      return false;
+    }
+    const next = (cart.get(lineItem.item.id) ?? 0) + (lineItem.quantity as number);
+    if (!Number.isSafeInteger(next)) return false;
+    cart.set(lineItem.item.id, next);
+  }
+
+  const skus = [...cart.keys()].sort();
+  const source = 0;
+  const skuOffset = 1;
+  const requirementOffset = skuOffset + skus.length;
+  const sink = requirementOffset + requirements.length;
+  const graph: FlowEdge[][] = Array.from({ length: sink + 1 }, () => []);
+  let totalQuantity = 0;
+  for (let skuIndex = 0; skuIndex < skus.length; skuIndex += 1) {
+    const sku = skus[skuIndex] as string;
+    const quantity = cart.get(sku) as number;
+    totalQuantity += quantity;
+    if (!Number.isSafeInteger(totalQuantity)) return false;
+    addFlowEdge(graph, source, skuOffset + skuIndex, quantity);
+    for (let requirementIndex = 0; requirementIndex < requirements.length; requirementIndex += 1) {
+      const requirement = requirements[requirementIndex] as {
+        readonly acceptable: ReadonlySet<string>;
+        readonly quantity: number;
+      };
+      if (requirement.acceptable.size === 0 || requirement.acceptable.has(sku)) {
+        addFlowEdge(
+          graph,
+          skuOffset + skuIndex,
+          requirementOffset + requirementIndex,
+          quantity,
+        );
+      }
+    }
+  }
+  for (let index = 0; index < requirements.length; index += 1) {
+    addFlowEdge(graph, requirementOffset + index, sink, (requirements[index] as { quantity: number }).quantity);
+  }
+  return boundedMaxFlow(graph, source, sink) === totalQuantity;
 }
 
 function verifyConstraints(
   claims: JsonObject,
   options: VerifyAp2MandateOptions,
   issues: InteropIssue[],
+  closedClaims?: JsonObject,
+  requirePinnedSchema = false,
 ): void {
-  if (claims.constraints === undefined) return;
+  if (claims.constraints === undefined) {
+    if (requirePinnedSchema) {
+      issues.push(upstreamIssue(
+        "AP2_CONSTRAINTS_REQUIRED",
+        "token.claims.constraints",
+        "Pinned AP2 open Mandate schema requires constraints",
+      ));
+    }
+    return;
+  }
   if (!Array.isArray(claims.constraints)) {
     issues.push(upstreamIssue(
       "AP2_CONSTRAINTS_INVALID",
@@ -1229,6 +2041,7 @@ function verifyConstraints(
     ));
     return;
   }
+  let hasRequiredConstraint = false;
   for (let index = 0; index < claims.constraints.length; index += 1) {
     const candidate = claims.constraints[index];
     if (!isObject(candidate) || typeof candidate.type !== "string") {
@@ -1240,7 +2053,20 @@ function verifyConstraints(
       continue;
     }
     if (candidate.type === "checkout.allowed_merchants") {
-      if (!verifyAllowedMerchantConstraint(candidate as JsonObject, options.expectedMerchant)) {
+      if (requirePinnedSchema && options.expectedVct !== "mandate.checkout.1") {
+        issues.push(upstreamIssue(
+          "AP2_CONSTRAINT_UNSUPPORTED",
+          `token.claims.constraints[${String(index)}]`,
+          "Checkout constraint is not valid for this Mandate type",
+        ));
+        continue;
+      }
+      if (!verifyAllowedMerchantConstraint(
+        candidate as JsonObject,
+        options.expectedMerchant,
+        closedClaims?.checkout_jwt,
+        requirePinnedSchema,
+      )) {
         issues.push(upstreamIssue(
           "AP2_CONSTRAINT_FAILED",
           `token.claims.constraints[${String(index)}]`,
@@ -1249,10 +2075,50 @@ function verifyConstraints(
       }
       continue;
     }
+    if (candidate.type === "checkout.line_items") {
+      hasRequiredConstraint = true;
+      if (
+        options.expectedVct !== "mandate.checkout.1" ||
+        !verifyLineItemsConstraint(candidate as JsonObject, closedClaims?.checkout_jwt)
+      ) {
+        issues.push(upstreamIssue(
+          "AP2_CONSTRAINT_FAILED",
+          `token.claims.constraints[${String(index)}]`,
+          "Line-item constraint could not be satisfied by the bound Checkout JWT",
+        ));
+      }
+      continue;
+    }
+    if (candidate.type === "payment.reference") {
+      hasRequiredConstraint = true;
+      if (
+        options.expectedVct !== "mandate.payment.1" ||
+        typeof candidate.conditional_transaction_id !== "string" ||
+        candidate.conditional_transaction_id.length === 0 ||
+        options.expectedOpenCheckoutHash === undefined ||
+        candidate.conditional_transaction_id !== options.expectedOpenCheckoutHash
+      ) {
+        issues.push(upstreamIssue(
+          "AP2_CONSTRAINT_FAILED",
+          `token.claims.constraints[${String(index)}]`,
+          "Payment-reference constraint is missing or does not match the associated open Checkout Mandate",
+        ));
+      }
+      continue;
+    }
     issues.push(upstreamIssue(
       "AP2_CONSTRAINT_UNSUPPORTED",
       `token.claims.constraints[${String(index)}]`,
       "Unknown or unsupported constraint types fail closed",
+    ));
+  }
+  if (requirePinnedSchema && !hasRequiredConstraint) {
+    issues.push(upstreamIssue(
+      "AP2_REQUIRED_CONSTRAINT_MISSING",
+      "token.claims.constraints",
+      options.expectedVct === "mandate.checkout.1"
+        ? "Pinned Open Checkout Mandate requires checkout.line_items"
+        : "Pinned Open Payment Mandate requires payment.reference",
     ));
   }
 }
@@ -1443,6 +2309,383 @@ export function verifyAp2Mandate(
     ...(checkoutHash === undefined ? {} : { checkoutHash }),
   };
   return finish(Object.freeze(result), issues);
+}
+
+const AP2_CHECKOUT_STATUSES = new Set([
+  "incomplete",
+  "requires_escalation",
+  "ready_for_complete",
+  "complete_in_progress",
+  "completed",
+  "canceled",
+]);
+
+function validateCheckoutTotals(value: unknown, path: string): void {
+  if (!Array.isArray(value) || value.length > 128) {
+    throw new UcpAp2ParseError(`Checkout totals are invalid at ${path}`);
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    const total = requireJsonObject(value[index], `${path}[${String(index)}]`);
+    requireString(total.type, `${path}[${String(index)}].type`);
+    requireSafeInteger(total.amount, `${path}[${String(index)}].amount`);
+  }
+}
+
+function validateAp2CheckoutClaims(claims: JsonObject): void {
+  requireString(claims.id, "checkoutJwt.claims.id");
+  if (!Array.isArray(claims.line_items) || claims.line_items.length > 128) {
+    throw new UcpAp2ParseError("Checkout line_items are missing or exceed the item limit");
+  }
+  for (let index = 0; index < claims.line_items.length; index += 1) {
+    const lineItem = requireJsonObject(
+      claims.line_items[index],
+      `checkoutJwt.claims.line_items[${String(index)}]`,
+    );
+    requireString(lineItem.id, `checkoutJwt.claims.line_items[${String(index)}].id`);
+    const item = requireJsonObject(
+      lineItem.item,
+      `checkoutJwt.claims.line_items[${String(index)}].item`,
+    );
+    requireString(item.id, `checkoutJwt.claims.line_items[${String(index)}].item.id`);
+    requireString(item.title, `checkoutJwt.claims.line_items[${String(index)}].item.title`);
+    const quantity = requireSafeInteger(
+      lineItem.quantity,
+      `checkoutJwt.claims.line_items[${String(index)}].quantity`,
+    );
+    if (quantity < 1) throw new UcpAp2ParseError("Checkout line-item quantity must be positive");
+    validateCheckoutTotals(
+      lineItem.totals,
+      `checkoutJwt.claims.line_items[${String(index)}].totals`,
+    );
+  }
+  if (typeof claims.status !== "string" || !AP2_CHECKOUT_STATUSES.has(claims.status)) {
+    throw new UcpAp2ParseError("Checkout status is not in the pinned UCP enum");
+  }
+  requireString(claims.currency, "checkoutJwt.claims.currency");
+  validateCheckoutTotals(claims.totals, "checkoutJwt.claims.totals");
+  if (!Array.isArray(claims.links) || claims.links.length > 128) {
+    throw new UcpAp2ParseError("Checkout links are missing or exceed the item limit");
+  }
+  for (let index = 0; index < claims.links.length; index += 1) {
+    const link = requireJsonObject(claims.links[index], `checkoutJwt.claims.links[${String(index)}]`);
+    requireString(link.type, `checkoutJwt.claims.links[${String(index)}].type`);
+    const url = requireString(link.url, `checkoutJwt.claims.links[${String(index)}].url`);
+    try {
+      new URL(url);
+    } catch {
+      throw new UcpAp2ParseError("Checkout link URL is not an absolute URI");
+    }
+  }
+  if (claims.merchant !== undefined) {
+    const merchant = requireJsonObject(claims.merchant, "checkoutJwt.claims.merchant");
+    requireString(merchant.id, "checkoutJwt.claims.merchant.id");
+    requireString(merchant.name, "checkoutJwt.claims.merchant.name");
+  }
+}
+
+export function verifyAp2CheckoutJwt(
+  options: VerifyAp2CheckoutJwtOptions,
+): InteropVerification<VerifiedAp2CheckoutJwt> {
+  const issues: InteropIssue[] = [];
+  let parsed: ParsedJwt;
+  let allowed: ReadonlySet<JoseEcAlgorithm>;
+  let asOf: number;
+  try {
+    if (
+      typeof options.token !== "string" ||
+      options.token.length === 0 ||
+      Buffer.byteLength(options.token, "utf8") > 1_048_576
+    ) {
+      throw new UcpAp2ParseError("Checkout JWT is empty or exceeds the byte limit");
+    }
+    parsed = parseJwtCompact(options.token, "checkoutJwt");
+    allowed = validateAllowedAlgorithms(options.allowedAlgorithms, ["ES256"]);
+    asOf = parseEpoch(options.asOf, "asOf");
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_CHECKOUT_JWT_INVALID",
+      "checkoutJwt",
+      error instanceof Error ? error.message : "Invalid merchant-signed Checkout JWT",
+    ));
+    return finish<VerifiedAp2CheckoutJwt>(null, issues);
+  }
+
+  checkKeySnapshot(
+    options.merchantKeySnapshot,
+    options.expectedMerchantKeySourceDigest,
+    options.asOf,
+    issues,
+    "checkoutMerchantKeySnapshot",
+  );
+  let header: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
+  try {
+    header = verifyParsedJwtSignature(
+      parsed,
+      options.merchantKeySnapshot.jwk,
+      allowed,
+      options.merchantKeySnapshot.kid,
+      "issuer",
+    );
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_CHECKOUT_JWT_SIGNATURE_INVALID",
+      "checkoutJwt",
+      error instanceof Error ? error.message : "Checkout JWT signature is invalid",
+    ));
+  }
+  if (
+    options.expectedIssuer !== undefined &&
+    parsed.claims.iss !== options.expectedIssuer
+  ) {
+    issues.push(upstreamIssue(
+      "AP2_CHECKOUT_JWT_ISSUER_MISMATCH",
+      "checkoutJwt.claims.iss",
+      "Checkout JWT issuer does not match the expected merchant",
+    ));
+  }
+  try {
+    if (
+      parsed.claims.iat !== undefined &&
+      requireSafeInteger(parsed.claims.iat, "checkoutJwt.claims.iat") > asOf + 60
+    ) {
+      throw new UcpAp2ParseError("Checkout JWT issuance time is in the future");
+    }
+    if (
+      parsed.claims.nbf !== undefined &&
+      asOf < requireSafeInteger(parsed.claims.nbf, "checkoutJwt.claims.nbf")
+    ) {
+      throw new UcpAp2ParseError("Checkout JWT is not yet valid");
+    }
+    if (
+      parsed.claims.exp !== undefined &&
+      asOf >= requireSafeInteger(parsed.claims.exp, "checkoutJwt.claims.exp")
+    ) {
+      throw new UcpAp2ParseError("Checkout JWT is expired");
+    }
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_CHECKOUT_JWT_TIME_INVALID",
+      "checkoutJwt.claims",
+      error instanceof Error ? error.message : "Checkout JWT time claims are invalid",
+    ));
+  }
+  try {
+    validateAp2CheckoutClaims(parsed.claims);
+  } catch {
+    issues.push(upstreamIssue(
+      "AP2_CHECKOUT_SCHEMA_INVALID",
+      "checkoutJwt.claims",
+      "Checkout JWT does not match the bounded pinned AP2 v0.2.0 UCP Checkout schema",
+    ));
+  }
+  return finish(Object.freeze({
+    profileId: UCP_AP2_EVIDENCE_PROFILE.id,
+    ap2Version: UCP_AP2_EVIDENCE_PROFILE.ap2Version,
+    exactToken: options.token,
+    claims: parsed.claims,
+    issuer: typeof parsed.claims.iss === "string" ? parsed.claims.iss : null,
+    merchantKid: header?.kid ?? options.merchantKeySnapshot.kid,
+    merchantAlgorithm: header?.algorithm ?? "ES256",
+    authorizesNativeRole: false,
+  }), issues);
+}
+
+/**
+ * Compute the AP2 v0.2.0 SDK-compatible Receipt reference over the exact ASCII
+ * bytes of the terminal compact JWS, before the first disclosure separator.
+ * This deliberately supports one named reference profile instead of trying
+ * multiple ambiguous hash representations until one passes.
+ */
+export function computeAp2MandateReference(token: string): string {
+  if (token.includes("~~") || token.endsWith("~")) {
+    const segments = parseAp2MandateChainSegments(token);
+    const terminal = segments[segments.length - 1];
+    if (terminal === undefined) throw new UcpAp2ParseError("AP2 Mandate chain is empty");
+    return base64UrlSha256(terminal.issuerJwt.exactCompact);
+  }
+  // Compatibility for the pre-v1.2 additive adapter's non-AP2 trailing
+  // key-binding form. Its only signed Mandate JWS is also its terminal JWS.
+  return base64UrlSha256(parseCompactAp2Token(token).issuerJwt.exactCompact);
+}
+
+/** Compute the AP2 sd_hash of the exact open root Mandate presentation. */
+export function computeAp2OpenMandateHash(token: string): string {
+  const segments = parseAp2MandateChainSegments(token);
+  const root = segments[0];
+  if (root === undefined) throw new UcpAp2ParseError("AP2 Mandate chain is empty");
+  return base64UrlSha256(root.canonical);
+}
+
+function validateReceiptClaims(
+  claims: JsonObject,
+  kind: Ap2ReceiptKind,
+  asOf: number,
+  issues: InteropIssue[],
+): {
+  readonly issuer: string;
+  readonly issuedAt: number;
+  readonly status: Ap2ReceiptStatus;
+  readonly reference: string;
+} | null {
+  let issuer = "";
+  let issuedAt = 0;
+  let status: Ap2ReceiptStatus = "Error";
+  let reference = "";
+  try {
+    issuer = requireString(claims.iss, "receipt.claims.iss");
+    issuedAt = requireSafeInteger(claims.iat, "receipt.claims.iat");
+    if (issuedAt < 0) throw new UcpAp2ParseError("Receipt iat must not be negative");
+    if (issuedAt > asOf + 60) {
+      throw new UcpAp2ParseError("Receipt issuance time is in the future");
+    }
+    if (claims.status !== "Success" && claims.status !== "Error") {
+      throw new UcpAp2ParseError("Receipt status is not Success or Error");
+    }
+    status = claims.status;
+    reference = requireString(claims.reference, "receipt.claims.reference");
+    if (decodeBase64Url(reference, "receipt.claims.reference").byteLength !== 32) {
+      throw new UcpAp2ParseError("Receipt reference is not a SHA-256 digest");
+    }
+
+    if (status === "Error") {
+      requireString(claims.error, "receipt.claims.error");
+      requireString(claims.error_description, "receipt.claims.error_description");
+      if (
+        claims.order_id !== undefined ||
+        claims.psp_confirmation_id !== undefined ||
+        claims.network_confirmation_id !== undefined
+      ) {
+        throw new UcpAp2ParseError("Error Receipt contains a success-only claim");
+      }
+    } else {
+      if (claims.error !== undefined || claims.error_description !== undefined) {
+        throw new UcpAp2ParseError("Success Receipt contains an error claim");
+      }
+      if (kind === "checkout_receipt") {
+        requireString(claims.order_id, "receipt.claims.order_id");
+      }
+      if (kind === "payment_receipt") {
+        requireString(claims.psp_confirmation_id, "receipt.claims.psp_confirmation_id");
+        requireString(claims.network_confirmation_id, "receipt.claims.network_confirmation_id");
+      }
+    }
+    if (kind === "payment_receipt") {
+      requireString(claims.payment_id, "receipt.claims.payment_id");
+    }
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_RECEIPT_CLAIMS_INVALID",
+      "receipt.claims",
+      error instanceof Error ? error.message : "Receipt claims are invalid",
+    ));
+    return null;
+  }
+  return { issuer, issuedAt, status, reference };
+}
+
+export function verifyAp2Receipt(
+  options: VerifyAp2ReceiptOptions,
+): InteropVerification<VerifiedAp2Receipt> {
+  const issues: InteropIssue[] = [];
+  let parsed: ParsedJwt;
+  let allowed: ReadonlySet<JoseEcAlgorithm>;
+  let asOf: number;
+  try {
+    if (
+      typeof options.token !== "string" ||
+      options.token.length === 0 ||
+      Buffer.byteLength(options.token, "utf8") > 1_048_576
+    ) {
+      throw new UcpAp2ParseError("AP2 Receipt JWT is empty or exceeds the byte limit");
+    }
+    if (!AP2_RECEIPT_KINDS.includes(options.kind)) {
+      throw new UcpAp2ParseError("AP2 Receipt kind is unsupported");
+    }
+    parsed = parseJwtCompact(options.token, "receipt");
+    allowed = validateAllowedAlgorithms(options.allowedAlgorithms, ["ES256"]);
+    asOf = parseEpoch(options.asOf, "asOf");
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_RECEIPT_INVALID",
+      "receipt",
+      error instanceof Error ? error.message : "Invalid AP2 Receipt JWT",
+    ));
+    return finish<VerifiedAp2Receipt>(null, issues);
+  }
+
+  checkKeySnapshot(
+    options.issuerKeySnapshot,
+    options.expectedIssuerKeySourceDigest,
+    options.asOf,
+    issues,
+    "receiptIssuerKeySnapshot",
+  );
+
+  let issuerHeader: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
+  try {
+    issuerHeader = verifyParsedJwtSignature(
+      parsed,
+      options.issuerKeySnapshot.jwk,
+      allowed,
+      options.issuerKeySnapshot.kid,
+      "issuer",
+    );
+  } catch (error) {
+    issues.push(upstreamIssue(
+      "AP2_RECEIPT_SIGNATURE_INVALID",
+      "receipt",
+      error instanceof Error ? error.message : "Receipt signature is invalid",
+    ));
+  }
+
+  const validated = validateReceiptClaims(parsed.claims, options.kind, asOf, issues);
+  if (validated === null) return finish<VerifiedAp2Receipt>(null, issues);
+  if (validated.issuer !== options.expectedIssuer) {
+    issues.push(upstreamIssue(
+      "AP2_RECEIPT_ISSUER_MISMATCH",
+      "receipt.claims.iss",
+      "Receipt issuer does not match the expected verifier",
+    ));
+  }
+  if (options.expectedMandateToken === undefined) {
+    issues.push(eligibilityIssue(
+      "AP2_RECEIPT_REFERENCE_UNANCHORED",
+      "receipt.claims.reference",
+      "Receipt reference was not checked against an exact closed Mandate presentation",
+    ));
+  } else {
+    try {
+      if (validated.reference !== computeAp2MandateReference(options.expectedMandateToken)) {
+        issues.push(upstreamIssue(
+          "AP2_RECEIPT_REFERENCE_MISMATCH",
+          "receipt.claims.reference",
+          "Receipt reference does not match the exact closed Mandate presentation",
+        ));
+      }
+    } catch (error) {
+      issues.push(upstreamIssue(
+        "AP2_RECEIPT_MANDATE_INVALID",
+        "expectedMandateToken",
+        error instanceof Error ? error.message : "Expected Mandate is invalid",
+      ));
+    }
+  }
+
+  const result: VerifiedAp2Receipt = Object.freeze({
+    profileId: UCP_AP2_EVIDENCE_PROFILE.id,
+    ap2Version: UCP_AP2_EVIDENCE_PROFILE.ap2Version,
+    exactToken: options.token,
+    kind: options.kind,
+    issuer: validated.issuer,
+    issuedAt: validated.issuedAt,
+    status: validated.status,
+    reference: validated.reference,
+    claims: parsed.claims,
+    issuerKid: issuerHeader?.kid ?? options.issuerKeySnapshot.kid,
+    issuerAlgorithm: issuerHeader?.algorithm ?? "ES256",
+    authorizesNativeRole: false,
+  });
+  return finish(result, issues);
 }
 
 function parseQuoted(

@@ -24,6 +24,12 @@ The [AP2 repository](https://github.com/google-agentic-commerce/AP2) is an upstr
 
 AP2 continues to evolve, so this repository does not silently track its default branch and does not claim general AP2 conformance.
 
+MandateBound v1.2 adds an Evidence Pack and dispute resolver pinned to AP2 v0.2.0 commit [`b4587ac1d055888a73b4b21750973cffba961793`](https://github.com/google-agentic-commerce/AP2/tree/b4587ac1d055888a73b4b21750973cffba961793). It supports direct closed SD-JWT Mandates and AP2 Delegate SD-JWT chains, enforces the required autonomous Checkout and Payment constraints, verifies the embedded merchant Checkout JWT, checks open-Checkout and transaction bindings, and verifies Receipt signatures and terminal-Mandate references.
+
+The `pack -> verify -> render` workflow preserves exact artifacts in a sensitive content-addressed Pack, requires an expected Pack digest retained outside that Pack, independently recomputes the evidence, and emits a metadata-only timeline after recomputing verification. Imported revocation snapshots are reported evidence, not authenticated revocation facts. The core has no built-in retrieval or revocation transport; callers may inject authenticated retrieval adapters.
+
+The Receipt reference uses one named SDK-compatible profile, `sha256-terminal-compact-jws`. Alternate AP2 interpretations are not tried opportunistically. The resolver reports evidence integrity under this bounded profile, not a dispute outcome or general AP2 conformance. See [`V1_2.md`](V1_2.md) for the exact contract.
+
 [RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) standardizes base Selective Disclosure for JWTs. Other AP2-adjacent delegation and SD-JWT VC profiles may still be drafts and require separate version pins.
 
 ## SAFR

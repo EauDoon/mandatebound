@@ -1,4 +1,5 @@
 export * from "./appeals.js";
+export * from "./ap2-dispute.js";
 export * from "./api.js";
 export * from "./bundle.js";
 export * from "./casepack.js";
