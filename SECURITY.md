@@ -31,7 +31,7 @@ The trusted core assumes:
 - external discovery material and source-checkpoint keys never enter native `TrustSnapshot/v1` automatically
 - CasePack coverage is relative to caller-pinned declared sources and windows; source truth and global completeness remain unestablished
 - imported revocation snapshots are reported evidence, not authenticated revocation facts
-- the reference API is local development infrastructure, not a production security boundary
+- the reference API is local development infrastructure, not a production security boundary; it binds only to loopback and rejects non-loopback peers, mismatched Host headers, and foreign Origins, but it has no production authentication, TLS, tenant isolation, or DDoS controls
 
 The engine, CasePack verifier, and UCP/AP2 adapter perform no built-in live key, schema, policy, DID, DNS, revocation, timestamp, profile, or network resolution. The AP2 dispute resolver can invoke caller-supplied retrieval adapters, but the caller owns their transport authentication, authorization, privacy, and retention controls.
 

@@ -181,6 +181,7 @@ test("documented --input and --format options work, while ambiguous and unsuppor
       ["verify", "--format", "yaml"],
       ["verify", "--scenario", "principal"],
       ["serve", "--input", inputFile],
+      ["serve", "--allow-remote"],
       ["verify", "--unknown"],
     ]) {
       const result = await invoke(argv, "{}");

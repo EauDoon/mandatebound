@@ -100,7 +100,7 @@ const VALUE_OPTIONS = new Set([
   "--format",
   "--expected-pack-digest",
 ]);
-const FLAG_OPTIONS = new Set(["--allow-remote", "--help", "--version"]);
+const FLAG_OPTIONS = new Set(["--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_AP2_CLI_INPUT_BYTES = 17 * 1024 * 1024;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -525,7 +525,7 @@ export async function runCli(
       }
       case "serve": {
         assertOutputFormat(args, ["json"]);
-        assertAllowedOptions(args, ["store", "host", "port", "allow-remote"]);
+        assertAllowedOptions(args, ["store", "host", "port"]);
         if (args.positionals.length !== 0) {
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Serve does not accept an input path.");
         }
@@ -537,7 +537,6 @@ export async function runCli(
             engine,
             host: typeof args.options["host"] === "string" ? args.options["host"] : "127.0.0.1",
             port: parsePort(args.options["port"]),
-            allowRemote: args.options["allow-remote"] === true,
           });
           io.onServer?.(server);
           if (io.signal !== undefined) {

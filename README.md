@@ -186,6 +186,8 @@ node dist/cli.js explain decision.json
 node dist/cli.js serve --host 127.0.0.1 --port 8787
 ```
 
+The reference server is loopback-only. It requires the active loopback Host header, rejects non-loopback peers and foreign Origins, and does not provide production authentication, TLS, tenant isolation, or DDoS controls.
+
 An unresolved policy result is a successful evaluation and exits with code `0`.
 
 ### AP2 Evidence Pack and dispute resolution

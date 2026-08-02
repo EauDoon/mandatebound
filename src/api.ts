@@ -7,7 +7,7 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import type { AddressInfo } from "node:net";
+import { isIP, type AddressInfo } from "node:net";
 import { TextDecoder } from "node:util";
 import type {
   AppealEvent,
@@ -107,7 +107,6 @@ export interface CreateApiServerOptions {
   readonly engine?: PlatformEngine;
   readonly host?: string;
   readonly port?: number;
-  readonly allowRemote?: boolean;
   readonly limits?: Partial<ApiLimits>;
   readonly logger?: (event: ApiLoggerEvent) => void;
 }
@@ -160,8 +159,74 @@ function resolveLimits(overrides: Partial<ApiLimits> | undefined): ApiLimits {
   return limits;
 }
 
-function isLoopback(host: string): boolean {
-  return host === "127.0.0.1" || host === "::1" || host.toLowerCase() === "localhost";
+function isIpv4Loopback(host: string): boolean {
+  const octets = host.split(".");
+  return octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
+    && Number(octets[0]) === 127;
+}
+
+function mappedIpv4(host: string): string | undefined {
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(host);
+  if (dotted !== null) return dotted[1];
+  const groups = host.includes("::")
+    ? (() => {
+      const [left, right] = host.split("::");
+      const leftGroups = left === "" ? [] : (left ?? "").split(":");
+      const rightGroups = right === "" ? [] : (right ?? "").split(":");
+      return [...leftGroups, ...Array.from({ length: 8 - leftGroups.length - rightGroups.length }, () => "0"), ...rightGroups];
+    })()
+    : host.split(":");
+  if (groups.length !== 8 || groups[5]?.toLowerCase() !== "ffff") return undefined;
+  const high = Number.parseInt(groups[6] ?? "", 16);
+  const low = Number.parseInt(groups[7] ?? "", 16);
+  if (!Number.isInteger(high) || !Number.isInteger(low) || high < 0 || low < 0) return undefined;
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+}
+
+export function isLoopbackAddress(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  if (isIP(normalized) === 4) return isIpv4Loopback(normalized);
+  if (isIP(normalized) !== 6) return false;
+  if (normalized === "::1") return true;
+  const mapped = mappedIpv4(normalized);
+  return mapped !== undefined && isIpv4Loopback(mapped);
+}
+
+function hostHeaderFor(host: string, port: number): string {
+  const displayHost = isIP(host) === 6 ? `[${host.toLowerCase()}]` : host.toLowerCase();
+  return `${displayHost}:${port}`;
+}
+
+export interface LocalRequestBoundaryFailure {
+  readonly code: "ALB_PEER_FORBIDDEN" | "ALB_HOST_FORBIDDEN" | "ALB_ORIGIN_FORBIDDEN";
+  readonly status: 403;
+  readonly detail: string;
+}
+
+export function validateLocalRequest(
+  request: Pick<IncomingMessage, "headers" | "rawHeaders" | "socket">,
+  expectedHostHeader: string,
+  expectedOrigin: string,
+): LocalRequestBoundaryFailure | undefined {
+  const peer = request.socket.remoteAddress;
+  if (typeof peer !== "string" || !isLoopbackAddress(peer)) {
+    return { code: "ALB_PEER_FORBIDDEN", status: 403, detail: "Requests must originate from a loopback peer." };
+  }
+  const hostHeaderCount = request.rawHeaders === undefined
+    ? undefined
+    : request.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === "host").length;
+  const host = request.headers.host;
+  if (hostHeaderCount !== undefined && hostHeaderCount !== 1) {
+    return { code: "ALB_HOST_FORBIDDEN", status: 403, detail: "The Host header must identify this loopback service exactly." };
+  }
+  if (typeof host !== "string" || host.toLowerCase() !== expectedHostHeader.toLowerCase()) {
+    return { code: "ALB_HOST_FORBIDDEN", status: 403, detail: "The Host header must identify this loopback service exactly." };
+  }
+  const origin = request.headers.origin;
+  if (origin !== undefined && (typeof origin !== "string" || origin !== expectedOrigin)) {
+    return { code: "ALB_ORIGIN_FORBIDDEN", status: 403, detail: "The Origin header is not allowed for this loopback service." };
+  }
+  return undefined;
 }
 
 function setCommonHeaders(response: ServerResponse): void {
@@ -190,6 +255,7 @@ function titleFor(status: number): string {
     case 415: return "Unsupported media type";
     case 422: return "Unprocessable content";
     case 429: return "Too many requests";
+    case 403: return "Forbidden";
     case 503: return "Service unavailable";
     default: return "Internal server error";
   }
@@ -450,8 +516,8 @@ async function loadOpenApi(): Promise<unknown> {
 export function createApiServer(options: CreateApiServerOptions = {}): ApiServer {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
-  if (!isLoopback(host) && options.allowRemote !== true) {
-    throw new TypeError("Non-loopback binding requires allowRemote: true.");
+  if (!isLoopbackAddress(host)) {
+    throw new TypeError("API server must bind to a loopback address.");
   }
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) {
     throw new TypeError("Invalid API port.");
@@ -460,9 +526,22 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
   const store = options.store ?? new MemoryStore();
   const engine = options.engine ?? createDefaultPlatformEngine();
   let activeRequests = 0;
+  let expectedHostHeader: string | undefined;
+  let expectedOrigin: string | undefined;
 
   const server = createServer(async (request, response) => {
     const requestId = randomUUID();
+    if (expectedHostHeader === undefined || expectedOrigin === undefined) {
+      sendProblem(response, 503, "ALB_BOUNDARY_UNAVAILABLE", "The loopback request boundary is unavailable.", requestId);
+      options.logger?.({ level: "error", code: "ALB_BOUNDARY_UNAVAILABLE", requestId, status: 503 });
+      return;
+    }
+    const boundaryFailure = validateLocalRequest(request, expectedHostHeader, expectedOrigin);
+    if (boundaryFailure !== undefined) {
+      sendProblem(response, boundaryFailure.status, boundaryFailure.code, boundaryFailure.detail, requestId);
+      options.logger?.({ level: "warn", code: boundaryFailure.code, requestId, status: boundaryFailure.status });
+      return;
+    }
     if (activeRequests >= limits.maxConcurrentRequests) {
       sendProblem(response, 503, "ALB_CONCURRENCY_LIMIT", "Service concurrency limit was reached.", requestId);
       options.logger?.({ level: "warn", code: "ALB_CONCURRENCY_LIMIT", requestId, status: 503 });
@@ -587,8 +666,14 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
     const value = server.address();
     if (value === null || typeof value === "string") return undefined;
     const address = value as AddressInfo;
-    const displayHost = address.family === "IPv6" ? `[${address.address}]` : address.address;
+    const isIpv6 = address.family === "IPv6" || (address.family as unknown) === 6;
+    const displayHost = isIpv6 ? `[${address.address}]` : address.address;
     return { host: address.address, port: address.port, url: `http://${displayHost}:${address.port}` };
+  }
+
+  function setBoundary(address: ApiAddress): void {
+    expectedHostHeader = hostHeaderFor(address.host, address.port);
+    expectedOrigin = `http://${expectedHostHeader}`;
   }
 
   return {
@@ -598,6 +683,7 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
       if (server.listening) {
         const existing = currentAddress();
         if (existing === undefined) throw new Error("API server address is unavailable.");
+        setBoundary(existing);
         return existing;
       }
       await new Promise<void>((resolve, reject) => {
@@ -610,6 +696,7 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
       });
       const address = currentAddress();
       if (address === undefined) throw new Error("API server address is unavailable.");
+      setBoundary(address);
       return address;
     },
     address: currentAddress,

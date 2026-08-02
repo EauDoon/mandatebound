@@ -39,6 +39,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BundleVerificationReport" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "408": { "$ref": "#/components/responses/RequestTimeout" },
           "413": { "$ref": "#/components/responses/BodyTooLarge" },
           "415": { "$ref": "#/components/responses/UnsupportedMedia" },
@@ -65,6 +66,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LiabilityDecision" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "408": { "$ref": "#/components/responses/RequestTimeout" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "413": { "$ref": "#/components/responses/BodyTooLarge" },
@@ -86,6 +88,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LiabilityDecision" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
@@ -107,6 +110,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "408": { "$ref": "#/components/responses/RequestTimeout" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
@@ -134,6 +138,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "408": { "$ref": "#/components/responses/RequestTimeout" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
@@ -156,6 +161,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppealHistory" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
@@ -185,6 +191,7 @@
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "408": { "$ref": "#/components/responses/RequestTimeout" },
           "413": { "$ref": "#/components/responses/BodyTooLarge" },
           "415": { "$ref": "#/components/responses/UnsupportedMedia" },
@@ -204,6 +211,7 @@
             "content": { "application/json": { "schema": { "type": "object" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -216,6 +224,7 @@
         "responses": {
           "200": { "description": "Process is alive", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -228,6 +237,7 @@
         "responses": {
           "200": { "description": "Service is ready", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Status" } } } },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "503": {
             "description": "Store chain is not ready or the service is unavailable",
             "content": {
@@ -250,6 +260,7 @@
     },
     "responses": {
       "BadRequest": { "description": "Malformed JSON or request", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
+      "Forbidden": { "description": "Loopback peer, active Host header, and same-origin Origin are required", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
       "NotFound": { "description": "Resource not found", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
       "Conflict": { "description": "Replay, fork, duplicate, or immutable-state conflict", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },
       "RequestTimeout": { "description": "Request body was not completed within the configured timeout", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/ProblemDetails" } } } },

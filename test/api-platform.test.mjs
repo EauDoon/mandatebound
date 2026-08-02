@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { connect } from "node:net";
 import test from "node:test";
 import { appealEventDigest } from "../dist/appeals.js";
-import { createApiServer } from "../dist/api.js";
+import { createApiServer, isLoopbackAddress, validateLocalRequest } from "../dist/api.js";
 import { verifyEvidenceBundle } from "../dist/bundle.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
@@ -191,14 +191,84 @@ test("published OpenAPI contract includes every route, Problem Details, and the 
   }
 });
 
-test("non-loopback binding requires an explicit opt-in", () => {
-  assert.throws(() => createApiServer({ host: "0.0.0.0", engine: engine() }), /allowRemote/);
+test("API binding is loopback-only and remote opt-in is not accepted", () => {
+  assert.throws(() => createApiServer({ host: "0.0.0.0", engine: engine() }), /loopback/);
+  assert.throws(() => createApiServer({ host: "192.0.2.10", allowRemote: true, engine: engine() }), /loopback/);
   assert.throws(() => createApiServer({ port: -1, engine: engine() }), /port/);
   assert.throws(() => createApiServer({ limits: { maxBodyBytes: 0 }, engine: engine() }), /limit/);
   assert.throws(
     () => createApiServer({ limits: { headersTimeoutMs: 20, requestTimeoutMs: 10 }, engine: engine() }),
     /Header timeout/,
   );
+});
+
+test("local request boundary rejects remote peers, rebinding Hosts, and foreign Origins", () => {
+  const request = (remoteAddress, host, origin, rawHeaders = ["host", host]) => ({
+    socket: { remoteAddress },
+    headers: { host, ...(origin === undefined ? {} : { origin }) },
+    rawHeaders,
+  });
+  const expectedHost = "127.0.0.1:4321";
+  const expectedOrigin = "http://127.0.0.1:4321";
+  assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost), expectedHost, expectedOrigin), undefined);
+  assert.equal(validateLocalRequest(request("::ffff:127.0.0.1", expectedHost), expectedHost, expectedOrigin), undefined);
+  assert.equal(validateLocalRequest(request("203.0.113.7", expectedHost), expectedHost, expectedOrigin)?.code, "ALB_PEER_FORBIDDEN");
+  assert.equal(validateLocalRequest(request("127.0.0.1", "127.0.0.1:4321.evil.example"), expectedHost, expectedOrigin)?.code, "ALB_HOST_FORBIDDEN");
+  assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost, "http://evil.example:4321"), expectedHost, expectedOrigin)?.code, "ALB_ORIGIN_FORBIDDEN");
+  assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost, expectedOrigin), expectedHost, expectedOrigin), undefined);
+  assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost, undefined, ["host", expectedHost, "host", expectedHost]), expectedHost, expectedOrigin)?.code, "ALB_HOST_FORBIDDEN");
+});
+
+test("loopback recognition covers IPv4, IPv6, and mapped IPv6 without admitting public addresses", () => {
+  assert.equal(isLoopbackAddress("127.0.0.1"), true);
+  assert.equal(isLoopbackAddress("127.42.7.9"), true);
+  assert.equal(isLoopbackAddress("::1"), true);
+  assert.equal(isLoopbackAddress("::ffff:127.0.0.1"), true);
+  assert.equal(isLoopbackAddress("::ffff:7f00:1"), true);
+  assert.equal(isLoopbackAddress("localhost"), false);
+  assert.equal(isLoopbackAddress("0.0.0.0"), false);
+  assert.equal(isLoopbackAddress("::"), false);
+  assert.equal(isLoopbackAddress("::ffff:192.0.2.1"), false);
+});
+
+test("API applies Host and Origin boundaries before routing", async () => {
+  const api = createApiServer({ engine: engine() });
+  const address = await api.listen();
+  try {
+    const rebinding = await rawHttpUntil(
+      address.port,
+      [
+        "GET /healthz HTTP/1.1",
+        `Host: 127.0.0.1.evil.example:${address.port}`,
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+      (text) => text.includes("ALB_HOST_FORBIDDEN"),
+    );
+    assert.match(rebinding, /^HTTP\/1\.1 403 /);
+
+    const foreignOrigin = await rawHttpUntil(
+      address.port,
+      [
+        "GET /healthz HTTP/1.1",
+        `Host: 127.0.0.1:${address.port}`,
+        `Origin: http://evil.example:${address.port}`,
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+      (text) => text.includes("ALB_ORIGIN_FORBIDDEN"),
+    );
+    assert.match(foreignOrigin, /^HTTP\/1\.1 403 /);
+
+    const sameOrigin = await fetch(`${address.url}/healthz`, {
+      headers: { origin: address.url },
+    });
+    assert.equal(sameOrigin.status, 200);
+  } finally {
+    await api.close();
+  }
 });
 
 test("listen is idempotent and readiness fails closed when store verification fails", async () => {

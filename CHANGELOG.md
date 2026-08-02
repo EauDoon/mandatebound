@@ -2,6 +2,12 @@
 
 All notable changes are documented here.
 
+## Unreleased corrective candidate
+
+### Security
+
+- Removed the remote-binding escape hatch from the API and CLI. The reference server now requires a loopback bind and rejects non-loopback peers, mismatched Host headers, and foreign Origins before routing.
+
 ## 1.2.0
 
 ### Added
