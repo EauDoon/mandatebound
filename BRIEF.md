@@ -268,6 +268,6 @@ The profile is pinned to the [UCP 2026-04-08 specification](https://ucp.dev/2026
 
 ## 12. Open-source posture
 
-MandateBound is published by Oonyl under Apache License 2.0. Public examples use synthetic identities and data.
+MandateBound is published by EauDoon under Apache License 2.0. Public examples use synthetic identities and data.
 
 External teams can adopt the evidence model without adopting the reference policy. Any real trust model, policy, contract, retention rule, reviewer authority, or dispute procedure must be separately governed.

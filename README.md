@@ -121,7 +121,7 @@ Capture means that supplied source artifacts are preserved, linked, classified, 
 Requirements: Node.js 22.12 or newer.
 
 ```bash
-git clone https://github.com/Oonyl/mandatebound.git
+git clone https://github.com/EauDoon/mandatebound.git
 cd mandatebound
 npm ci --ignore-scripts
 npm run verify
@@ -329,6 +329,6 @@ Those projects and specifications are upstream references. MandateBound is not a
 
 ## Project and license
 
-MandateBound is published by Oonyl under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+MandateBound is published by EauDoon under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 The license covers repository-authored software and documentation. It does not grant regulatory approval, insurance coverage, a legal opinion, certification, or rights to third-party standards and trademarks.

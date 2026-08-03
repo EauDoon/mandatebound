@@ -105,4 +105,4 @@ Any real deployment requires separately governed trust, privacy, retention, secu
 
 ## Project
 
-MandateBound is published by Oonyl under the Apache License 2.0. Examples are synthetic. The repository is not affiliated with or endorsed by UCP, AP2, a payment network, regulator, insurer, or model provider.
+MandateBound is published by EauDoon under the Apache License 2.0. Examples are synthetic. The repository is not affiliated with or endorsed by UCP, AP2, a payment network, regulator, insurer, or model provider.

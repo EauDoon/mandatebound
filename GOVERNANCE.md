@@ -8,7 +8,7 @@ It does not govern a real claims scheme, legal standard, insurer product, paymen
 
 ## Maintainer
 
-Oonyl is the initial maintainer and final reviewer for v1 repository changes.
+EauDoon is the initial maintainer and final reviewer for v1 repository changes.
 
 ## Decision process
 

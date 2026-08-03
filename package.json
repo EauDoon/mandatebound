@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "private": false,
   "license": "Apache-2.0",
-  "author": "Oonyl",
+  "author": "EauDoon",
   "keywords": [
     "mandatebound",
     "ai-agent-liability",
@@ -30,11 +30,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oonyl/mandatebound.git"
+    "url": "git+https://github.com/EauDoon/mandatebound.git"
   },
-  "homepage": "https://github.com/oonyl/mandatebound#readme",
+  "homepage": "https://github.com/EauDoon/mandatebound#readme",
   "bugs": {
-    "url": "https://github.com/oonyl/mandatebound/issues"
+    "url": "https://github.com/EauDoon/mandatebound/issues"
   },
   "publishConfig": {
     "access": "public"
