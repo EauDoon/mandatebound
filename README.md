@@ -7,6 +7,8 @@ MandateBound captures, verifies, and preserves signed transaction evidence from 
 > [!IMPORTANT]
 > MandateBound is experimental decision-support software. It is not legal advice, legal adjudication, insurance, a claims service, a compliance certification, or a hosted production service. Every policy result keeps `legalEffect: "not-determined"`.
 
+![Flow diagram showing signed commerce artifacts verified, checked for evidence eligibility, sealed in a content-addressed case pack, and replayed offline.](docs/assets/project-overview.svg)
+
 ## The problem
 
 Agentic commerce can authorize and execute a transaction across several systems. When the transaction is disputed, the relevant evidence may be split across signed HTTP exchanges, mandates, receipts, order events, refund events, changing keys, and local logs.
