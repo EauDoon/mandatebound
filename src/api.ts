@@ -187,8 +187,14 @@ export function isLoopbackAddress(host: string): boolean {
   const normalized = host.trim().toLowerCase();
   if (isIP(normalized) === 4) return isIpv4Loopback(normalized);
   if (isIP(normalized) !== 6) return false;
-  if (normalized === "::1") return true;
-  const mapped = mappedIpv4(normalized);
+  let canonical: string;
+  try {
+    canonical = new URL(`http://[${normalized}]`).hostname.slice(1, -1);
+  } catch {
+    return false;
+  }
+  if (canonical === "::1") return true;
+  const mapped = mappedIpv4(canonical);
   return mapped !== undefined && isIpv4Loopback(mapped);
 }
 
