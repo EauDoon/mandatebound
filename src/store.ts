@@ -457,6 +457,7 @@ export class JsonlStore extends MemoryStore {
   private readonly lockPath: string;
   private readonly maxFileBytes: number;
   private readonly maxRecords: number;
+  private needsSeparator: boolean;
   private jsonlClosed = false;
 
   private constructor(
@@ -464,6 +465,7 @@ export class JsonlStore extends MemoryStore {
     lockHandle: FileHandle,
     lockPath: string,
     records: readonly StoreRecord[],
+    needsSeparator: boolean,
     maxFileBytes: number,
     maxRecords: number,
   ) {
@@ -471,6 +473,7 @@ export class JsonlStore extends MemoryStore {
     this.dataHandle = dataHandle;
     this.lockHandle = lockHandle;
     this.lockPath = lockPath;
+    this.needsSeparator = needsSeparator;
     this.maxFileBytes = maxFileBytes;
     this.maxRecords = maxRecords;
   }
@@ -498,6 +501,7 @@ export class JsonlStore extends MemoryStore {
       } catch {
         throw new StoreError("ALB_STORE_CORRUPT", "Store contains invalid UTF-8.");
       }
+      const needsSeparator = text.length > 0 && !text.endsWith("\n");
       const lines = text.length === 0 ? [] : text.split("\n");
       if (lines.at(-1) === "") lines.pop();
       if (lines.length > maxRecords) {
@@ -516,7 +520,7 @@ export class JsonlStore extends MemoryStore {
         }
         records.push(parsed);
       }
-      return new JsonlStore(dataHandle, lockHandle, lockPath, records, maxFileBytes, maxRecords);
+      return new JsonlStore(dataHandle, lockHandle, lockPath, records, needsSeparator, maxFileBytes, maxRecords);
     } catch (error) {
       await dataHandle?.close().catch(() => undefined);
       await lockHandle?.close().catch(() => undefined);
@@ -529,7 +533,7 @@ export class JsonlStore extends MemoryStore {
   }
 
   protected override async persist(records: readonly StoreRecord[]): Promise<void> {
-    const text = records.map((record) => canonicalize(record)).join("\n") + "\n";
+    const text = `${this.needsSeparator ? "\n" : ""}${records.map((record) => canonicalize(record)).join("\n")}\n`;
     try {
       const metadata = await this.dataHandle.stat();
       if (
@@ -539,6 +543,7 @@ export class JsonlStore extends MemoryStore {
         throw new StoreError("ALB_STORE_LIMIT", "Store append exceeds configured limits.");
       }
       await this.dataHandle.appendFile(text, "utf8");
+      this.needsSeparator = false;
       await this.dataHandle.sync();
     } catch (error) {
       if (error instanceof StoreError) throw error;
