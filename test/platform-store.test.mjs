@@ -427,6 +427,33 @@ test("JsonlStore enforces one writer and verifies persisted history", async () =
   }
 });
 
+test("JsonlStore enforces configured limits before appending", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-store-append-limit-"));
+  try {
+    await assert.rejects(JsonlStore.open(join(directory, "invalid.jsonl"), { maxRecords: Number.NaN }), TypeError);
+
+    const recordStore = await JsonlStore.open(join(directory, "records.jsonl"), { maxRecords: 1 });
+    await recordStore.putDecision(decision());
+    await assert.rejects(
+      recordStore.putDecision(decision({ caseId: "case-2", evidenceBundleId: "bundle-2" })),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_LIMIT",
+    );
+    assert.equal((await recordStore.verifyChain()).records, 1);
+    await recordStore.close();
+
+    const byteFile = join(directory, "bytes.jsonl");
+    const byteStore = await JsonlStore.open(byteFile, { maxFileBytes: 1 });
+    await assert.rejects(
+      byteStore.putDecision(decision()),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_LIMIT",
+    );
+    assert.equal(await readFile(byteFile, "utf8"), "");
+    await byteStore.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("JsonlStore rejects malformed, duplicate-key, oversized, over-count, and invalid-chain files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "alb-corrupt-store-"));
   const file = join(directory, "store.jsonl");
