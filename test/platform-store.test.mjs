@@ -454,6 +454,33 @@ test("JsonlStore rejects malformed, duplicate-key, oversized, over-count, and in
   }
 });
 
+test("JsonlStore rejects invalid UTF-8 that decodes to a valid record", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-invalid-utf8-store-"));
+  const file = join(directory, "store.jsonl");
+  try {
+    const replacementCharacter = String.fromCodePoint(0xfffd);
+    const valid = recordFor(decision(), { recordId: `decision:${replacementCharacter}` });
+    assert.equal(verifyStoreRecords([valid]).valid, true);
+    const canonical = Buffer.from(`${canonicalize(valid)}\n`, "utf8");
+    const replacement = Buffer.from(replacementCharacter, "utf8");
+    const offset = canonical.indexOf(replacement);
+    assert.notEqual(offset, -1);
+    const malformed = Buffer.concat([
+      canonical.subarray(0, offset),
+      Buffer.from([0xc3]),
+      canonical.subarray(offset + replacement.length),
+    ]);
+    await writeFile(file, malformed);
+
+    await assert.rejects(
+      JsonlStore.open(file),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_CORRUPT",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("JsonlStore maps filesystem-open and append failures to bounded store errors", async () => {
   const directory = await mkdtemp(join(tmpdir(), "alb-store-errors-"));
   const missingParentFile = join(directory, "missing-parent", "store.jsonl");
