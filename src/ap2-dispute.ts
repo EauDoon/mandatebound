@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { isSha256Digest, sha256Digest } from "./canonical.js";
 import type { Sha256Digest } from "./domain.js";
+import { parseStrictJson } from "./strict-json.js";
 import {
   AP2_V020_MANDATE_CHAIN_PROFILE,
   computeAp2OpenMandateHash,
@@ -369,6 +370,51 @@ function validateTransactionId(value: string): void {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasNoHiddenKeys(value: Record<string, unknown>): boolean {
+  return Object.getOwnPropertySymbols(value).length === 0;
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  if (!hasNoHiddenKeys(value)) return false;
+  const actual = Object.keys(value).sort(compareCodeUnits);
+  const expected = [...keys].sort(compareCodeUnits);
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function hasAllowedKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[],
+): boolean {
+  if (!hasNoHiddenKeys(value)) return false;
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key)) &&
+    Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isClosedArtifactInput(value: unknown): value is Ap2DisputeArtifactInput {
+  return isRecord(value) &&
+    hasExactKeys(value, ["kind", "token"]) &&
+    AP2_DISPUTE_ARTIFACT_KINDS.includes(value.kind as Ap2DisputeArtifactKind) &&
+    typeof value.token === "string" &&
+    value.token.length > 0 &&
+    Buffer.byteLength(value.token, "utf8") <= MAX_ARTIFACT_TOKEN_BYTES;
+}
+
+function isClosedSourceInput(value: unknown): value is Ap2DisputeEvidenceSource {
+  return isRecord(value) &&
+    hasExactKeys(value, ["sourceId", "role", "retrievedAt", "artifacts"]) &&
+    typeof value.sourceId === "string" &&
+    SOURCE_ID_PATTERN.test(value.sourceId) &&
+    AP2_DISPUTE_SOURCE_ROLES.includes(value.role as Ap2DisputeSourceRole) &&
+    typeof value.retrievedAt === "string" &&
+    Array.isArray(value.artifacts);
+}
+
 function freezeStrings(values: Iterable<string>): readonly string[] {
   return Object.freeze([...new Set(values)].sort());
 }
@@ -645,15 +691,8 @@ function validateAndCollect(
   const candidates: Candidate[] = [];
   let artifactCount = 0;
   for (let index = 0; index < input.sources.length; index += 1) {
-    const source = input.sources[index];
-    if (
-      source === undefined ||
-      typeof source.sourceId !== "string" ||
-      !SOURCE_ID_PATTERN.test(source.sourceId) ||
-      !AP2_DISPUTE_SOURCE_ROLES.includes(source.role) ||
-      sourceIds.has(source.sourceId) ||
-      !Array.isArray(source.artifacts)
-    ) {
+    const source: unknown = input.sources[index];
+    if (!isClosedSourceInput(source) || sourceIds.has(source.sourceId)) {
       throw new TypeError(`Invalid AP2 dispute source at index ${String(index)}`);
     }
     sourceIds.add(source.sourceId);
@@ -671,17 +710,11 @@ function validateAndCollect(
     artifactCount += source.artifacts.length;
     if (artifactCount > MAX_ARTIFACTS) throw new TypeError("AP2 dispute artifact count exceeds the limit");
     for (let artifactIndex = 0; artifactIndex < source.artifacts.length; artifactIndex += 1) {
-      const artifact = source.artifacts[artifactIndex];
-      if (
-        artifact === undefined ||
-        !AP2_DISPUTE_ARTIFACT_KINDS.includes(artifact.kind) ||
-        typeof artifact.token !== "string" ||
-        artifact.token.length === 0 ||
-        Buffer.byteLength(artifact.token, "utf8") > MAX_ARTIFACT_TOKEN_BYTES
-      ) {
+      const artifact: unknown = source.artifacts[artifactIndex];
+      if (!isClosedArtifactInput(artifact)) {
         throw new TypeError("AP2 dispute artifact has an invalid shape");
       }
-      const kind = artifact.kind as Ap2DisputeArtifactKind;
+      const kind = artifact.kind;
       if (!ALLOWED_SOURCE_ROLES[kind].has(source.role)) {
         issues.push(makeIssue(
           "AP2_DISPUTE_SOURCE_ROLE_INVALID",
@@ -926,6 +959,8 @@ export async function resolveAp2DisputeEvidence(
         };
       }
       if (
+        !isRecord(response) ||
+        !hasExactKeys(response, ["retrievedAt", "artifacts"]) ||
         typeof response.retrievedAt !== "string" ||
         !Array.isArray(response.artifacts) ||
         response.artifacts.length > MAX_ARTIFACTS
@@ -934,13 +969,7 @@ export async function resolveAp2DisputeEvidence(
       }
       parseTimestamp(response.retrievedAt, `retrieval.${retriever.id}.retrievedAt`);
       for (const artifact of response.artifacts) {
-        if (
-          artifact === undefined ||
-          !AP2_DISPUTE_ARTIFACT_KINDS.includes(artifact.kind) ||
-          typeof artifact.token !== "string" ||
-          artifact.token.length === 0 ||
-          Buffer.byteLength(artifact.token, "utf8") > MAX_ARTIFACT_TOKEN_BYTES
-        ) {
+        if (!isClosedArtifactInput(artifact)) {
           throw new TypeError("AP2 dispute retriever returned an invalid artifact");
         }
       }
@@ -999,26 +1028,6 @@ export async function resolveAp2DisputeEvidence(
       .map((entry) => entry.source)
       .filter((source): source is Ap2DisputeEvidenceSource => source !== null),
   }, Object.freeze(results.map((entry) => entry.attempt)));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort(compareCodeUnits);
-  const expected = [...keys].sort(compareCodeUnits);
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
-}
-
-function hasAllowedKeys(
-  value: Record<string, unknown>,
-  required: readonly string[],
-  optional: readonly string[],
-): boolean {
-  const allowed = new Set([...required, ...optional]);
-  return required.every((key) => Object.hasOwn(value, key)) &&
-    Object.keys(value).every((key) => allowed.has(key));
 }
 
 const JOSE_EC_ALGORITHMS = Object.freeze(["ES256", "ES384", "ES512"] as const);
@@ -1215,7 +1224,18 @@ function cloneBoundedJson<T>(value: T, path: string): T {
   ) {
     throw new TypeError(`JSON-compatible value at ${path} exceeds the byte limit`);
   }
-  return JSON.parse(serialized) as T;
+  try {
+    return parseStrictJson(serialized, {
+      maxBytes: MAX_PACK_CANONICAL_BYTES,
+      maxStringBytes: MAX_PACK_CANONICAL_BYTES,
+      maxDepth: 32,
+      maxNodes: 100_000,
+      maxArrayLength: 10_000,
+      maxObjectKeys: 10_000,
+    }) as T;
+  } catch {
+    throw new TypeError(`Invalid JSON-compatible value at ${path}`);
+  }
 }
 
 function decodeCanonicalBase64(value: string, path: string): Uint8Array {
