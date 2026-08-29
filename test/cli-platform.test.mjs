@@ -435,6 +435,12 @@ test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fai
     assert.match(JSON.parse(result.stdout).error.code, /^ALB_JSON_/);
   }
 
+  const invalidUtf8 = await invoke(["verify", "-"], Buffer.concat([
+    Buffer.from('{"value":"'), Buffer.from([0xc3]), Buffer.from('"}'),
+  ]));
+  assert.equal(invalidUtf8.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(invalidUtf8.stdout).error.code, "ALB_JSON_INVALID");
+
   const wrongShape = await invoke(["replay", "-"], "null");
   assert.equal(wrongShape.code, CLI_EXIT.INVALID);
   assert.equal(JSON.parse(wrongShape.stdout).error.code, "ALB_CLI_INPUT");

@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { lstat, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { TextDecoder } from "node:util";
 import type { Readable, Writable } from "node:stream";
 import type { AppealCheckpoint } from "./appeals.js";
 import { replayAppealEvents } from "./appeals.js";
@@ -105,6 +106,14 @@ const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_AP2_CLI_INPUT_BYTES = 17 * 1024 * 1024;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
+function decodeUtf8(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new CliError("ALB_JSON_INVALID", CLI_EXIT.INVALID, "Input JSON is invalid.");
+  }
+}
+
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const first = argv[0];
   const command = first === "--help" ? "help" : first === "--version" ? "version" : first;
@@ -157,7 +166,7 @@ async function readStdin(stream: Readable, maxBytes: number): Promise<string> {
     }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks, size).toString("utf8");
+  return decodeUtf8(Buffer.concat(chunks, size));
 }
 
 async function readInput(
@@ -175,7 +184,7 @@ async function readInput(
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > maxBytes) {
         throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file is not accepted.");
       }
-      text = await readFile(path, "utf8");
+      text = decodeUtf8(await readFile(path));
     } catch (error) {
       if (error instanceof CliError) throw error;
       throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file could not be read.");

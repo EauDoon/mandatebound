@@ -1,4 +1,5 @@
 import { open, readFile, stat, unlink, type FileHandle } from "node:fs/promises";
+import { TextDecoder } from "node:util";
 import type { AppealEvent, LiabilityDecision, Sha256Digest } from "./domain.js";
 import { canonicalize, sha256Digest } from "./canonical.js";
 import { parseStrictJson } from "./strict-json.js";
@@ -480,7 +481,13 @@ export class JsonlStore extends MemoryStore {
       if (!metadata.isFile() || metadata.size > maxFileBytes) {
         throw new StoreError("ALB_STORE_LIMIT", "Store file exceeds configured limits.");
       }
-      const text = metadata.size === 0 ? "" : await readFile(filePath, "utf8");
+      const bytes = metadata.size === 0 ? undefined : await readFile(filePath);
+      let text = "";
+      try {
+        if (bytes !== undefined) text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      } catch {
+        throw new StoreError("ALB_STORE_CORRUPT", "Store contains invalid UTF-8.");
+      }
       const lines = text.length === 0 ? [] : text.split("\n");
       if (lines.at(-1) === "") lines.pop();
       if (lines.length > maxRecords) {
