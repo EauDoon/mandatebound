@@ -219,6 +219,39 @@ test("supersession and appeal references must exist and remain case-bound", asyn
 
   const filed = event({ decisionId: original.artifactId });
   await store.appendAppeal(filed);
+  const unrelated = decision({ evidenceBundleId: "bundle-unrelated" });
+  await store.putDecision(unrelated);
+  const crossBound = decision({
+    outcome: "operator",
+    supersedesDecisionId: unrelated.artifactId,
+    appealId: filed.appealId,
+    reasonCodes: ["appeal_reversed"],
+  });
+  await assert.rejects(
+    store.putDecision(crossBound),
+    (error) => error.code === "ALB_STORE_SUPERSESSION",
+  );
+
+  const originalRecord = recordFor(original);
+  const unrelatedRecord = recordFor(unrelated, {
+    sequence: 2,
+    previousHash: originalRecord.recordHash,
+  });
+  const appealRecord = recordFor(filed, {
+    recordType: "appeal_event",
+    sequence: 3,
+    previousHash: unrelatedRecord.recordHash,
+    entityId: filed.appealId,
+  });
+  const crossBoundRecord = recordFor(crossBound, {
+    sequence: 4,
+    previousHash: appealRecord.recordHash,
+  });
+  assert(
+    verifyStoreRecords([originalRecord, unrelatedRecord, appealRecord, crossBoundRecord])
+      .issues.some((issue) => issue.code === "ALB_STORE_SUPERSESSION"),
+  );
+
   await assert.rejects(
     store.putDecision(decision({
       caseId: "different-case",
