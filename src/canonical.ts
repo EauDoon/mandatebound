@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { types } from "node:util";
 import type { Sha256Digest, ValidationErrorCode } from "./domain.js";
 
 export interface CanonicalLimits {
@@ -67,13 +68,26 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
     }
     return Object.is(value, -0) ? "0" : JSON.stringify(value);
   }
+  if (types.isProxy(value)) {
+    throw new CanonicalizationError("Proxy values are not canonicalizable");
+  }
   if (Array.isArray(value)) {
+    if (value.length > limits.maxNodes - counter.nodes) {
+      throw new CanonicalizationError("Maximum canonical JSON node count exceeded");
+    }
+    if (
+      Object.getPrototypeOf(value) !== Array.prototype ||
+      Reflect.ownKeys(value).length !== value.length + 1
+    ) {
+      throw new CanonicalizationError("Only plain dense JSON arrays are canonicalizable");
+    }
     const parts: string[] = [];
     for (let index = 0; index < value.length; index += 1) {
-      if (!(index in value)) {
-        throw new CanonicalizationError("Sparse arrays are not canonicalizable");
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+        throw new CanonicalizationError("Sparse and accessor-backed arrays are not canonicalizable");
       }
-      parts.push(serialize(value[index], depth + 1, limits, counter));
+      parts.push(serialize(descriptor.value, depth + 1, limits, counter));
     }
     return `[${parts.join(",")}]`;
   }

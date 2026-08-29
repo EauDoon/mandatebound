@@ -66,6 +66,21 @@ test("canonicalization rejects hidden, executable, sparse, and invalid Unicode v
   const sparse = [];
   sparse.length = 1;
   assert.throws(() => canonicalize(sparse), CanonicalizationError);
+  let arrayAccessorCalls = 0;
+  const accessorArray = [1];
+  Object.defineProperty(accessorArray, "0", { enumerable: true, get: () => ++arrayAccessorCalls });
+  assert.throws(() => canonicalize(accessorArray), CanonicalizationError);
+  assert.equal(arrayAccessorCalls, 0);
+  const decoratedArray = [1];
+  decoratedArray.extra = true;
+  assert.throws(() => canonicalize(decoratedArray), CanonicalizationError);
+  let proxyTrapCalls = 0;
+  const proxiedArray = new Proxy([1], {
+    getPrototypeOf: (target) => { proxyTrapCalls += 1; return Reflect.getPrototypeOf(target); },
+    ownKeys: (target) => { proxyTrapCalls += 1; return Reflect.ownKeys(target); },
+  });
+  assert.throws(() => canonicalize(proxiedArray), CanonicalizationError);
+  assert.equal(proxyTrapCalls, 0);
   assert.throws(() => canonicalize("\ud800"), CanonicalizationError);
   assert.throws(() => canonicalize(() => true), CanonicalizationError);
   const accessor = {};
