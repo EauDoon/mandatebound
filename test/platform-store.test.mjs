@@ -454,6 +454,83 @@ test("JsonlStore enforces configured limits before appending", async () => {
   }
 });
 
+test("JsonlStore accepts complete final records and preserves append boundaries", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-store-line-endings-"));
+  const firstDecision = decision();
+  const firstRecord = recordFor(firstDecision);
+  const firstLine = canonicalize(firstRecord);
+  const lockIsRemoved = async (file) => assert.rejects(
+    readFile(`${file}.lock`),
+    (error) => error.code === "ENOENT",
+  );
+  try {
+    for (const [name, text, count] of [
+      ["empty", "", 0],
+      ["lf", `${firstLine}\n`, 1],
+      ["crlf", `${firstLine}\r\n`, 1],
+      ["no-lf", firstLine, 1],
+    ]) {
+      const file = join(directory, `${name}.jsonl`);
+      await writeFile(file, text, "utf8");
+      const store = await JsonlStore.open(file);
+      const verification = await store.verifyChain();
+      assert.equal(verification.valid, true);
+      assert.equal(verification.records, count);
+      await store.close();
+      await lockIsRemoved(file);
+    }
+
+    const secondDecision = decision({ caseId: "case-2", evidenceBundleId: "bundle-2" });
+    const secondRecord = recordFor(secondDecision, {
+      sequence: 2,
+      previousHash: firstRecord.recordHash,
+    });
+    const limitedFile = join(directory, "no-lf-limit.jsonl");
+    await writeFile(limitedFile, firstLine, "utf8");
+    const limitWithoutSeparator = Buffer.byteLength(firstLine)
+      + Buffer.byteLength(canonicalize(secondRecord))
+      + 1;
+    const limited = await JsonlStore.open(limitedFile, { maxFileBytes: limitWithoutSeparator });
+    await assert.rejects(
+      limited.putDecision(secondDecision),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_LIMIT",
+    );
+    assert.equal(await readFile(limitedFile, "utf8"), firstLine);
+    await limited.close();
+    await lockIsRemoved(limitedFile);
+
+    const appendFile = join(directory, "no-lf-append.jsonl");
+    await writeFile(appendFile, firstLine, "utf8");
+    const writer = await JsonlStore.open(appendFile);
+    await writer.putDecision(secondDecision);
+    await writer.close();
+    assert.equal(
+      await readFile(appendFile, "utf8"),
+      `${firstLine}\n${canonicalize(secondRecord)}\n`,
+    );
+    const reopened = await JsonlStore.open(appendFile);
+    assert.equal((await reopened.verifyChain()).records, 2);
+    await reopened.close();
+    await lockIsRemoved(appendFile);
+
+    for (const [name, text] of [
+      ["blank", `${firstLine}\n\n`],
+      ["invalid-no-lf", canonicalize({ ...firstRecord, recordHash: DIGEST_B })],
+    ]) {
+      const file = join(directory, `${name}.jsonl`);
+      await writeFile(file, text, "utf8");
+      await assert.rejects(
+        JsonlStore.open(file),
+        (error) => error instanceof StoreError && error.code === "ALB_STORE_CORRUPT",
+      );
+      assert.equal(await readFile(file, "utf8"), text);
+      await lockIsRemoved(file);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("JsonlStore rejects malformed, duplicate-key, oversized, over-count, and invalid-chain files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "alb-corrupt-store-"));
   const file = join(directory, "store.jsonl");
