@@ -1,4 +1,5 @@
 import { open, readFile, stat, unlink, type FileHandle } from "node:fs/promises";
+import { Buffer } from "node:buffer";
 import { TextDecoder } from "node:util";
 import type { AppealEvent, LiabilityDecision, Sha256Digest } from "./domain.js";
 import { canonicalize, sha256Digest } from "./canonical.js";
@@ -454,6 +455,8 @@ export class JsonlStore extends MemoryStore {
   private readonly dataHandle: FileHandle;
   private readonly lockHandle: FileHandle;
   private readonly lockPath: string;
+  private readonly maxFileBytes: number;
+  private readonly maxRecords: number;
   private jsonlClosed = false;
 
   private constructor(
@@ -461,16 +464,23 @@ export class JsonlStore extends MemoryStore {
     lockHandle: FileHandle,
     lockPath: string,
     records: readonly StoreRecord[],
+    maxFileBytes: number,
+    maxRecords: number,
   ) {
     super({ records });
     this.dataHandle = dataHandle;
     this.lockHandle = lockHandle;
     this.lockPath = lockPath;
+    this.maxFileBytes = maxFileBytes;
+    this.maxRecords = maxRecords;
   }
 
   public static async open(filePath: string, options: JsonlStoreOptions = {}): Promise<JsonlStore> {
     const maxFileBytes = options.maxFileBytes ?? 32 * 1024 * 1024;
     const maxRecords = options.maxRecords ?? 100_000;
+    if (![maxFileBytes, maxRecords].every((value) => Number.isSafeInteger(value) && value >= 1)) {
+      throw new TypeError("Store limits must be positive safe integers.");
+    }
     const lockPath = `${filePath}.lock`;
     let lockHandle: FileHandle | undefined;
     let dataHandle: FileHandle | undefined;
@@ -506,7 +516,7 @@ export class JsonlStore extends MemoryStore {
         }
         records.push(parsed);
       }
-      return new JsonlStore(dataHandle, lockHandle, lockPath, records);
+      return new JsonlStore(dataHandle, lockHandle, lockPath, records, maxFileBytes, maxRecords);
     } catch (error) {
       await dataHandle?.close().catch(() => undefined);
       await lockHandle?.close().catch(() => undefined);
@@ -521,9 +531,17 @@ export class JsonlStore extends MemoryStore {
   protected override async persist(records: readonly StoreRecord[]): Promise<void> {
     const text = records.map((record) => canonicalize(record)).join("\n") + "\n";
     try {
+      const metadata = await this.dataHandle.stat();
+      if (
+        this.records.length + records.length > this.maxRecords
+        || metadata.size + Buffer.byteLength(text) > this.maxFileBytes
+      ) {
+        throw new StoreError("ALB_STORE_LIMIT", "Store append exceeds configured limits.");
+      }
       await this.dataHandle.appendFile(text, "utf8");
       await this.dataHandle.sync();
-    } catch {
+    } catch (error) {
+      if (error instanceof StoreError) throw error;
       throw new StoreError("ALB_STORE_WRITE", "Store append failed.");
     }
   }
