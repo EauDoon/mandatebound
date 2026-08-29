@@ -2,7 +2,6 @@ import {
   createEvidenceBundle,
   evaluationCaseFromBundle,
   verifyEvidenceBundle,
-  type BundleReplayAnchors,
 } from "./bundle.js";
 import { isSha256Digest, sha256Digest } from "./canonical.js";
 import { decodeProofHeader, jwkThumbprint, verifySignedArtifactDigest } from "./crypto.js";
@@ -13,8 +12,10 @@ import type {
   ArtifactType,
   BundlePins,
   CausationAttestation,
+  DecisionDisposition,
   DecisionTraceEntry,
   Ed25519PublicJwk,
+  EvaluationAnchors,
   EvaluationCase,
   EvidenceBundle,
   ExecutionReceipt,
@@ -52,11 +53,7 @@ const ASCII_DIGITS = "0123456789";
 const ASCII_IDENTIFIER_LEAD = ASCII_UPPERCASE + ASCII_LOWERCASE + ASCII_DIGITS;
 const ASCII_IDENTIFIER_CHARACTERS = ASCII_IDENTIFIER_LEAD + "._:-";
 
-export type DecisionDisposition = "allocated" | "indeterminate" | "conflicted" | "invalid";
-
-export interface EvaluationAnchors extends BundleReplayAnchors {
-  readonly expectedBundleRootDigest?: Sha256Digest;
-}
+export type { DecisionDisposition, EvaluationAnchors };
 
 export interface CryptographicFact {
   readonly artifactRef: ArtifactRef;

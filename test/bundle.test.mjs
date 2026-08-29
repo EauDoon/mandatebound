@@ -102,6 +102,15 @@ test("bundle evaluation without external anchors never allocates", () => {
   });
   assert.equal(mismatched.outcome, "unresolved");
   assert.equal(mismatched.disposition, "invalid");
+
+  const flattened = evaluateBundle(bundle, {
+    ...input.pins,
+    trustRootJwk: input.trustRootJwk,
+    expectedBundleRootDigest: bundle.rootDigest,
+  });
+  assert.equal(flattened.outcome, "unresolved");
+  assert.equal(flattened.disposition, "invalid");
+  assert.equal(flattened.externalAuthenticity, "unestablished");
 });
 
 test("a bundled decision remains semantically closed and valid", () => {

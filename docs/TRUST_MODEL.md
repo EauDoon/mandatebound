@@ -30,6 +30,8 @@ The decision records the accepted trust digest so later replay never resolves a 
 
 `evaluateCase` and `evaluateBundle` validate the signed-artifact envelope, bind it to the exact installed trust-snapshot schema, confirm the caller pin, and only then resolve keys. Direct library callers using `verifyPinnedTrustSnapshot` or `verifyDigestPinnedTrustSnapshot` must preserve that order. Those functions are low-level trust-anchor primitives, not substitutes for signed-artifact and exact-schema validation.
 
+`evaluateBundle` takes `EvaluationAnchors`: `{ pins, trustRootJwk?, expectedBundleRootDigest? }`. The nested `pins` object is the same `BundlePins` used by `evaluateCase`. Flattened pin fields (`asOf`, `policyDigest`, and the other `BundlePins` members at the top level) are not anchors and do not allocate. `EngineEvaluationAnchors` is an alias of that shape.
+
 A caller-supplied digest pin is itself a trust decision. Supplying the optional root public key adds publisher-proof authentication but does not establish real-world identity or authority.
 
 ## Revocation

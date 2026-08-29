@@ -441,9 +441,16 @@ export interface BundlePins {
   readonly engineVersion: string;
 }
 
-/** Caller-owned anchors required before a portable bundle may be allocated. */
-export interface EvaluationAnchors extends BundlePins {
+/**
+ * Caller-owned anchors required before a portable bundle may be allocated.
+ *
+ * `evaluateBundle` reads nested `pins`, never flattened BundlePins fields.
+ * `expectedBundleRootDigest` is an optional second factor for the closed bundle.
+ */
+export interface EvaluationAnchors {
+  readonly pins: BundlePins;
   readonly trustRootJwk?: Ed25519PublicJwk;
+  readonly expectedBundleRootDigest?: Sha256Digest;
 }
 
 export interface BundleManifest {
