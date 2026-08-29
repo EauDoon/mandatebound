@@ -118,6 +118,14 @@ function assertPayloadValid(recordType: StoreRecordType, payload: unknown): void
   }
 }
 
+function appealBindsDecision(
+  appeals: ReadonlyMap<string, readonly AppealEvent[]>,
+  appealId: string | undefined,
+  decisionId: string,
+): boolean {
+  return appealId !== undefined && appeals.get(appealId)?.[0]?.decisionId === decisionId;
+}
+
 const REVIEWER_EVENTS = new Set<AppealEvent["eventType"]>(["review_started", "upheld", "reversed"]);
 
 function assertAppealPolicyAllows(
@@ -199,8 +207,7 @@ export function verifyStoreRecords(
           const original = decisions.get(decision.supersedesDecisionId);
           if (
             original === undefined
-            || decision.appealId === undefined
-            || !appeals.has(decision.appealId)
+            || !appealBindsDecision(appeals, decision.appealId, decision.supersedesDecisionId)
             || original.caseId !== decision.caseId
           ) {
             issues.push({ code: "ALB_STORE_SUPERSESSION", message: "Stored decision supersession is invalid." });
@@ -357,8 +364,8 @@ export class MemoryStore implements DecisionAppealStore {
         if (original === undefined) {
           throw new StoreError("ALB_STORE_SUPERSESSION", "Superseded decision does not exist.");
         }
-        if (decision.appealId === undefined || !this.appeals.has(decision.appealId)) {
-          throw new StoreError("ALB_STORE_SUPERSESSION", "Superseding decision is not bound to an appeal.");
+        if (!appealBindsDecision(this.appeals, decision.appealId, decision.supersedesDecisionId)) {
+          throw new StoreError("ALB_STORE_SUPERSESSION", "Superseding decision is not bound to the superseded decision's appeal.");
         }
         if (original.caseId !== decision.caseId) {
           throw new StoreError("ALB_STORE_SUPERSESSION", "Superseding decision case does not match.");
