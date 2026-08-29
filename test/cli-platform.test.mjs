@@ -85,8 +85,9 @@ function collector() {
 async function invoke(argv, input, options = {}) {
   const stdout = collector();
   const stderr = collector();
+  const stdin = options.stdin ?? Readable.from([input]);
   const code = await runCli(argv, {
-    stdin: Readable.from([input]),
+    stdin,
     stdout: stdout.stream,
     stderr: stderr.stream,
     engine: options.engine ?? engine(),
@@ -157,7 +158,13 @@ test("usage and input failures are privacy-safe", async () => {
   const usage = await invoke(["unknown"], "");
   assert.equal(usage.code, CLI_EXIT.USAGE);
   assert.equal(JSON.parse(usage.stdout).error.code, "ALB_CLI_USAGE");
+  assert.match(JSON.parse(usage.stdout).error.message, /Expected one of: verify/);
+  assert.match(JSON.parse(usage.stdout).error.message, /mandatebound --help/);
   assert.match(usage.stderr, /ALB_CLI_USAGE/);
+
+  const missingCommand = await invoke([], "");
+  assert.equal(missingCommand.code, CLI_EXIT.USAGE);
+  assert.match(JSON.parse(missingCommand.stdout).error.message, /Command is required/);
 
   const canary = "C:\\private\\owner\\SECRET_CANARY.json";
   const missing = await invoke(["verify", canary], "");
@@ -196,8 +203,11 @@ test("documented --input and --format options work, while ambiguous and unsuppor
 test("help and version are stable JSON and use the public brand", async () => {
   const help = await invoke(["--help"], "");
   assert.equal(help.code, CLI_EXIT.SUCCESS);
-  assert.equal(JSON.parse(help.stdout).result.name, "MandateBound");
-  assert.match(JSON.parse(help.stdout).result.usage, /mandatebound/);
+  const helpResult = JSON.parse(help.stdout).result;
+  assert.equal(helpResult.name, "MandateBound");
+  assert.match(helpResult.usage, /mandatebound/);
+  assert.equal(helpResult.commands.some((command) => command.name === "verify"), true);
+  assert.match(helpResult.input, /Empty documents are rejected/);
 
   const version = await invoke(["--version"], "");
   assert.equal(version.code, CLI_EXIT.SUCCESS);
@@ -426,6 +436,44 @@ test("AP2 dispute CLI exposes pack, independent verify, and timeline render", as
   assert.equal(renderedHtml.code, CLI_EXIT.CONFLICT);
   assert.match(renderedHtml.stdout, /AP2 Evidence Timeline/);
   assert.doesNotMatch(renderedHtml.stdout, /synthetic-checkout-jwt/);
+});
+
+test("missing bundle paths, empty evidence, and unknown actions fail with actionable usage", async () => {
+  const tty = Readable.from([""]);
+  Object.defineProperty(tty, "isTTY", { value: true });
+  const missingBundle = await invoke(["verify"], "", { stdin: tty });
+  assert.equal(missingBundle.code, CLI_EXIT.USAGE);
+  assert.equal(JSON.parse(missingBundle.stdout).error.code, "ALB_CLI_USAGE");
+  assert.match(JSON.parse(missingBundle.stdout).error.message, /JSON input path/);
+
+  const emptyStdin = await invoke(["verify", "-"], "");
+  assert.equal(emptyStdin.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(emptyStdin.stdout).error.code, "ALB_CLI_INPUT");
+  assert.match(JSON.parse(emptyStdin.stdout).error.message, /Input is empty/);
+
+  const whitespace = await invoke(["verify", "-"], "  \n\t");
+  assert.equal(whitespace.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(whitespace.stdout).error.code, "ALB_CLI_INPUT");
+
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-empty-"));
+  const emptyFile = join(directory, "empty.json");
+  try {
+    await writeFile(emptyFile, "", "utf8");
+    const emptyPath = await invoke(["verify", "--input", emptyFile], "");
+    assert.equal(emptyPath.code, CLI_EXIT.INVALID);
+    assert.equal(JSON.parse(emptyPath.stdout).error.code, "ALB_CLI_INPUT");
+    assert.equal(emptyPath.stdout.includes(emptyFile), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+
+  const missingAction = await invoke(["casepack"], "{}");
+  assert.equal(missingAction.code, CLI_EXIT.USAGE);
+  assert.match(JSON.parse(missingAction.stdout).error.message, /build, verify, unpack, diff/);
+
+  const unknownAction = await invoke(["ap2-dispute", "unknown"], "{}");
+  assert.equal(unknownAction.code, CLI_EXIT.USAGE);
+  assert.match(JSON.parse(unknownAction.stdout).error.message, /resolve, pack, verify, render/);
 });
 
 test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fail safely", async () => {

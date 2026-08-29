@@ -105,6 +105,25 @@ const FLAG_OPTIONS = new Set(["--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_AP2_CLI_INPUT_BYTES = 17 * 1024 * 1024;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const CLI_COMMANDS = Object.freeze([
+  { name: "verify", summary: "Verify a native evidence bundle" },
+  { name: "decide", summary: "Evaluate a case and persist the policy result" },
+  { name: "explain", summary: "Explain a stored decision without legal effect" },
+  { name: "appeal", summary: "Append an appeal event" },
+  { name: "replay", summary: "Replay an appeal event history" },
+  { name: "simulate", summary: "Run a named synthetic scenario" },
+  { name: "serve", summary: "Listen on loopback with the reference API" },
+  { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack" },
+  { name: "policy", summary: "Validate, test, or diff a policy pack" },
+  { name: "case-report", summary: "Render a CasePack report as JSON or HTML" },
+  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence" },
+  { name: "conformance", summary: "Print the bounded capability statement" },
+] as const);
+const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
+const CLI_USAGE =
+  "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]";
+const CLI_INPUT_HELP =
+  "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
 function decodeUtf8(bytes: Uint8Array): string {
   try {
@@ -169,11 +188,22 @@ async function readStdin(stream: Readable, maxBytes: number): Promise<string> {
   return decodeUtf8(Buffer.concat(chunks, size));
 }
 
+function isInteractiveStdin(stream: Readable): boolean {
+  return "isTTY" in stream && (stream as { readonly isTTY?: boolean }).isTTY === true;
+}
+
 async function readInput(
   pathValue: string | undefined,
   stdin: Readable,
   maxBytes = MAX_CLI_INPUT_BYTES,
 ): Promise<unknown> {
+  if (pathValue === undefined && isInteractiveStdin(stdin)) {
+    throw new CliError(
+      "ALB_CLI_USAGE",
+      CLI_EXIT.USAGE,
+      "Command requires a JSON input path. Pass --input PATH, a positional path, or pipe JSON on stdin.",
+    );
+  }
   const path = pathValue ?? "-";
   let text: string;
   if (path === "-") {
@@ -189,6 +219,13 @@ async function readInput(
       if (error instanceof CliError) throw error;
       throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file could not be read.");
     }
+  }
+  if (text.trim().length === 0) {
+    throw new CliError(
+      "ALB_CLI_INPUT",
+      CLI_EXIT.INVALID,
+      "Input is empty. Provide a JSON document via --input PATH or stdin.",
+    );
   }
   try {
     return parseStrictJson(text, { maxBytes });
@@ -299,8 +336,20 @@ function requireSubcommandInput(
   actions: readonly string[],
 ): { readonly action: string; readonly path?: string } {
   const action = args.positionals[0];
-  if (action === undefined || !actions.includes(action) || args.positionals.length > 2) {
-    throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Command action is missing or unsupported.");
+  const expected = actions.join(", ");
+  if (action === undefined) {
+    throw new CliError(
+      "ALB_CLI_USAGE",
+      CLI_EXIT.USAGE,
+      `Command action is missing. Expected one of: ${expected}.`,
+    );
+  }
+  if (!actions.includes(action) || args.positionals.length > 2) {
+    throw new CliError(
+      "ALB_CLI_USAGE",
+      CLI_EXIT.USAGE,
+      `Command action is unsupported. Expected one of: ${expected}.`,
+    );
   }
   const positionalPath = args.positionals[1];
   const optionPath = args.options["input"];
@@ -448,7 +497,9 @@ export async function runCli(
           version: PROTOCOL_VERSION,
           releaseVersion: RELEASE_VERSION,
           engineVersion: ENGINE_VERSION,
-          usage: "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]",
+          usage: CLI_USAGE,
+          commands: CLI_COMMANDS,
+          input: CLI_INPUT_HELP,
         },
       });
       return CLI_EXIT.SUCCESS;
@@ -727,7 +778,9 @@ export async function runCli(
         throw new CliError(
           "ALB_CLI_USAGE",
           CLI_EXIT.USAGE,
-          "Command is not supported.",
+          args.command === undefined
+            ? `Command is required. Expected one of: ${CLI_COMMAND_NAMES.join(", ")}. Run mandatebound --help.`
+            : `Command is not supported. Expected one of: ${CLI_COMMAND_NAMES.join(", ")}. Run mandatebound --help.`,
         );
     }
   } catch (error) {
