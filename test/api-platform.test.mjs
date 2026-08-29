@@ -212,6 +212,7 @@ test("local request boundary rejects remote peers, rebinding Hosts, and foreign 
   const expectedOrigin = "http://127.0.0.1:4321";
   assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost), expectedHost, expectedOrigin), undefined);
   assert.equal(validateLocalRequest(request("::ffff:127.0.0.1", expectedHost), expectedHost, expectedOrigin), undefined);
+  assert.equal(validateLocalRequest(request("fe80::1%lo0", expectedHost), expectedHost, expectedOrigin)?.code, "ALB_PEER_FORBIDDEN");
   assert.equal(validateLocalRequest(request("203.0.113.7", expectedHost), expectedHost, expectedOrigin)?.code, "ALB_PEER_FORBIDDEN");
   assert.equal(validateLocalRequest(request("127.0.0.1", "127.0.0.1:4321.evil.example"), expectedHost, expectedOrigin)?.code, "ALB_HOST_FORBIDDEN");
   assert.equal(validateLocalRequest(request("127.0.0.1", expectedHost, "http://evil.example:4321"), expectedHost, expectedOrigin)?.code, "ALB_ORIGIN_FORBIDDEN");
@@ -223,6 +224,8 @@ test("loopback recognition covers IPv4, IPv6, and mapped IPv6 without admitting 
   assert.equal(isLoopbackAddress("127.0.0.1"), true);
   assert.equal(isLoopbackAddress("127.42.7.9"), true);
   assert.equal(isLoopbackAddress("::1"), true);
+  assert.equal(isLoopbackAddress("0:0:0:0:0:0:0:1"), true);
+  assert.equal(isLoopbackAddress("::1%lo0"), false);
   assert.equal(isLoopbackAddress("::ffff:127.0.0.1"), true);
   assert.equal(isLoopbackAddress("::ffff:7f00:1"), true);
   assert.equal(isLoopbackAddress("localhost"), false);
