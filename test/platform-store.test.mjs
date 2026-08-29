@@ -541,8 +541,30 @@ test("JsonlStore rejects malformed, duplicate-key, oversized, over-count, and in
       '{}\n',
     ]) {
       await writeFile(file, text, "utf8");
-      await assert.rejects(JsonlStore.open(file), (error) => error.code === "ALB_STORE_CORRUPT");
+      await assert.rejects(
+        JsonlStore.open(file),
+        (error) => error instanceof StoreError
+          && error.code === "ALB_STORE_CORRUPT"
+          && error.line === 1
+          && error.message === "Store contains an invalid record at line 1.",
+      );
     }
+
+    await writeFile(file, "{not-json}\n", "utf8");
+    await assert.rejects(
+      JsonlStore.open(file),
+      (error) => error instanceof StoreError && error.cause instanceof Error,
+    );
+
+    const validRecord = recordFor(decision());
+    await writeFile(file, `${canonicalize(validRecord)}\n{not-json}\n`, "utf8");
+    await assert.rejects(
+      JsonlStore.open(file),
+      (error) => error instanceof StoreError
+        && error.code === "ALB_STORE_CORRUPT"
+        && error.line === 2
+        && error.message === "Store contains an invalid record at line 2.",
+    );
 
     const valid = recordFor(decision());
     await writeFile(file, `${canonicalize({ ...valid, recordHash: DIGEST_B })}\n`, "utf8");

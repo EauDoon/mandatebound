@@ -83,13 +83,43 @@ interface ParsedArgs {
 class CliError extends Error {
   public readonly code: string;
   public readonly exitCode: number;
+  public readonly offset?: number;
+  public readonly line?: number;
 
-  public constructor(code: string, exitCode: number, message: string) {
-    super(message);
+  public constructor(
+    code: string,
+    exitCode: number,
+    message: string,
+    options: { cause?: unknown; offset?: number; line?: number } = {},
+  ) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "CliError";
     this.code = code;
     this.exitCode = exitCode;
+    if (options.offset !== undefined) this.offset = options.offset;
+    if (options.line !== undefined) this.line = options.line;
   }
+}
+
+function diagnosticFields(error: { readonly offset?: number; readonly line?: number }): {
+  readonly offset?: number;
+  readonly line?: number;
+} {
+  return {
+    ...(error.offset === undefined ? {} : { offset: error.offset }),
+    ...(error.line === undefined ? {} : { line: error.line }),
+  };
+}
+
+function locationFrom(error: unknown): { readonly offset?: number; readonly line?: number } {
+  if (typeof error !== "object" || error === null) return {};
+  const candidate = error as { readonly offset?: unknown; readonly line?: unknown };
+  const offset = candidate.offset;
+  const line = candidate.line;
+  return {
+    ...(typeof offset === "number" && Number.isSafeInteger(offset) && offset >= 0 ? { offset } : {}),
+    ...(typeof line === "number" && Number.isSafeInteger(line) && line >= 1 ? { line } : {}),
+  };
 }
 
 const VALUE_OPTIONS = new Set([
@@ -217,7 +247,7 @@ async function readInput(
       text = decodeUtf8(await readFile(path));
     } catch (error) {
       if (error instanceof CliError) throw error;
-      throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file could not be read.");
+      throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Input file could not be read.", { cause: error });
     }
   }
   if (text.trim().length === 0) {
@@ -231,7 +261,10 @@ async function readInput(
     return parseStrictJson(text, { maxBytes });
   } catch (error) {
     if (error instanceof StrictJsonError) {
-      throw new CliError(error.code, CLI_EXIT.INVALID, "Input JSON is invalid.");
+      throw new CliError(error.code, CLI_EXIT.INVALID, error.message, {
+        cause: error,
+        offset: error.offset,
+      });
     }
     throw error;
   }
@@ -265,22 +298,33 @@ async function storeFor(
 }
 
 function mappedCliError(error: unknown): CliError {
+  const location = locationFrom(error);
   if (error instanceof CliError) return error;
   if (error instanceof StoreError) {
-    if (error.code.endsWith("NOT_FOUND")) return new CliError(error.code, CLI_EXIT.NOT_FOUND, "Requested resource was not found.");
-    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP|LOCKED/.test(error.code)) {
-      return new CliError(error.code, CLI_EXIT.CONFLICT, "Requested state transition conflicts with current state.");
+    const options = { cause: error, ...location };
+    if (error.code.endsWith("NOT_FOUND")) {
+      return new CliError(error.code, CLI_EXIT.NOT_FOUND, "Requested resource was not found.", options);
     }
-    if (/OPEN|WRITE|CLOSED/.test(error.code)) return new CliError(error.code, CLI_EXIT.UNAVAILABLE, "Storage is unavailable.");
-    return new CliError(error.code, CLI_EXIT.INVALID, "Stored artifact is invalid.");
+    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP|LOCKED/.test(error.code)) {
+      return new CliError(error.code, CLI_EXIT.CONFLICT, "Requested state transition conflicts with current state.", options);
+    }
+    if (/OPEN|WRITE|CLOSED/.test(error.code)) {
+      return new CliError(error.code, CLI_EXIT.UNAVAILABLE, "Storage is unavailable.", options);
+    }
+    return new CliError(error.code, CLI_EXIT.INVALID, "Stored artifact is invalid.", options);
   }
   const hasCode = typeof error === "object" && error !== null && "code" in error;
   const code = hasCode ? String(Reflect.get(error, "code")) : "ALB_INTERNAL";
-  if (hasCode && /^ALB_[A-Z0-9_]+$/.test(code)) return new CliError(code, CLI_EXIT.INVALID, "Artifact validation failed.");
-  if (error instanceof TypeError || error instanceof RangeError) {
-    return new CliError("ALB_ARTIFACT_INVALID", CLI_EXIT.INVALID, "Protocol artifact is invalid.");
+  if (hasCode && /^ALB_[A-Z0-9_]+$/.test(code)) {
+    return new CliError(code, CLI_EXIT.INVALID, "Artifact validation failed.", { cause: error, ...location });
   }
-  return new CliError("ALB_INTERNAL", CLI_EXIT.INTERNAL, "Command could not be completed.");
+  if (error instanceof TypeError || error instanceof RangeError) {
+    return new CliError("ALB_ARTIFACT_INVALID", CLI_EXIT.INVALID, "Protocol artifact is invalid.", {
+      cause: error,
+      ...location,
+    });
+  }
+  return new CliError("ALB_INTERNAL", CLI_EXIT.INTERNAL, "Command could not be completed.", { cause: error });
 }
 
 function requireSingleInput(args: ParsedArgs): string | undefined {
@@ -785,8 +829,9 @@ export async function runCli(
     }
   } catch (error) {
     const mapped = mappedCliError(error);
-    writeJson(stdout, { ok: false, error: { code: mapped.code, message: mapped.message } });
-    writeJson(stderr, { level: "error", code: mapped.code, message: mapped.message });
+    const diagnostic = { code: mapped.code, message: mapped.message, ...diagnosticFields(mapped) };
+    writeJson(stdout, { ok: false, error: diagnostic });
+    writeJson(stderr, { level: "error", ...diagnostic });
     return mapped.exitCode;
   } finally {
     await ownedStore?.close().catch(() => undefined);

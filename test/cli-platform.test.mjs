@@ -477,6 +477,24 @@ test("missing bundle paths, empty evidence, and unknown actions fail with action
 });
 
 test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fail safely", async () => {
+  const truncated = await invoke(["verify", "-"], "{");
+  assert.equal(truncated.code, CLI_EXIT.INVALID);
+  const truncatedError = JSON.parse(truncated.stdout).error;
+  assert.equal(truncatedError.code, "ALB_JSON_INVALID");
+  assert.equal(truncatedError.offset, 1);
+  assert.match(truncatedError.message, /offset 1/);
+  const truncatedLog = JSON.parse(truncated.stderr);
+  assert.equal(truncatedLog.level, "error");
+  assert.equal(truncatedLog.code, "ALB_JSON_INVALID");
+  assert.equal(truncatedLog.offset, 1);
+
+  const duplicate = await invoke(["verify", "-"], '{"a":1,"a":2}');
+  assert.equal(duplicate.code, CLI_EXIT.INVALID);
+  const duplicateError = JSON.parse(duplicate.stdout).error;
+  assert.equal(duplicateError.code, "ALB_JSON_DUPLICATE_KEY");
+  assert.equal(duplicateError.offset, 7);
+  assert.equal(duplicateError.message.includes('"a"'), false);
+
   for (const input of ["{", '{"a":1,"a":2}']) {
     const result = await invoke(["verify", "-"], input);
     assert.equal(result.code, CLI_EXIT.INVALID);
@@ -543,6 +561,24 @@ test("CLI error mapping uses stable exit classes and never reflects exception se
     const result = await invoke(["decide", "-"], "{}", { store });
     assert.equal(result.code, expected);
     assert.equal(result.stdout.includes("secret"), false);
+  }
+});
+
+test("CLI store diagnostics name the failing JSONL line without reflecting record bodies", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-store-"));
+  const file = join(directory, "store.jsonl");
+  try {
+    await writeFile(file, "{not-json}\n", "utf8");
+    const result = await invoke(["decide", "--store", file, "-"], JSON.stringify({ pins: {} }));
+    assert.equal(result.code, CLI_EXIT.INVALID);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_STORE_CORRUPT");
+    assert.equal(error.line, 1);
+    assert.equal(error.message, "Stored artifact is invalid.");
+    assert.equal(result.stdout.includes("not-json"), false);
+    assert.equal(JSON.parse(result.stderr).line, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

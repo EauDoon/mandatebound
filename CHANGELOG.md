@@ -9,6 +9,7 @@ All notable changes are documented here.
 - Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.
 - `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.
 - CLI `--help` now lists commands and the JSON input convention. Unknown commands, a missing bundle path on an interactive terminal, and empty evidence documents fail with actionable usage or input errors instead of a generic parse failure.
+- CLI, API, and `parseAndValidateArtifact` JSON parse failures now keep their diagnostic code and include the UTF-16 parse offset. JsonlStore names the failing record line and preserves the exception cause. API logger events include the bounded detail.
 
 ### Security
 

@@ -280,7 +280,12 @@
           "status": { "type": "integer", "minimum": 400, "maximum": 599 },
           "detail": { "type": "string" },
           "code": { "type": "string", "pattern": "^ALB_[A-Z0-9_]+$" },
-          "requestId": { "type": "string", "format": "uuid" }
+          "requestId": { "type": "string", "format": "uuid" },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "UTF-16 code unit offset of a strict JSON parse failure. Omitted unless the request body failed parsing."
+          }
         }
       },
       "EvidenceBundle": {

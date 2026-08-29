@@ -314,7 +314,14 @@ export function parseAndValidateArtifact<T>(
     return validateArtifact<T>(key, parsed);
   } catch (error: unknown) {
     if (error instanceof StrictJsonError) {
-      return { ok: false, issues: [{ code: error.code, path: "", message: "Strict JSON parsing failed" }] };
+      return {
+        ok: false,
+        issues: [{
+          code: error.code,
+          path: "",
+          message: `Strict JSON parsing failed (offset ${String(error.offset)})`,
+        }],
+      };
     }
     if (error instanceof TypeError || error instanceof RangeError) {
       return { ok: false, issues: [{ code: "ALB_JSON_INVALID", path: "", message: "JSON input is invalid" }] };
