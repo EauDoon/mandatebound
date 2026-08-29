@@ -13,7 +13,7 @@ import type {
   BundleObject,
   BundlePins,
   BundleVerificationReport,
-  Ed25519PublicJwk,
+  EvaluationAnchors,
   EvaluationCase,
   EvidenceBundle,
   LiabilityDecision,
@@ -61,10 +61,7 @@ interface BundleCaseIndex {
 }
 
 /** External replay anchors. They are never read from the bundle being tested. */
-export interface BundleReplayAnchors {
-  readonly pins: BundlePins;
-  readonly trustRootJwk?: Ed25519PublicJwk;
-}
+export type BundleReplayAnchors = Pick<EvaluationAnchors, "pins" | "trustRootJwk">;
 
 interface ObjectWithEntry {
   readonly object: BundleObject;

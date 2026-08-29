@@ -26,7 +26,7 @@ type MaybePromise<T> = T | Promise<T>;
 export interface PlatformEngine {
   readonly verifyEvidenceBundle: (bundle: EvidenceBundle) => MaybePromise<BundleVerificationReport>;
   readonly evaluateCase: (input: EvaluationInput) => MaybePromise<LiabilityDecision>;
-  readonly explainDecision: (decision: LiabilityDecision) => MaybePromise<unknown>;
+  readonly explainDecision: (decision: LiabilityDecision) => MaybePromise<string>;
 }
 
 async function resolveExport<T extends (...args: never[]) => unknown>(
@@ -62,7 +62,7 @@ export function createDefaultPlatformEngine(): PlatformEngine {
     },
     async explainDecision(decision) {
       const modules = [await import("./engine.js")];
-      const fn = await resolveExport<(value: LiabilityDecision) => MaybePromise<unknown>>(
+      const fn = await resolveExport<(value: LiabilityDecision) => MaybePromise<string>>(
         modules,
         ["explainDecision", "explain"],
       );

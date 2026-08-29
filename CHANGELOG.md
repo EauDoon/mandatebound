@@ -4,6 +4,11 @@ All notable changes are documented here.
 
 ## Unreleased corrective candidate
 
+### Changed
+
+- Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.
+- `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.
+
 ### Security
 
 - Removed the remote-binding escape hatch from the API and CLI. The reference server now requires a loopback bind and rejects non-loopback peers, mismatched Host headers, and foreign Origins before routing.
