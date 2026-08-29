@@ -135,6 +135,8 @@ The demo uses synthetic identities and ephemeral test keys. It does not contact 
 
 ## CLI
 
+`mandatebound --help` prints JSON usage, the command list, and the JSON input convention. Unknown commands exit `2`. JSON commands require one document from `--input PATH`, a positional path, or stdin (`-`). A missing path on an interactive terminal and an empty document fail closed without leaking file paths.
+
 The examples below use the installed `mandatebound` binary. From a source checkout, run `npm run build` and replace `mandatebound` with `node dist/cli.js`.
 
 ### CasePack workflow
