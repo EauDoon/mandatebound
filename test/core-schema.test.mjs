@@ -112,6 +112,7 @@ test("parse-and-validate preserves duplicate-key failures without reflecting bod
   assert.equal(result.ok, false);
   assert.equal(result.issues[0].code, "ALB_JSON_DUPLICATE_KEY");
   assert.equal(result.issues[0].message.includes("schemaVersion"), false);
+  assert.match(result.issues[0].message, /offset \d+/);
 });
 
 test("appeal chain starts at one and links every later event", () => {

@@ -50,11 +50,13 @@ export interface DecisionAppealStore {
 
 export class StoreError extends Error {
   public readonly code: string;
+  public readonly line?: number;
 
-  public constructor(code: string, message: string) {
-    super(message);
+  public constructor(code: string, message: string, options: { cause?: unknown; line?: number } = {}) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "StoreError";
     this.code = code;
+    if (options.line !== undefined) this.line = options.line;
   }
 }
 
@@ -498,8 +500,8 @@ export class JsonlStore extends MemoryStore {
       let text = "";
       try {
         if (bytes !== undefined) text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-      } catch {
-        throw new StoreError("ALB_STORE_CORRUPT", "Store contains invalid UTF-8.");
+      } catch (error) {
+        throw new StoreError("ALB_STORE_CORRUPT", "Store contains invalid UTF-8.", { cause: error });
       }
       const needsSeparator = text.length > 0 && !text.endsWith("\n");
       const lines = text.length === 0 ? [] : text.split("\n");
@@ -508,15 +510,25 @@ export class JsonlStore extends MemoryStore {
         throw new StoreError("ALB_STORE_LIMIT", "Store record count exceeds configured limits.");
       }
       const records: StoreRecord[] = [];
-      for (const line of lines) {
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (line === undefined) continue;
         let parsed: unknown;
         try {
           parsed = parseStrictJson(line, { maxBytes: 1_048_576 });
-        } catch {
-          throw new StoreError("ALB_STORE_CORRUPT", "Store contains an invalid record.");
+        } catch (error) {
+          throw new StoreError(
+            "ALB_STORE_CORRUPT",
+            `Store contains an invalid record at line ${String(index + 1)}.`,
+            { cause: error, line: index + 1 },
+          );
         }
         if (!isRecord(parsed)) {
-          throw new StoreError("ALB_STORE_CORRUPT", "Store contains an invalid record.");
+          throw new StoreError(
+            "ALB_STORE_CORRUPT",
+            `Store contains an invalid record at line ${String(index + 1)}.`,
+            { line: index + 1 },
+          );
         }
         records.push(parsed);
       }
@@ -527,8 +539,8 @@ export class JsonlStore extends MemoryStore {
       if (lockHandle !== undefined) await unlink(lockPath).catch(() => undefined);
       if (error instanceof StoreError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EEXIST") throw new StoreError("ALB_STORE_LOCKED", "Store already has a writer.");
-      throw new StoreError("ALB_STORE_OPEN", "Store could not be opened.");
+      if (code === "EEXIST") throw new StoreError("ALB_STORE_LOCKED", "Store already has a writer.", { cause: error });
+      throw new StoreError("ALB_STORE_OPEN", "Store could not be opened.", { cause: error });
     }
   }
 
@@ -547,7 +559,7 @@ export class JsonlStore extends MemoryStore {
       await this.dataHandle.sync();
     } catch (error) {
       if (error instanceof StoreError) throw error;
-      throw new StoreError("ALB_STORE_WRITE", "Store append failed.");
+      throw new StoreError("ALB_STORE_WRITE", "Store append failed.", { cause: error });
     }
   }
 

@@ -100,6 +100,8 @@ export interface ApiLoggerEvent {
   readonly code: string;
   readonly requestId: string;
   readonly status: number;
+  readonly detail?: string;
+  readonly offset?: number;
 }
 
 export interface CreateApiServerOptions {
@@ -132,18 +134,49 @@ export interface ProblemDetails {
   readonly detail: string;
   readonly code: string;
   readonly requestId: string;
+  readonly offset?: number;
 }
 
 class PlatformError extends Error {
   public readonly code: string;
   public readonly status: number;
+  public readonly offset?: number;
 
-  public constructor(code: string, status: number, message: string) {
-    super(message);
+  public constructor(
+    code: string,
+    status: number,
+    message: string,
+    options: { cause?: unknown; offset?: number } = {},
+  ) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "PlatformError";
     this.code = code;
     this.status = status;
+    if (options.offset !== undefined) this.offset = options.offset;
   }
+}
+
+function locationFrom(error: unknown): { readonly offset?: number } {
+  if (typeof error !== "object" || error === null) return {};
+  const offset = (error as { readonly offset?: unknown }).offset;
+  return typeof offset === "number" && Number.isSafeInteger(offset) && offset >= 0 ? { offset } : {};
+}
+
+function loggerEvent(
+  level: ApiLoggerEvent["level"],
+  code: string,
+  requestId: string,
+  status: number,
+  extras: { detail?: string; offset?: number } = {},
+): ApiLoggerEvent {
+  return {
+    level,
+    code,
+    requestId,
+    status,
+    ...(extras.detail === undefined ? {} : { detail: extras.detail }),
+    ...(extras.offset === undefined ? {} : { offset: extras.offset }),
+  };
 }
 
 function resolveLimits(overrides: Partial<ApiLimits> | undefined): ApiLimits {
@@ -277,6 +310,7 @@ function sendProblem(
   codeValue: string,
   detail: string,
   requestId: string,
+  extras: { offset?: number } = {},
 ): void {
   setCommonHeaders(response);
   const code = safeCode(codeValue);
@@ -287,6 +321,7 @@ function sendProblem(
     detail,
     code,
     requestId,
+    ...(extras.offset === undefined ? {} : { offset: extras.offset }),
   };
   const body = JSON.stringify(problem);
   response.statusCode = status;
@@ -388,7 +423,12 @@ async function readJsonBody(
     });
   } catch (error) {
     if (error instanceof StrictJsonError) {
-      throw new PlatformError(error.code, error.code === "ALB_JSON_LIMIT" ? 413 : 400, "JSON body is invalid.");
+      throw new PlatformError(
+        error.code,
+        error.code === "ALB_JSON_LIMIT" ? 413 : 400,
+        error.message,
+        { cause: error, offset: error.offset },
+      );
     }
     throw error;
   }
@@ -485,25 +525,29 @@ function safePathIdentifier(encoded: string): string {
 }
 
 function errorMapping(error: unknown): PlatformError {
+  const location = locationFrom(error);
   if (error instanceof PlatformError) return error;
   if (error instanceof StoreError) {
-    if (error.code.endsWith("NOT_FOUND")) return new PlatformError(error.code, 404, "Requested resource was not found.");
+    const options = { cause: error, ...location };
+    if (error.code.endsWith("NOT_FOUND")) return new PlatformError(error.code, 404, "Requested resource was not found.", options);
     if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP/.test(error.code)) {
-      return new PlatformError(error.code, 409, "Requested state transition conflicts with current state.");
+      return new PlatformError(error.code, 409, "Requested state transition conflicts with current state.", options);
     }
-    if (/LIMIT/.test(error.code)) return new PlatformError(error.code, 413, "Configured storage limit was exceeded.");
-    if (/LOCKED|CLOSED|WRITE|OPEN/.test(error.code)) return new PlatformError(error.code, 503, "Storage service is unavailable.");
-    return new PlatformError(error.code, 422, "Stored artifact is invalid.");
+    if (/LIMIT/.test(error.code)) return new PlatformError(error.code, 413, "Configured storage limit was exceeded.", options);
+    if (/LOCKED|CLOSED|WRITE|OPEN/.test(error.code)) {
+      return new PlatformError(error.code, 503, "Storage service is unavailable.", options);
+    }
+    return new PlatformError(error.code, 422, "Stored artifact is invalid.", options);
   }
   const hasCode = typeof error === "object" && error !== null && "code" in error;
   const code = hasCode ? String(Reflect.get(error, "code")) : "ALB_INTERNAL";
   if (hasCode && /^ALB_[A-Z0-9_]{1,76}$/.test(code)) {
-    return new PlatformError(code, 422, "Artifact validation failed.");
+    return new PlatformError(code, 422, "Artifact validation failed.", { cause: error, ...location });
   }
   if (error instanceof TypeError || error instanceof RangeError) {
-    return new PlatformError("ALB_ARTIFACT_INVALID", 422, "Protocol artifact is invalid.");
+    return new PlatformError("ALB_ARTIFACT_INVALID", 422, "Protocol artifact is invalid.", { cause: error, ...location });
   }
-  return new PlatformError("ALB_INTERNAL", 500, "The request could not be completed.");
+  return new PlatformError("ALB_INTERNAL", 500, "The request could not be completed.", { cause: error });
 }
 
 let cachedOpenApi: unknown;
@@ -539,18 +583,24 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
     const requestId = randomUUID();
     if (expectedHostHeader === undefined || expectedOrigin === undefined) {
       sendProblem(response, 503, "ALB_BOUNDARY_UNAVAILABLE", "The loopback request boundary is unavailable.", requestId);
-      options.logger?.({ level: "error", code: "ALB_BOUNDARY_UNAVAILABLE", requestId, status: 503 });
+      options.logger?.(loggerEvent("error", "ALB_BOUNDARY_UNAVAILABLE", requestId, 503, {
+        detail: "The loopback request boundary is unavailable.",
+      }));
       return;
     }
     const boundaryFailure = validateLocalRequest(request, expectedHostHeader, expectedOrigin);
     if (boundaryFailure !== undefined) {
       sendProblem(response, boundaryFailure.status, boundaryFailure.code, boundaryFailure.detail, requestId);
-      options.logger?.({ level: "warn", code: boundaryFailure.code, requestId, status: boundaryFailure.status });
+      options.logger?.(loggerEvent("warn", boundaryFailure.code, requestId, boundaryFailure.status, {
+        detail: boundaryFailure.detail,
+      }));
       return;
     }
     if (activeRequests >= limits.maxConcurrentRequests) {
       sendProblem(response, 503, "ALB_CONCURRENCY_LIMIT", "Service concurrency limit was reached.", requestId);
-      options.logger?.({ level: "warn", code: "ALB_CONCURRENCY_LIMIT", requestId, status: 503 });
+      options.logger?.(loggerEvent("warn", "ALB_CONCURRENCY_LIMIT", requestId, 503, {
+        detail: "Service concurrency limit was reached.",
+      }));
       return;
     }
     activeRequests += 1;
@@ -651,13 +701,17 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
       throw new PlatformError("ALB_ROUTE_NOT_FOUND", 404, "Requested resource was not found.");
     } catch (error) {
       const mapped = errorMapping(error);
-      if (!response.headersSent) sendProblem(response, mapped.status, mapped.code, mapped.message, requestId);
-      options.logger?.({
-        level: mapped.status >= 500 ? "error" : "warn",
-        code: mapped.code,
+      const location = locationFrom(mapped);
+      if (!response.headersSent) {
+        sendProblem(response, mapped.status, mapped.code, mapped.message, requestId, location);
+      }
+      options.logger?.(loggerEvent(
+        mapped.status >= 500 ? "error" : "warn",
+        mapped.code,
         requestId,
-        status: mapped.status,
-      });
+        mapped.status,
+        { detail: mapped.message, ...location },
+      ));
     } finally {
       activeRequests -= 1;
     }

@@ -465,7 +465,10 @@ test("API rejects missing anchors, malformed JSON, duplicate keys, media types, 
       body: '{"bundle":',
     });
     assert.equal(malformed.status, 400);
-    assert.equal((await json(malformed)).code, "ALB_JSON_INVALID");
+    const malformedProblem = await json(malformed);
+    assert.equal(malformedProblem.code, "ALB_JSON_INVALID");
+    assert.equal(malformedProblem.offset, 10);
+    assert.match(malformedProblem.detail, /offset 10/);
 
     const empty = await fetch(`${address.url}/v1/verify`, {
       method: "POST",
@@ -760,6 +763,34 @@ test("Problem Details never reflects engine secrets or local paths", async () =>
     assert.equal(JSON.parse(text).detail, "The request could not be completed.");
     assert.equal(JSON.stringify(logEvents).includes(canary), false);
     assert.equal(JSON.stringify(logEvents).includes("private\\owner"), false);
+    assert.equal(logEvents.at(-1)?.detail, "The request could not be completed.");
+  } finally {
+    await api.close();
+  }
+});
+
+test("API logger and Problem Details include JSON parse offset", async () => {
+  const logEvents = [];
+  const api = createApiServer({
+    engine: engine(),
+    logger: (event) => logEvents.push(event),
+  });
+  const address = await api.listen();
+  try {
+    const response = await fetch(`${address.url}/v1/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"bundle":',
+    });
+    assert.equal(response.status, 400);
+    const problem = await json(response);
+    assert.equal(problem.code, "ALB_JSON_INVALID");
+    assert.equal(problem.offset, 10);
+    const event = logEvents.at(-1);
+    assert.equal(event.code, "ALB_JSON_INVALID");
+    assert.equal(event.status, 400);
+    assert.equal(event.offset, 10);
+    assert.match(event.detail, /offset 10/);
   } finally {
     await api.close();
   }
