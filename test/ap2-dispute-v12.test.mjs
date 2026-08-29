@@ -581,6 +581,33 @@ test("Pack digest verification is independent of evidence array order", () => {
   assert.equal(verification.status, "verified", JSON.stringify(verification.issues));
 });
 
+test("packing the same evidence in any array order is byte-identical", () => {
+  const fixture = makeFixture();
+  const input = makePackInput(fixture);
+  input.checkoutVersions.push({
+    versionId: "checkout-version-2",
+    sourceId: "merchant-primary",
+    observedAt: "2026-07-22T23:58:40.000Z",
+    checkoutJwt: fixture.checkoutJwt,
+  });
+  const reversed = {
+    ...input,
+    sources: [...input.sources].reverse(),
+    checkoutVersions: [...input.checkoutVersions].reverse(),
+    revocations: [...input.revocations].reverse(),
+  };
+  const first = packAp2DisputeEvidence(input);
+  const second = packAp2DisputeEvidence(reversed);
+  assert.equal(second.packDigest, first.packDigest);
+  assert.deepEqual(second.sources.map((source) => source.sourceId), first.sources.map((source) => source.sourceId));
+  const firstReport = verifyAp2DisputeEvidencePack(first, { expectedPackDigest: first.packDigest });
+  const secondReport = verifyAp2DisputeEvidencePack(second, { expectedPackDigest: first.packDigest });
+  assert.equal(firstReport.status, "verified", JSON.stringify(firstReport.issues));
+  assert.equal(secondReport.status, "verified", JSON.stringify(secondReport.issues));
+  assert.equal(secondReport.reportDigest, firstReport.reportDigest);
+  assert.equal(secondReport.resolution.resolutionDigest, firstReport.resolution.resolutionDigest);
+});
+
 test("strict AP2 profile accepts a directly signed Human Present closed Mandate", () => {
   const fixture = makeFixture();
   const claims = {
@@ -940,6 +967,26 @@ test("caller-supplied retrieval is deterministic and provider failures do not le
   });
   assert.equal(malformed.status, "unresolved");
   assert.equal(codes(malformed).has("AP2_DISPUTE_RETRIEVAL_FAILED"), true);
+
+  const extraFields = await resolveAp2DisputeEvidence({
+    transactionId: fixture.transactionId,
+    asOf,
+    verificationPlan: fixture.verificationPlan,
+    retrievers: [...providers, {
+      id: "network-extra-fields",
+      role: "network",
+      async retrieve() {
+        return {
+          retrievedAt: asOf,
+          artifacts: [],
+          providerNote: "secret-sidecar",
+        };
+      },
+    }],
+  });
+  assert.equal(extraFields.status, "unresolved");
+  assert.equal(codes(extraFields).has("AP2_DISPUTE_RETRIEVAL_FAILED"), true);
+  assert.equal(JSON.stringify(extraFields).includes("secret-sidecar"), false);
 });
 
 test("invalid identifiers, duplicated retrievers, and oversized inputs are rejected", async () => {
@@ -976,6 +1023,50 @@ test("invalid identifiers, duplicated retrievers, and oversized inputs are rejec
       artifacts: [{ kind: "checkout_mandate", token: "x".repeat(1_048_577) }],
     }],
   }), TypeError);
+
+  assert.throws(() => assembleAp2DisputeEvidence({
+    ...fixture.input,
+    sources: [{
+      ...fixture.sources[0],
+      artifacts: [{
+        kind: "checkout_mandate",
+        token: fixture.checkoutMandate,
+        sidecar: "not-evidence",
+      }],
+    }],
+  }), TypeError);
+  assert.throws(() => assembleAp2DisputeEvidence({
+    ...fixture.input,
+    sources: [{ ...fixture.sources[0], note: "sidecar-metadata" }, fixture.sources[1]],
+  }), TypeError);
+
+  const inherited = Object.create(fixture.sources[0]);
+  inherited.sourceId = "inherited-source";
+  assert.throws(() => assembleAp2DisputeEvidence({
+    ...fixture.input,
+    sources: [inherited],
+  }), TypeError);
+
+  const symbolKeyed = { ...fixture.sources[0] };
+  symbolKeyed[Symbol("hidden")] = "channel";
+  assert.throws(() => assembleAp2DisputeEvidence({
+    ...fixture.input,
+    sources: [symbolKeyed, fixture.sources[1]],
+  }), TypeError);
+
+  const packInput = makePackInput(fixture);
+  const extraSource = JSON.parse(JSON.stringify(packInput));
+  extraSource.sources[0].note = "sidecar-metadata";
+  assert.throws(() => packAp2DisputeEvidence(extraSource), TypeError);
+
+  const unsafeKey = JSON.parse(JSON.stringify(packInput));
+  Object.defineProperty(unsafeKey.sources[0], "constructor", {
+    value: { name: "Array" },
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  assert.throws(() => packAp2DisputeEvidence(unsafeKey), TypeError);
 });
 
 test("required autonomous constraints, nested Payment fields, and caller trust IDs fail closed", () => {
