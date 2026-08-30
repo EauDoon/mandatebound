@@ -20,9 +20,15 @@ for (const field of [manifest.main, manifest.types, manifest.bin, manifest.expor
 
 const npmCli = process.env["npm_execpath"];
 const useNpmCli = typeof npmCli === "string" && npmCli.endsWith(".js");
-const npmCommand = useNpmCli ? process.execPath : process.platform === "win32" ? "npm.cmd" : "npm";
+const useWindowsNpmShim = process.platform === "win32" && !useNpmCli;
+const npmCommand = useNpmCli
+  ? process.execPath
+  : useWindowsNpmShim
+    ? process.env.ComSpec ?? "cmd.exe"
+    : "npm";
 const npmArgs = [
   ...(useNpmCli ? [npmCli] : []),
+  ...(useWindowsNpmShim ? ["/d", "/s", "/c", "npm.cmd"] : []),
   "pack",
   "--dry-run",
   "--json",
@@ -47,7 +53,12 @@ try {
   process.exit(1);
 }
 
-const packageReport = report[0];
+const packageReports = Array.isArray(report)
+  ? report
+  : report && typeof report === "object"
+    ? Object.values(report)
+    : [];
+const packageReport = packageReports.length === 1 ? packageReports[0] : undefined;
 if (!packageReport || !Array.isArray(packageReport.files)) {
   process.stderr.write("package check failed: missing file inventory\n");
   process.exit(1);
