@@ -474,6 +474,7 @@ export class JsonlStore extends MemoryStore {
   private readonly maxRecords: number;
   private readonly maxRecordBytes: number;
   private needsSeparator: boolean;
+  private appendStateUncertain = false;
   private jsonlClosed = false;
 
   private constructor(
@@ -494,6 +495,13 @@ export class JsonlStore extends MemoryStore {
     this.maxFileBytes = maxFileBytes;
     this.maxRecords = maxRecords;
     this.maxRecordBytes = maxRecordBytes;
+  }
+
+  protected override ensureOpen(): void {
+    super.ensureOpen();
+    if (this.appendStateUncertain) {
+      throw new StoreError("ALB_STORE_WRITE", "Store append state is uncertain.");
+    }
   }
 
   public static async open(filePath: string, options: JsonlStoreOptions = {}): Promise<JsonlStore> {
@@ -577,6 +585,7 @@ export class JsonlStore extends MemoryStore {
       throw new StoreError("ALB_STORE_LIMIT", "Store append exceeds configured limits.");
     }
     const text = `${this.needsSeparator ? "\n" : ""}${lines.join("\n")}\n`;
+    let appendStarted = false;
     try {
       const metadata = await this.dataHandle.stat();
       if (
@@ -585,10 +594,12 @@ export class JsonlStore extends MemoryStore {
       ) {
         throw new StoreError("ALB_STORE_LIMIT", "Store append exceeds configured limits.");
       }
+      appendStarted = true;
       await this.dataHandle.appendFile(text, "utf8");
       this.needsSeparator = false;
       await this.dataHandle.sync();
     } catch (error) {
+      if (appendStarted) this.appendStateUncertain = true;
       if (error instanceof StoreError) throw error;
       throw new StoreError("ALB_STORE_WRITE", "Store append failed.", { cause: error });
     }

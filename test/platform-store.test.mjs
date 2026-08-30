@@ -660,6 +660,52 @@ test("JsonlStore maps filesystem-open and append failures to bounded store error
   }
 });
 
+test("JsonlStore fails closed after append succeeds but sync fails", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-store-sync-failure-"));
+  const file = join(directory, "store.jsonl");
+  const stored = decision();
+  const store = await JsonlStore.open(file);
+  const sync = store.dataHandle.sync.bind(store.dataHandle);
+  let syncCalls = 0;
+  try {
+    store.dataHandle.sync = async () => {
+      syncCalls += 1;
+      throw new Error("synthetic sync failure");
+    };
+    await assert.rejects(
+      store.putDecision(stored),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_WRITE",
+    );
+    const appended = await readFile(file, "utf8");
+    assert.equal(appended.trim().split("\n").length, 1);
+
+    store.dataHandle.sync = sync;
+    await assert.rejects(
+      store.putDecision(stored),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_WRITE",
+    );
+    await assert.rejects(
+      store.verifyChain(),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_WRITE",
+    );
+    assert.equal(await readFile(file, "utf8"), appended);
+    assert.equal(syncCalls, 1);
+  } finally {
+    store.dataHandle.sync = sync;
+    await store.close();
+  }
+
+  let reopened;
+  try {
+    reopened = await JsonlStore.open(file);
+    assert.equal((await reopened.verifyChain()).valid, true);
+    assert.equal((await reopened.getDecision(stored.artifactId)).artifactId, stored.artifactId);
+  } finally {
+    await reopened?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("JsonlStore reopen rejects recomputed histories that bypass reviewer or cap policy", async () => {
   const directory = await mkdtemp(join(tmpdir(), "alb-store-policy-reopen-"));
   try {
