@@ -244,3 +244,60 @@ test("semantic closure rejects invalid identifiers, timestamps, proof schemas, a
     assert.equal(verifyEvidenceBundle(reseal(candidate)).valid, false);
   }
 });
+
+test("rejects duplicate artifact ids, duplicate sequences, extra index keys, and non-protocol media types", () => {
+  const base = createEvidenceBundle(withoutEmbeddedBundle(buildScenario("principal").input));
+
+  const duplicateId = structuredClone(base);
+  const events = duplicateId.objects.filter((object) => object.path.startsWith("evidence/runtime-events/"));
+  assert.ok(events.length >= 2);
+  events[1].content = structuredClone(events[0].content);
+  const duplicateIdReport = verifyEvidenceBundle(reseal(duplicateId));
+  assert.equal(duplicateIdReport.valid, false);
+  assert.ok(duplicateIdReport.issues.some((entry) =>
+    entry.message === "Bundle artifact identifiers must be unique"
+    || entry.message === "Runtime event sequences must be unique"));
+
+  const extraIndexKey = structuredClone(base);
+  extraIndexKey.objects.find((object) => object.path === "case/index.json").content.note = "sidecar";
+  assert.equal(verifyEvidenceBundle(reseal(extraIndexKey)).valid, false);
+
+  const decoratedPaths = structuredClone(base);
+  const decoratedIndex = decoratedPaths.objects.find((object) => object.path === "case/index.json").content;
+  decoratedIndex.runtimeEventPaths.extra = true;
+  const decoratedReport = verifyEvidenceBundle(decoratedPaths);
+  assert.equal(decoratedReport.valid, false);
+  assert.ok(decoratedReport.issues.some((entry) =>
+    entry.message === "Bundle case index is missing or invalid"));
+
+  const oversized = structuredClone(base);
+  const oversizedIndex = oversized.objects.find((object) => object.path === "case/index.json").content;
+  oversizedIndex.runtimeEventPaths = Array.from(
+    { length: 10_001 },
+    (_unused, index) => `evidence/runtime-events/${String(index).padStart(6, "0")}.json`,
+  );
+  const oversizedReport = verifyEvidenceBundle(oversized);
+  assert.equal(oversizedReport.valid, false);
+  assert.ok(oversizedReport.issues.some((entry) =>
+    entry.message === "Bundle case index is missing or invalid"));
+
+  const wrongType = structuredClone(base);
+  wrongType.objects.find((object) => object.path === "case/index.json").content.runtimeEventPaths = {
+    0: "evidence/runtime-events/000000.json",
+  };
+  assert.equal(verifyEvidenceBundle(reseal(wrongType)).valid, false);
+
+  const mediaType = structuredClone(base);
+  mediaType.manifest.entries[0].mediaType = "text/plain";
+  const mediaTypeReport = verifyEvidenceBundle(reseal(mediaType));
+  assert.equal(mediaTypeReport.valid, false);
+  assert.ok(mediaTypeReport.issues.some((entry) =>
+    entry.path.endsWith(".mediaType") && entry.message.includes("media type")));
+
+  const classification = structuredClone(base);
+  classification.manifest.entries[0].classification = "secret";
+  const classificationReport = verifyEvidenceBundle(reseal(classification));
+  assert.equal(classificationReport.valid, false);
+  assert.ok(classificationReport.issues.some((entry) =>
+    entry.path.endsWith(".classification") || entry.code === "ALB_SCHEMA_INVALID"));
+});

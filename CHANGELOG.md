@@ -10,6 +10,7 @@ All notable changes are documented here.
 - `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.
 - CLI `--help` now lists commands and the JSON input convention. Unknown commands, a missing bundle path on an interactive terminal, and empty evidence documents fail with actionable usage or input errors instead of a generic parse failure.
 - CLI, API, and `parseAndValidateArtifact` JSON parse failures now keep their diagnostic code and include the UTF-16 parse offset. JsonlStore names the failing record line and preserves the exception cause. API logger events include the bounded detail.
+- Evidence-bundle verification now rejects duplicate signed-artifact identifiers, duplicate runtime-event sequences, extra case-index keys, decorated or oversized path lists, and non-protocol media types or classifications even when Merkle metadata is otherwise self-consistent.
 
 ### Security
 
