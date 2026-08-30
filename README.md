@@ -190,7 +190,7 @@ node dist/cli.js explain decision.json
 node dist/cli.js serve --host 127.0.0.1 --port 8787
 ```
 
-The reference server is loopback-only. It requires the active loopback Host header, rejects non-loopback peers and foreign Origins, and does not provide production authentication, TLS, tenant isolation, or DDoS controls.
+The reference server is loopback-only. It requires the active loopback Host header, rejects non-loopback peers and foreign Origins, and does not provide production authentication, TLS, tenant isolation, or DDoS controls. `serve` defaults `--host` to `127.0.0.1` and `--port` to an ephemeral port. The API default body limit is 1 MiB; JSON string limits follow that document cap unless a tighter `maxJsonStringBytes` override is supplied. `--store PATH` uses a JSONL file with a 32 MiB / 100,000-record / 1 MiB-per-record default, and the per-record JSON string cap follows the record-byte limit.
 
 An unresolved policy result is a successful evaluation and exits with code `0`.
 
