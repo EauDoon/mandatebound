@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { TextDecoder } from "node:util";
 import type { AppealEvent, LiabilityDecision, Sha256Digest } from "./domain.js";
 import { canonicalize, sha256Digest } from "./canonical.js";
-import { parseStrictJson } from "./strict-json.js";
+import { DEFAULT_STRICT_JSON_LIMITS, parseStrictJson } from "./strict-json.js";
 import { validateArtifact } from "./validation.js";
 import {
   AppealError,
@@ -448,9 +448,22 @@ export class MemoryStore implements DecisionAppealStore {
   }
 }
 
+export interface JsonlStoreLimits {
+  readonly maxFileBytes: number;
+  readonly maxRecords: number;
+  readonly maxRecordBytes: number;
+}
+
+export const DEFAULT_JSONL_STORE_LIMITS: JsonlStoreLimits = Object.freeze({
+  maxFileBytes: 32 * 1024 * 1024,
+  maxRecords: 100_000,
+  maxRecordBytes: DEFAULT_STRICT_JSON_LIMITS.maxBytes,
+});
+
 export interface JsonlStoreOptions {
   readonly maxFileBytes?: number;
   readonly maxRecords?: number;
+  readonly maxRecordBytes?: number;
 }
 
 export class JsonlStore extends MemoryStore {
@@ -459,6 +472,7 @@ export class JsonlStore extends MemoryStore {
   private readonly lockPath: string;
   private readonly maxFileBytes: number;
   private readonly maxRecords: number;
+  private readonly maxRecordBytes: number;
   private needsSeparator: boolean;
   private jsonlClosed = false;
 
@@ -470,6 +484,7 @@ export class JsonlStore extends MemoryStore {
     needsSeparator: boolean,
     maxFileBytes: number,
     maxRecords: number,
+    maxRecordBytes: number,
   ) {
     super({ records });
     this.dataHandle = dataHandle;
@@ -478,14 +493,17 @@ export class JsonlStore extends MemoryStore {
     this.needsSeparator = needsSeparator;
     this.maxFileBytes = maxFileBytes;
     this.maxRecords = maxRecords;
+    this.maxRecordBytes = maxRecordBytes;
   }
 
   public static async open(filePath: string, options: JsonlStoreOptions = {}): Promise<JsonlStore> {
-    const maxFileBytes = options.maxFileBytes ?? 32 * 1024 * 1024;
-    const maxRecords = options.maxRecords ?? 100_000;
-    if (![maxFileBytes, maxRecords].every((value) => Number.isSafeInteger(value) && value >= 1)) {
+    const maxFileBytes = options.maxFileBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxFileBytes;
+    const maxRecords = options.maxRecords ?? DEFAULT_JSONL_STORE_LIMITS.maxRecords;
+    const requestedRecordBytes = options.maxRecordBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxRecordBytes;
+    if (![maxFileBytes, maxRecords, requestedRecordBytes].every((value) => Number.isSafeInteger(value) && value >= 1)) {
       throw new TypeError("Store limits must be positive safe integers.");
     }
+    const maxRecordBytes = Math.min(requestedRecordBytes, maxFileBytes);
     const lockPath = `${filePath}.lock`;
     let lockHandle: FileHandle | undefined;
     let dataHandle: FileHandle | undefined;
@@ -515,7 +533,7 @@ export class JsonlStore extends MemoryStore {
         if (line === undefined) continue;
         let parsed: unknown;
         try {
-          parsed = parseStrictJson(line, { maxBytes: 1_048_576 });
+          parsed = parseStrictJson(line, { maxBytes: maxRecordBytes, maxStringBytes: maxRecordBytes });
         } catch (error) {
           throw new StoreError(
             "ALB_STORE_CORRUPT",
@@ -532,7 +550,16 @@ export class JsonlStore extends MemoryStore {
         }
         records.push(parsed);
       }
-      return new JsonlStore(dataHandle, lockHandle, lockPath, records, needsSeparator, maxFileBytes, maxRecords);
+      return new JsonlStore(
+        dataHandle,
+        lockHandle,
+        lockPath,
+        records,
+        needsSeparator,
+        maxFileBytes,
+        maxRecords,
+        maxRecordBytes,
+      );
     } catch (error) {
       await dataHandle?.close().catch(() => undefined);
       await lockHandle?.close().catch(() => undefined);
@@ -545,7 +572,11 @@ export class JsonlStore extends MemoryStore {
   }
 
   protected override async persist(records: readonly StoreRecord[]): Promise<void> {
-    const text = `${this.needsSeparator ? "\n" : ""}${records.map((record) => canonicalize(record)).join("\n")}\n`;
+    const lines = records.map((record) => canonicalize(record));
+    if (lines.some((line) => Buffer.byteLength(line) > this.maxRecordBytes)) {
+      throw new StoreError("ALB_STORE_LIMIT", "Store append exceeds configured limits.");
+    }
+    const text = `${this.needsSeparator ? "\n" : ""}${lines.join("\n")}\n`;
     try {
       const metadata = await this.dataHandle.stat();
       if (

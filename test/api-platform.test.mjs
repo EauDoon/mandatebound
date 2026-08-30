@@ -3,7 +3,8 @@ import { Buffer } from "node:buffer";
 import { connect } from "node:net";
 import test from "node:test";
 import { appealEventDigest } from "../dist/appeals.js";
-import { createApiServer, isLoopbackAddress, validateLocalRequest } from "../dist/api.js";
+import { createApiServer, DEFAULT_API_LIMITS, isLoopbackAddress, validateLocalRequest } from "../dist/api.js";
+import { DEFAULT_STRICT_JSON_LIMITS } from "../dist/strict-json.js";
 import { verifyEvidenceBundle } from "../dist/bundle.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
@@ -509,6 +510,43 @@ test("API rejects missing anchors, malformed JSON, duplicate keys, media types, 
     assert.equal(oversized.status, 413);
   } finally {
     await api.close();
+  }
+});
+
+test("API JSON string limits follow the configured body cap", async () => {
+  assert.equal(DEFAULT_API_LIMITS.maxBodyBytes, DEFAULT_STRICT_JSON_LIMITS.maxBytes);
+  assert.equal(DEFAULT_API_LIMITS.maxJsonStringBytes, DEFAULT_STRICT_JSON_LIMITS.maxBytes);
+  assert.equal(DEFAULT_API_LIMITS.maxJsonArrayLength, DEFAULT_STRICT_JSON_LIMITS.maxArrayLength);
+
+  const token = "a".repeat(300_000);
+  const api = createApiServer({ engine: engine(), limits: { maxBodyBytes: 400_000 } });
+  const address = await api.listen();
+  try {
+    const accepted = await fetch(`${address.url}/v1/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    assert.equal(accepted.status, 200);
+  } finally {
+    await api.close();
+  }
+
+  const tight = createApiServer({
+    engine: engine(),
+    limits: { maxBodyBytes: 400_000, maxJsonStringBytes: 16 },
+  });
+  const tightAddress = await tight.listen();
+  try {
+    const rejected = await fetch(`${tightAddress.url}/v1/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    assert.equal(rejected.status, 413);
+    assert.equal((await json(rejected)).code, "ALB_JSON_LIMIT");
+  } finally {
+    await tight.close();
   }
 });
 

@@ -258,7 +258,7 @@ async function readInput(
     );
   }
   try {
-    return parseStrictJson(text, { maxBytes });
+    return parseStrictJson(text, { maxBytes, maxStringBytes: maxBytes });
   } catch (error) {
     if (error instanceof StrictJsonError) {
       throw new CliError(error.code, CLI_EXIT.INVALID, error.message, {

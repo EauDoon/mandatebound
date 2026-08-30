@@ -5,7 +5,15 @@ import { join } from "node:path";
 import test from "node:test";
 import { appealEventDigest } from "../dist/appeals.js";
 import { canonicalize } from "../dist/canonical.js";
-import { JsonlStore, MemoryStore, StoreError, storeRecordHash, verifyStoreRecords } from "../dist/store.js";
+import {
+  DEFAULT_JSONL_STORE_LIMITS,
+  JsonlStore,
+  MemoryStore,
+  StoreError,
+  storeRecordHash,
+  verifyStoreRecords,
+} from "../dist/store.js";
+import { DEFAULT_STRICT_JSON_LIMITS } from "../dist/strict-json.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
@@ -449,6 +457,35 @@ test("JsonlStore enforces configured limits before appending", async () => {
     );
     assert.equal(await readFile(byteFile, "utf8"), "");
     await byteStore.close();
+
+    assert.equal(DEFAULT_JSONL_STORE_LIMITS.maxRecordBytes, DEFAULT_STRICT_JSON_LIMITS.maxBytes);
+    const recordFile = join(directory, "record-bytes.jsonl");
+    const recordLimited = await JsonlStore.open(recordFile, { maxRecordBytes: 32 });
+    await assert.rejects(
+      recordLimited.putDecision(decision()),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_LIMIT",
+    );
+    assert.equal(await readFile(recordFile, "utf8"), "");
+    await recordLimited.close();
+
+    const oversizedLine = JSON.stringify({ value: "a".repeat(300) });
+    const corruptFile = join(directory, "record-json-limit.jsonl");
+    await writeFile(corruptFile, `${oversizedLine}\n`, "utf8");
+    await assert.rejects(
+      JsonlStore.open(corruptFile, { maxRecordBytes: 64 }),
+      (error) => error instanceof StoreError
+        && error.code === "ALB_STORE_CORRUPT"
+        && error.cause?.code === "ALB_JSON_LIMIT",
+    );
+
+    const largeStringFile = join(directory, "record-large-string.jsonl");
+    await writeFile(largeStringFile, `${JSON.stringify({ value: "a".repeat(300_000) })}\n`, "utf8");
+    await assert.rejects(
+      JsonlStore.open(largeStringFile),
+      (error) => error instanceof StoreError
+        && error.code === "ALB_STORE_CORRUPT"
+        && error.cause === undefined,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -16,7 +16,7 @@ import type {
   EvaluationInput,
   LiabilityDecision,
 } from "./domain.js";
-import { parseStrictJson, StrictJsonError } from "./strict-json.js";
+import { DEFAULT_STRICT_JSON_LIMITS, parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { MemoryStore, StoreError } from "./store.js";
 import { validateArtifact } from "./validation.js";
@@ -77,18 +77,22 @@ export interface ApiLimits {
   readonly maxJsonDepth: number;
   readonly maxJsonNodes: number;
   readonly maxJsonObjectKeys: number;
+  readonly maxJsonArrayLength: number;
+  readonly maxJsonStringBytes: number;
   readonly bodyTimeoutMs: number;
   readonly requestTimeoutMs: number;
   readonly headersTimeoutMs: number;
   readonly keepAliveTimeoutMs: number;
 }
 
-const DEFAULT_LIMITS: ApiLimits = Object.freeze({
-  maxBodyBytes: 1_048_576,
+export const DEFAULT_API_LIMITS: ApiLimits = Object.freeze({
+  maxBodyBytes: DEFAULT_STRICT_JSON_LIMITS.maxBytes,
   maxConcurrentRequests: 16,
-  maxJsonDepth: 32,
-  maxJsonNodes: 100_000,
-  maxJsonObjectKeys: 10_000,
+  maxJsonDepth: DEFAULT_STRICT_JSON_LIMITS.maxDepth,
+  maxJsonNodes: DEFAULT_STRICT_JSON_LIMITS.maxNodes,
+  maxJsonObjectKeys: DEFAULT_STRICT_JSON_LIMITS.maxObjectKeys,
+  maxJsonArrayLength: DEFAULT_STRICT_JSON_LIMITS.maxArrayLength,
+  maxJsonStringBytes: DEFAULT_STRICT_JSON_LIMITS.maxBytes,
   bodyTimeoutMs: 5_000,
   requestTimeoutMs: 10_000,
   headersTimeoutMs: 5_000,
@@ -180,7 +184,14 @@ function loggerEvent(
 }
 
 function resolveLimits(overrides: Partial<ApiLimits> | undefined): ApiLimits {
-  const limits = { ...DEFAULT_LIMITS, ...overrides };
+  const merged = { ...DEFAULT_API_LIMITS, ...overrides };
+  const limits: ApiLimits = {
+    ...merged,
+    maxJsonStringBytes: Math.min(
+      overrides?.maxJsonStringBytes ?? merged.maxBodyBytes,
+      merged.maxBodyBytes,
+    ),
+  };
   for (const [name, value] of Object.entries(limits)) {
     if (!Number.isSafeInteger(value) || value < 1) {
       throw new TypeError(`Invalid API limit: ${name}`);
@@ -420,6 +431,8 @@ async function readJsonBody(
       maxDepth: limits.maxJsonDepth,
       maxNodes: limits.maxJsonNodes,
       maxObjectKeys: limits.maxJsonObjectKeys,
+      maxArrayLength: limits.maxJsonArrayLength,
+      maxStringBytes: limits.maxJsonStringBytes,
     });
   } catch (error) {
     if (error instanceof StrictJsonError) {

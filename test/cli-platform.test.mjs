@@ -98,6 +98,13 @@ async function invoke(argv, input, options = {}) {
   return { code, stdout: stdout.value(), stderr: stderr.value() };
 }
 
+test("CLI JSON string limits follow the document size cap", async () => {
+  const payload = JSON.stringify({ token: "a".repeat(300_000) });
+  const verified = await invoke(["verify", "-"], payload);
+  assert.equal(verified.code, CLI_EXIT.SUCCESS);
+  assert.equal(JSON.parse(verified.stdout).ok, true);
+});
+
 test("verify and decide use stable success/invalid exit codes with JSON stdout", async () => {
   const verified = await invoke(["verify", "-"], "{}", {});
   assert.equal(verified.code, CLI_EXIT.SUCCESS);
