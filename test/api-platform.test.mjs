@@ -201,6 +201,13 @@ test("API binding is loopback-only and remote opt-in is not accepted", () => {
     () => createApiServer({ limits: { headersTimeoutMs: 20, requestTimeoutMs: 10 }, engine: engine() }),
     /Header timeout/,
   );
+  assert.throws(
+    () => createApiServer({
+      limits: { bodyTimeoutMs: 20, headersTimeoutMs: 10, requestTimeoutMs: 10 },
+      engine: engine(),
+    }),
+    /Body timeout/,
+  );
 });
 
 test("local request boundary rejects remote peers, rebinding Hosts, and foreign Origins", () => {

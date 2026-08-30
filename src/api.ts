@@ -200,6 +200,9 @@ function resolveLimits(overrides: Partial<ApiLimits> | undefined): ApiLimits {
   if (limits.headersTimeoutMs > limits.requestTimeoutMs) {
     throw new TypeError("Header timeout cannot exceed request timeout.");
   }
+  if (limits.bodyTimeoutMs > limits.requestTimeoutMs) {
+    throw new TypeError("Body timeout cannot exceed request timeout.");
+  }
   return limits;
 }
 
