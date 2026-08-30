@@ -72,6 +72,7 @@ const required = new Set([
   "NOTICE",
   "README.md",
   "SECURITY.md",
+  "package.json",
   ...entryPoints,
 ]);
 const rejected = [];
