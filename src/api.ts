@@ -697,18 +697,21 @@ export function createApiServer(options: CreateApiServerOptions = {}): ApiServer
         return;
       }
 
-      const knownPath = path === "/v1/verify"
+      const allowedMethods = path === "/v1/verify"
         || path === "/v1/evaluations"
         || path === "/v1/appeals"
         || path === "/v1/simulations"
-        || path === "/healthz"
-        || path === "/readyz"
-        || path === "/openapi.json"
-        || decisionMatch !== null
         || appealEventsMatch !== null
-        || appealMatch !== null;
-      if (knownPath) {
-        response.setHeader("allow", "GET, POST");
+        ? "POST"
+        : path === "/healthz"
+          || path === "/readyz"
+          || path === "/openapi.json"
+          || decisionMatch !== null
+          || appealMatch !== null
+          ? "GET"
+          : undefined;
+      if (allowedMethods !== undefined) {
+        response.setHeader("allow", allowedMethods);
         throw new PlatformError("ALB_METHOD_NOT_ALLOWED", 405, "HTTP method is not allowed.");
       }
       throw new PlatformError("ALB_ROUTE_NOT_FOUND", 404, "Requested resource was not found.");

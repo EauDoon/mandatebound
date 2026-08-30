@@ -704,12 +704,37 @@ test("method and route failures use Problem Details", async () => {
   try {
     const method = await fetch(`${address.url}/v1/verify`);
     assert.equal(method.status, 405);
+    assert.equal(method.headers.get("allow"), "POST");
     assert.match(method.headers.get("content-type"), /^application\/problem\+json/);
     assert.equal((await json(method)).code, "ALB_METHOD_NOT_ALLOWED");
+
+    const options = await fetch(`${address.url}/v1/verify`, { method: "OPTIONS" });
+    assert.equal(options.status, 405);
+    assert.equal(options.headers.get("allow"), "POST");
+    assert.equal((await json(options)).code, "ALB_METHOD_NOT_ALLOWED");
+
+    const patch = await fetch(`${address.url}/v1/verify`, { method: "PATCH" });
+    assert.equal(patch.status, 405);
+    assert.equal(patch.headers.get("allow"), "POST");
+    assert.equal((await json(patch)).code, "ALB_METHOD_NOT_ALLOWED");
+
+    const healthMethod = await fetch(`${address.url}/healthz`, { method: "POST" });
+    assert.equal(healthMethod.status, 405);
+    assert.equal(healthMethod.headers.get("allow"), "GET");
+    assert.equal((await json(healthMethod)).code, "ALB_METHOD_NOT_ALLOWED");
+
+    const healthHead = await fetch(`${address.url}/healthz`, { method: "HEAD" });
+    assert.equal(healthHead.status, 405);
+    assert.equal(healthHead.headers.get("allow"), "GET");
+    assert.equal(await healthHead.text(), "");
 
     const missing = await fetch(`${address.url}/not-a-route`);
     assert.equal(missing.status, 404);
     assert.equal((await json(missing)).code, "ALB_ROUTE_NOT_FOUND");
+    const missingOptions = await fetch(`${address.url}/not-a-route`, { method: "OPTIONS" });
+    assert.equal(missingOptions.status, 404);
+    assert.equal(missingOptions.headers.get("allow"), null);
+    assert.equal((await json(missingOptions)).code, "ALB_ROUTE_NOT_FOUND");
     assert.match((await fetch(`${address.url}/not-a-route`).then(json)).type, /^urn:mandatebound:problem:/);
   } finally {
     await api.close();
