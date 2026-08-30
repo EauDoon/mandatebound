@@ -1,4 +1,22 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const entryPoints = new Set();
+
+function collectEntryPoints(value) {
+  if (typeof value === "string") {
+    if (value.startsWith("./")) entryPoints.add(value.slice(2));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const target of Object.values(value)) collectEntryPoints(target);
+  }
+}
+
+for (const field of [manifest.main, manifest.types, manifest.bin, manifest.exports]) {
+  collectEntryPoints(field);
+}
 
 const npmCli = process.env["npm_execpath"];
 const useNpmCli = typeof npmCli === "string" && npmCli.endsWith(".js");
@@ -54,9 +72,8 @@ const required = new Set([
   "NOTICE",
   "README.md",
   "SECURITY.md",
-  "dist/index.js",
-  "dist/index.d.ts",
   "package.json",
+  ...entryPoints,
 ]);
 const rejected = [];
 
