@@ -45,6 +45,8 @@ const TRUST_PATH = "trust/snapshot.json";
 const PRIOR_DECISION_PATH = "history/prior-decision.json";
 const DECISION_PATH = "decision/liability-decision.json";
 const JSON_MEDIA_TYPE = "application/agent-liability+json";
+const MAX_INDEXED_PATHS = 10_000;
+const ALLOWED_CLASSIFICATIONS = new Set(["public", "internal", "confidential", "restricted"]);
 
 interface BundleCaseIndex {
   readonly caseId: string;
@@ -375,6 +377,12 @@ function verifyEntries(bundle: EvidenceBundle, issues: ValidationIssue[]): void 
       issues.push(issue(`${path}.path`, "ALB_SCHEMA_INVALID", "Unsafe bundle path"));
       continue;
     }
+    if (entry.mediaType !== JSON_MEDIA_TYPE) {
+      issues.push(issue(`${path}.mediaType`, "ALB_SCHEMA_INVALID", "Bundle entry media type must be application/agent-liability+json"));
+    }
+    if (typeof entry.classification !== "string" || !ALLOWED_CLASSIFICATIONS.has(entry.classification)) {
+      issues.push(issue(`${path}.classification`, "ALB_SCHEMA_INVALID", "Bundle entry classification is not an allowed protocol value"));
+    }
     if (paths.has(entry.path)) {
       issues.push(issue(`${path}.path`, "ALB_SCHEMA_INVALID", "Duplicate bundle path"));
     }
@@ -409,6 +417,31 @@ function verifyEntries(bundle: EvidenceBundle, issues: ValidationIssue[]): void 
 
 function exactNumberedPaths(paths: readonly string[], prefix: string): boolean {
   return paths.every((path, index) => path === numberedPath(prefix, index));
+}
+
+function isPlainDensePathArray(value: unknown, prefix: string): value is string[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return false;
+  if (value.length > MAX_INDEXED_PATHS) return false;
+  if (Reflect.ownKeys(value).length !== value.length + 1) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+      return false;
+    }
+    if (!isSafeBundlePath(descriptor.value)) return false;
+  }
+  return exactNumberedPaths(value as string[], prefix);
+}
+
+function payloadArtifactId(content: unknown): string | undefined {
+  if (!isPlainObject(content) || !isPlainObject(content.payload)) return undefined;
+  return typeof content.payload.artifactId === "string" ? content.payload.artifactId : undefined;
+}
+
+function payloadSequence(content: unknown): number | undefined {
+  if (!isPlainObject(content) || !isPlainObject(content.payload)) return undefined;
+  const sequence = content.payload.sequence;
+  return typeof sequence === "number" && Number.isSafeInteger(sequence) ? sequence : undefined;
 }
 
 function semanticSignedObject(
@@ -512,6 +545,63 @@ function verifySemanticClosure(bundle: EvidenceBundle, issues: ValidationIssue[]
     trust.payloadDigest !== bundle.manifest.pins.trustSnapshotDigest
   ) {
     issues.push(issue("$.manifest.pins", "ALB_DIGEST_MISMATCH", "Pinned artifacts do not match bundle content"));
+  }
+
+  verifyUniqueEvidenceIdentifiers(bundle, index, issues);
+}
+
+function verifyUniqueEvidenceIdentifiers(
+  bundle: EvidenceBundle,
+  index: BundleCaseIndex,
+  issues: ValidationIssue[],
+): void {
+  const ids = new Set<string>();
+  const claimId = (artifactId: string | undefined, path: string): void => {
+    if (artifactId === undefined) return;
+    if (ids.has(artifactId)) {
+      issues.push(issue(path, "ALB_SCHEMA_INVALID", "Bundle artifact identifiers must be unique"));
+      return;
+    }
+    ids.add(artifactId);
+  };
+  const signedPaths = [
+    POLICY_PATH,
+    RULEBOOK_PATH,
+    TRUST_PATH,
+    ...(index.mandatePath === undefined ? [] : [index.mandatePath]),
+    ...(index.executionReceiptPath === undefined ? [] : [index.executionReceiptPath]),
+    ...(index.incidentReportPath === undefined ? [] : [index.incidentReportPath]),
+    ...index.runtimeEventPaths,
+    ...index.priorReceiptPaths,
+    ...index.causationAttestationPaths,
+    ...(index.priorDecisionPath === undefined ? [] : [index.priorDecisionPath]),
+  ];
+  for (const path of signedPaths) {
+    const object = bundle.objects.find((candidate) => candidate.path === path);
+    if (object === undefined) continue;
+    claimId(payloadArtifactId(object.content), `$.objects[path=${path}].content.payload.artifactId`);
+  }
+  if (index.decisionPath !== undefined) {
+    const object = bundle.objects.find((candidate) => candidate.path === index.decisionPath);
+    if (object !== undefined && isPlainObject(object.content) && typeof object.content.artifactId === "string") {
+      claimId(object.content.artifactId, `$.objects[path=${index.decisionPath}].content.artifactId`);
+    }
+  }
+
+  const sequences = new Set<number>();
+  for (const path of index.runtimeEventPaths) {
+    const object = bundle.objects.find((candidate) => candidate.path === path);
+    if (object === undefined) continue;
+    const sequence = payloadSequence(object.content);
+    if (sequence === undefined) continue;
+    if (sequences.has(sequence)) {
+      issues.push(issue(
+        `$.objects[path=${path}].content.payload.sequence`,
+        "ALB_SCHEMA_INVALID",
+        "Runtime event sequences must be unique",
+      ));
+    }
+    sequences.add(sequence);
   }
 }
 
@@ -631,24 +721,14 @@ function isBundleCaseIndex(value: unknown): value is BundleCaseIndex {
     (value.mandatePath === undefined || value.mandatePath === MANDATE_PATH) &&
     (value.executionReceiptPath === undefined || value.executionReceiptPath === RECEIPT_PATH) &&
     (value.incidentReportPath === undefined || value.incidentReportPath === INCIDENT_PATH) &&
-    Array.isArray(value.runtimeEventPaths) &&
-    value.runtimeEventPaths.every(isSafeBundlePath) &&
-    Array.isArray(value.priorReceiptPaths) &&
-    value.priorReceiptPaths.every(isSafeBundlePath) &&
-    Array.isArray(value.causationAttestationPaths) &&
-    value.causationAttestationPaths.every(isSafeBundlePath) &&
+    isPlainDensePathArray(value.runtimeEventPaths, "evidence/runtime-events") &&
+    isPlainDensePathArray(value.priorReceiptPaths, "history/prior-receipts") &&
+    isPlainDensePathArray(value.causationAttestationPaths, "evidence/causation-attestations") &&
     (value.priorDecisionPath === undefined || value.priorDecisionPath === PRIOR_DECISION_PATH) &&
     (value.decisionPath === undefined || value.decisionPath === DECISION_PATH) &&
     (value.appealId === undefined || isProtocolIdentifier(value.appealId))
   );
   if (!shapeValid) return false;
-  if (
-    !exactNumberedPaths(value.runtimeEventPaths as string[], "evidence/runtime-events") ||
-    !exactNumberedPaths(value.priorReceiptPaths as string[], "history/prior-receipts") ||
-    !exactNumberedPaths(value.causationAttestationPaths as string[], "evidence/causation-attestations")
-  ) {
-    return false;
-  }
   const referenced = [
     ...(value.mandatePath === undefined ? [] : [value.mandatePath]),
     ...(value.executionReceiptPath === undefined ? [] : [value.executionReceiptPath]),
