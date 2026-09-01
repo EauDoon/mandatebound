@@ -228,6 +228,13 @@ export function verifyStoreRecords(
         const decision = decisions.get(event.decisionId);
         const existing = appeals.get(event.appealId) ?? [];
         let transitionValid = true;
+        if (
+          record.entityId !== event.appealId
+          || record.recordId !== `appeal:${event.artifactId}`
+        ) {
+          issues.push({ code: "ALB_STORE_APPEAL_BINDING", message: "Stored appeal binding is invalid." });
+          transitionValid = false;
+        }
         if (decision === undefined) {
           issues.push({ code: "ALB_STORE_DECISION_NOT_FOUND", message: "Stored appeal decision is missing." });
           transitionValid = false;

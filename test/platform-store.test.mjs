@@ -89,8 +89,10 @@ function recordFor(payload, overrides = {}) {
     sequence: overrides.sequence ?? 1,
     ...(overrides.previousHash === undefined ? {} : { previousHash: overrides.previousHash }),
     recordType,
-    recordId: overrides.recordId ?? `${recordType}:${payload.artifactId}`,
-    entityId: overrides.entityId ?? payload.artifactId,
+    recordId: overrides.recordId
+      ?? `${recordType === "appeal_event" ? "appeal" : "decision"}:${payload.artifactId}`,
+    entityId: overrides.entityId
+      ?? (recordType === "appeal_event" ? payload.appealId : payload.artifactId),
     payload,
   };
   return { ...body, recordHash: overrides.recordHash ?? storeRecordHash(body) };
@@ -262,6 +264,21 @@ test("supersession and appeal references must exist and remain case-bound", asyn
     verifyStoreRecords([originalRecord, unrelatedRecord, appealRecord, crossBoundRecord])
       .issues.some((issue) => issue.code === "ALB_STORE_SUPERSESSION"),
   );
+  for (const overrides of [
+    { recordId: "appeal:unbound-event" },
+    { entityId: "appeal-unbound" },
+  ]) {
+    const unboundAppealRecord = recordFor(filed, {
+      recordType: "appeal_event",
+      sequence: 2,
+      previousHash: originalRecord.recordHash,
+      ...overrides,
+    });
+    assert(
+      verifyStoreRecords([originalRecord, unboundAppealRecord]).issues
+        .some((issue) => issue.code === "ALB_STORE_APPEAL_BINDING"),
+    );
+  }
 
   await assert.rejects(
     store.putDecision(decision({
