@@ -203,7 +203,11 @@ export function verifyStoreRecords(
       if (record.recordType === "decision") {
         const decision = record.payload as LiabilityDecision;
         let transitionValid = true;
-        if (record.entityId !== decision.artifactId || decisions.has(decision.artifactId)) {
+        if (
+          record.entityId !== decision.artifactId
+          || record.recordId !== `decision:${decision.artifactId}`
+          || decisions.has(decision.artifactId)
+        ) {
           issues.push({ code: "ALB_STORE_DECISION_BINDING", message: "Stored decision binding is invalid." });
           transitionValid = false;
         }

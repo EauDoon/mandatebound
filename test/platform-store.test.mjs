@@ -148,13 +148,11 @@ test("store record verification is bounded and detects corruption, duplication, 
   const second = recordFor(secondDecision, {
     sequence: 2,
     previousHash: first.recordHash,
-    recordId: "shared-record-id",
   });
   const thirdDecision = decision({ caseId: "case-3", evidenceBundleId: "bundle-3" });
   const third = recordFor(thirdDecision, {
     sequence: 3,
     previousHash: second.recordHash,
-    recordId: "third-record-id",
   });
 
   const verified = verifyStoreRecords([first, second, third], { sequence: 3, headHash: third.recordHash });
@@ -195,6 +193,11 @@ test("store record verification is bounded and detects corruption, duplication, 
   const nonCanonicalIssues = verifyStoreRecords([nonCanonical]).issues.map((issue) => issue.code);
   assert(nonCanonicalIssues.includes("ALB_STORE_ARTIFACT"));
   assert(nonCanonicalIssues.includes("ALB_STORE_RECORD"));
+  const unboundRecord = recordFor(firstDecision, { recordId: "unbound-decision-record" });
+  assert(
+    verifyStoreRecords([unboundRecord]).issues
+      .some((issue) => issue.code === "ALB_STORE_DECISION_BINDING"),
+  );
   assert.throws(() => new MemoryStore({ records: [tampered] }), (error) => error.code === "ALB_STORE_CORRUPT");
 });
 
@@ -622,7 +625,9 @@ test("JsonlStore rejects invalid UTF-8 that decodes to a valid record", async ()
   const file = join(directory, "store.jsonl");
   try {
     const replacementCharacter = String.fromCodePoint(0xfffd);
-    const valid = recordFor(decision(), { recordId: `decision:${replacementCharacter}` });
+    const valid = recordFor(decision({
+      verifiedFacts: [{ name: "replacement", value: replacementCharacter, sourceRefs: [] }],
+    }));
     assert.equal(verifyStoreRecords([valid]).valid, true);
     const canonical = Buffer.from(`${canonicalize(valid)}\n`, "utf8");
     const replacement = Buffer.from(replacementCharacter, "utf8");
