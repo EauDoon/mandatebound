@@ -659,12 +659,27 @@ function verifyRawEcdsa(
 }
 
 function checkKeySnapshot(
-  snapshot: PinnedEcKeySnapshot,
+  snapshotValue: unknown,
   expectedDigest: Sha256Digest,
   asOf: string | number,
   issues: InteropIssue[],
   path: string,
-): void {
+): boolean {
+  if (
+    !isObject(snapshotValue)
+    || typeof snapshotValue.kid !== "string"
+    || typeof snapshotValue.capturedAt !== "string"
+    || typeof snapshotValue.validUntil !== "string"
+    || !isObject(snapshotValue.jwk)
+  ) {
+    issues.push(upstreamIssue(
+      "INTEROP_KEY_SNAPSHOT_INVALID",
+      path,
+      "External key snapshot has an invalid shape",
+    ));
+    return false;
+  }
+  const snapshot = snapshotValue as unknown as PinnedEcKeySnapshot;
   if (!isSha256Digest(snapshot.sourceDigest) || snapshot.sourceDigest !== expectedDigest) {
     issues.push(eligibilityIssue(
       "INTEROP_KEY_SOURCE_PIN_MISMATCH",
@@ -733,6 +748,7 @@ function checkKeySnapshot(
       error instanceof Error ? error.message : "Invalid key snapshot time",
     ));
   }
+  return true;
 }
 
 function extractCapabilityEntries(
@@ -1579,13 +1595,13 @@ export function verifyAp2MandateChain(
   options: VerifyAp2MandateOptions,
 ): InteropVerification<VerifiedAp2MandateChain> {
   const issues: InteropIssue[] = [];
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "issuerKeySnapshot",
-  );
+  )) return finish<VerifiedAp2MandateChain>(null, issues);
   try {
     requireString(options.expectedIssuer, "expectedIssuer");
     const segments = parseAp2MandateChainSegments(options.token);
@@ -2149,13 +2165,13 @@ export function verifyAp2Mandate(
     return finish<VerifiedAp2Mandate>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "issuerKeySnapshot",
-  );
+  )) return finish<VerifiedAp2Mandate>(null, issues);
 
   let issuerHeader: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {

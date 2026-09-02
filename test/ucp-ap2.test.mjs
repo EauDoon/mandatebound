@@ -1178,6 +1178,17 @@ test("AP2 verifier handles expiry, temporal, issuer, checkout, and key-binding b
   assert.equal(missingExpiry.evidenceEligible, false);
   assert.equal(issueCodes(missingExpiry).has("AP2_EXPIRY_MISSING"), true);
 
+  assert.doesNotThrow(() => verifyAp2Mandate({
+    ...fixture.options,
+    issuerKeySnapshot: null,
+  }));
+  const malformedSnapshot = verifyAp2Mandate({
+    ...fixture.options,
+    issuerKeySnapshot: null,
+  });
+  assert.equal(malformedSnapshot.upstreamValid, false);
+  assert.equal(issueCodes(malformedSnapshot).has("INTEROP_KEY_SNAPSHOT_INVALID"), true);
+
   const temporalFailures = [
     [{ exp: 1_700_000_000 }, "AP2_TOKEN_EXPIRED"],
     [{ exp: "tomorrow" }, "AP2_EXPIRY_INVALID"],
