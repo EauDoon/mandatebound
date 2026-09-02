@@ -1118,6 +1118,31 @@ test("invalid identifiers, duplicated retrievers, and oversized inputs are rejec
 
 test("required autonomous constraints, nested Payment fields, and caller trust IDs fail closed", () => {
   const fixture = makeFixture();
+  const underfilled = createMandate({
+    iss: "https://trusted-surface.example",
+    vct: "mandate.checkout.1",
+    iat: 1_770_000_000,
+    exp: 1_800_000_000,
+    checkout_jwt: fixture.checkoutJwt,
+    checkout_hash: fixture.transactionId,
+  }, fixture.issuer, fixture.agent, "https://merchant.example", "checkout-nonce", [{
+    type: "checkout.line_items",
+    items: [{
+      id: "requirement-underfilled",
+      acceptable_items: [{ id: "sku-1", title: "Synthetic item" }],
+      quantity: 2,
+    }],
+  }]);
+  const underfilledReport = verifyAp2MandateChain({
+    ...fixture.verificationPlan.checkoutMandate,
+    token: underfilled,
+    expectedVct: "mandate.checkout.1",
+    expectedCheckoutHash: fixture.transactionId,
+    asOf,
+  });
+  assert.equal(underfilledReport.upstreamValid, false);
+  assert.equal(codes(underfilledReport).has("AP2_CONSTRAINT_FAILED"), true);
+
   const unconstrained = createMandate({
     iss: "https://trusted-surface.example",
     vct: "mandate.checkout.1",

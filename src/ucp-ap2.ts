@@ -2011,6 +2011,7 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
   const sink = requirementOffset + requirements.length;
   const graph: FlowEdge[][] = Array.from({ length: sink + 1 }, () => []);
   let totalQuantity = 0;
+  let requiredQuantity = 0;
   for (let skuIndex = 0; skuIndex < skus.length; skuIndex += 1) {
     const sku = skus[skuIndex] as string;
     const quantity = cart.get(sku) as number;
@@ -2033,9 +2034,13 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
     }
   }
   for (let index = 0; index < requirements.length; index += 1) {
-    addFlowEdge(graph, requirementOffset + index, sink, (requirements[index] as { quantity: number }).quantity);
+    const quantity = (requirements[index] as { quantity: number }).quantity;
+    requiredQuantity += quantity;
+    if (!Number.isSafeInteger(requiredQuantity)) return false;
+    addFlowEdge(graph, requirementOffset + index, sink, quantity);
   }
-  return boundedMaxFlow(graph, source, sink) === totalQuantity;
+  return totalQuantity === requiredQuantity
+    && boundedMaxFlow(graph, source, sink) === requiredQuantity;
 }
 
 function verifyConstraints(
