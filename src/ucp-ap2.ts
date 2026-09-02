@@ -3157,7 +3157,7 @@ export function correlateTransactionLifecycle(
     for (const [eventId, entries] of byId) {
       if (entries.length > 1) {
         duplicateEventIds.push(eventId);
-        if (new Set(entries.map((entry) => entry.sourceDigest)).size > 1) {
+        if (new Set(entries.map((entry) => canonicalize(entry))).size > 1) {
           conflictingEventIds.push(eventId);
         }
       }
@@ -3167,7 +3167,9 @@ export function correlateTransactionLifecycle(
       .filter((entry) => (entry.parentEventIds ?? []).some((parent) => !eventIds.has(parent)))
       .map((entry) => entry.eventId);
 
-    const eligible = sorted.filter((entry) => entry.upstreamValid && entry.evidenceEligible);
+    const conflictingIds = new Set(conflictingEventIds);
+    const eligible = sorted.filter((entry) =>
+      entry.upstreamValid && entry.evidenceEligible && !conflictingIds.has(entry.eventId));
     const coverage: EvidenceCoverageItem[] = [
       Object.freeze({
         requirement: "checkout_evidence",

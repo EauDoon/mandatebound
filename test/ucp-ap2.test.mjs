@@ -1545,7 +1545,7 @@ test("lifecycle correlation validates inputs, sorts transactions, and distinguis
       eventId: "evt-z",
       kind: "cancel",
       transactionId: "txn-z",
-      occurredAt: "2026-07-23T00:01:00.000Z",
+      occurredAt: "2026-07-23T00:02:00.000Z",
       sourceDigest: sameDigest,
       upstreamValid: false,
       evidenceEligible: false,
@@ -1591,6 +1591,17 @@ test("lifecycle correlation validates inputs, sorts transactions, and distinguis
     upstreamValid: true,
     evidenceEligible: true,
   };
+  const contradictory = correlateTransactionLifecycle([base, { ...base, kind: "order" }])[0];
+  assert.deepEqual(contradictory.duplicateEventIds, ["evt"]);
+  assert.deepEqual(contradictory.conflictingEventIds, ["evt"]);
+  assert.equal(
+    contradictory.coverage.find((entry) => entry.requirement === "checkout_evidence").state,
+    "unknown",
+  );
+  assert.equal(
+    contradictory.coverage.find((entry) => entry.requirement === "order_evidence").state,
+    "unknown",
+  );
   for (const invalid of [
     { ...base, eventId: "" },
     { ...base, transactionId: "" },
