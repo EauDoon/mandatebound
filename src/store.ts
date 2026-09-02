@@ -213,10 +213,14 @@ export function verifyStoreRecords(
         }
         if (decision.supersedesDecisionId !== undefined) {
           const original = decisions.get(decision.supersedesDecisionId);
+          const existingSupersession = [...decisions.values()].find((candidateDecision) =>
+            candidateDecision.supersedesDecisionId === decision.supersedesDecisionId
+            && candidateDecision.appealId === decision.appealId);
           if (
             original === undefined
             || !appealBindsDecision(appeals, decision.appealId, decision.supersedesDecisionId)
             || original.caseId !== decision.caseId
+            || existingSupersession !== undefined
           ) {
             issues.push({ code: "ALB_STORE_SUPERSESSION", message: "Stored decision supersession is invalid." });
             transitionValid = false;
@@ -376,6 +380,9 @@ export class MemoryStore implements DecisionAppealStore {
       }
       if (decision.supersedesDecisionId !== undefined) {
         const original = this.decisions.get(decision.supersedesDecisionId);
+        const existingSupersession = [...this.decisions.values()].find((candidate) =>
+          candidate.supersedesDecisionId === decision.supersedesDecisionId
+          && candidate.appealId === decision.appealId);
         if (original === undefined) {
           throw new StoreError("ALB_STORE_SUPERSESSION", "Superseded decision does not exist.");
         }
@@ -384,6 +391,9 @@ export class MemoryStore implements DecisionAppealStore {
         }
         if (original.caseId !== decision.caseId) {
           throw new StoreError("ALB_STORE_SUPERSESSION", "Superseding decision case does not match.");
+        }
+        if (existingSupersession !== undefined) {
+          throw new StoreError("ALB_STORE_SUPERSESSION", "Appeal already has a superseding decision.");
         }
       }
       const record = this.nextRecord("decision", `decision:${decision.artifactId}`, decision.artifactId, decision);

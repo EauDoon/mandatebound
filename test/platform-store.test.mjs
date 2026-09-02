@@ -310,6 +310,51 @@ test("supersession and appeal references must exist and remain case-bound", asyn
   await store.close();
 });
 
+test("one appeal cannot create divergent superseding decisions", async () => {
+  const store = new MemoryStore();
+  const original = decision();
+  const filed = event({ decisionId: original.artifactId });
+  await store.putDecision(original);
+  await store.appendAppeal(filed);
+  const first = decision({
+    outcome: "operator",
+    supersedesDecisionId: original.artifactId,
+    appealId: filed.appealId,
+    reasonCodes: ["appeal_reversed"],
+  });
+  const second = decision({
+    outcome: "unresolved",
+    supersedesDecisionId: original.artifactId,
+    appealId: filed.appealId,
+    reasonCodes: ["appeal_reversed"],
+  });
+  await store.putDecision(first);
+  await assert.rejects(
+    store.putDecision(second),
+    (error) => error.code === "ALB_STORE_SUPERSESSION",
+  );
+
+  const originalRecord = recordFor(original);
+  const appealRecord = recordFor(filed, {
+    recordType: "appeal_event",
+    sequence: 2,
+    previousHash: originalRecord.recordHash,
+  });
+  const firstRecord = recordFor(first, {
+    sequence: 3,
+    previousHash: appealRecord.recordHash,
+  });
+  const secondRecord = recordFor(second, {
+    sequence: 4,
+    previousHash: firstRecord.recordHash,
+  });
+  assert(
+    verifyStoreRecords([originalRecord, appealRecord, firstRecord, secondRecord]).issues
+      .some((issue) => issue.code === "ALB_STORE_SUPERSESSION"),
+  );
+  await store.close();
+});
+
 test("appeals are append-only, fork-aware, and explicitly checkpointed", async () => {
   const store = new MemoryStore();
   const original = decision();
