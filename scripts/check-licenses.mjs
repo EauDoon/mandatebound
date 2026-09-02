@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve("node_modules");
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const root = join(repositoryRoot, "node_modules");
 const allowed = new Set(["Apache-2.0", "BSD-3-Clause", "MIT"]);
 const packages = [];
 const issues = [];

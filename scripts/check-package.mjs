@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const entryPoints = new Set();
 
@@ -35,6 +37,7 @@ const npmArgs = [
   "--ignore-scripts",
 ];
 const result = spawnSync(npmCommand, npmArgs, {
+  cwd: repositoryRoot,
   encoding: "utf8",
   shell: false,
 });
