@@ -1679,6 +1679,12 @@ export function verifyAp2MandateChain(
           `token.chain[${String(index)}].delegate_payload`,
           false,
         );
+        verifyExpiryClaims(
+          payload,
+          asOf,
+          issues,
+          `token.chain[${String(index)}].delegate_payload`,
+        );
         const nextCnf = cnfJwkFromPayload(payload);
         if ((isLast && nextCnf !== null) || (!isLast && nextCnf === null)) {
           throw new UcpAp2ParseError("Delegate hop cnf does not match its protected typ");
