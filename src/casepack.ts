@@ -1585,9 +1585,12 @@ function verifyCheckpointInclusion(
 ): CasePackStatus {
   const inclusion = envelope.checkpointInclusion;
   if (inclusion === undefined) return "missing";
+  const capturedAt = timestampMillis(envelope.capturedAt);
   if (
     inclusion.checkpointId !== checkpoint.checkpointId
     || checkpoint.sourceId !== envelope.sourceId
+    || capturedAt < timestampMillis(checkpoint.windowStart)
+    || capturedAt > timestampMillis(checkpoint.windowEnd)
     || inclusion.treeSize !== checkpoint.eventCount
     || inclusion.leafIndex >= inclusion.treeSize
     || inclusion.sequence !== checkpoint.firstSequence + inclusion.leafIndex

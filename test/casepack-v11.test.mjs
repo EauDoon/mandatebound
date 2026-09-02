@@ -768,6 +768,23 @@ test("caller-pinned external trust verifies a signed source checkpoint without e
   assert.equal(futureReport.valid, false);
   assert.equal(futureReport.coverageStatus, "missing");
 
+  const excludedUnsigned = sealSourceCheckpoint({
+    ...unsigned,
+    windowStart: "2026-07-22T12:00:01.000Z",
+    windowEnd: "2026-07-22T12:00:01.000Z",
+    checkpointDigest: undefined,
+  });
+  const excludedCheckpoint = {
+    ...excludedUnsigned,
+    proofs: [createSourceCheckpointProof(excludedUnsigned, privateKey, keyId)],
+  };
+  const excludedReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, sourceCheckpoints: [excludedCheckpoint] }),
+    anchors,
+  );
+  assert.equal(excludedReport.valid, false);
+  assert.equal(excludedReport.coverageStatus, "conflicting");
+
   const altered = structuredClone(checkpoint);
   const alteredSignature = Buffer.from(altered.proofs[0].signature, "base64url");
   alteredSignature[0] ^= 1;
