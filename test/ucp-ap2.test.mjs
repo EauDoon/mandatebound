@@ -417,6 +417,15 @@ test("merchant detached JWS verifies JCS checkout-without-ap2 and fails closed",
   assert.equal(valid.upstreamValid, true, JSON.stringify(valid.issues));
   assert.equal(valid.evidenceEligible, true);
   assert.equal(valid.value.exactCompact, detached);
+  for (const keySnapshot of [null, undefined, {}]) {
+    const malformedSnapshot = verifyDetachedMerchantAuthorization(checkout, detached, {
+      ...options,
+      keySnapshot,
+    });
+    assert.equal(malformedSnapshot.upstreamValid, false);
+    assert.equal(malformedSnapshot.value, null);
+    assert.equal(malformedSnapshot.issues[0].code, "INTEROP_KEY_SNAPSHOT_INVALID");
+  }
 
   const mutated = {
     ...checkout,
@@ -1178,6 +1187,17 @@ test("AP2 verifier handles expiry, temporal, issuer, checkout, and key-binding b
   assert.equal(missingExpiry.evidenceEligible, false);
   assert.equal(issueCodes(missingExpiry).has("AP2_EXPIRY_MISSING"), true);
 
+  assert.doesNotThrow(() => verifyAp2Mandate({
+    ...fixture.options,
+    issuerKeySnapshot: null,
+  }));
+  const malformedSnapshot = verifyAp2Mandate({
+    ...fixture.options,
+    issuerKeySnapshot: null,
+  });
+  assert.equal(malformedSnapshot.upstreamValid, false);
+  assert.equal(issueCodes(malformedSnapshot).has("INTEROP_KEY_SNAPSHOT_INVALID"), true);
+
   const temporalFailures = [
     [{ exp: 1_700_000_000 }, "AP2_TOKEN_EXPIRED"],
     [{ exp: "tomorrow" }, "AP2_EXPIRY_INVALID"],
@@ -1534,7 +1554,7 @@ test("lifecycle correlation validates inputs, sorts transactions, and distinguis
       eventId: "evt-z",
       kind: "cancel",
       transactionId: "txn-z",
-      occurredAt: "2026-07-23T00:01:00.000Z",
+      occurredAt: "2026-07-23T00:02:00.000Z",
       sourceDigest: sameDigest,
       upstreamValid: false,
       evidenceEligible: false,
@@ -1580,6 +1600,17 @@ test("lifecycle correlation validates inputs, sorts transactions, and distinguis
     upstreamValid: true,
     evidenceEligible: true,
   };
+  const contradictory = correlateTransactionLifecycle([base, { ...base, kind: "order" }])[0];
+  assert.deepEqual(contradictory.duplicateEventIds, ["evt"]);
+  assert.deepEqual(contradictory.conflictingEventIds, ["evt"]);
+  assert.equal(
+    contradictory.coverage.find((entry) => entry.requirement === "checkout_evidence").state,
+    "unknown",
+  );
+  assert.equal(
+    contradictory.coverage.find((entry) => entry.requirement === "order_evidence").state,
+    "unknown",
+  );
   for (const invalid of [
     { ...base, eventId: "" },
     { ...base, transactionId: "" },

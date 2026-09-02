@@ -527,10 +527,13 @@ test("static CasePack HTML escapes report strings and contains no raw evidence",
     coverage: [{
       ...report.coverage[0],
       requirementId: hostile,
+      matchedEnvelopes: hostile,
     }],
     envelopes: [{
       ...report.envelopes[0],
       envelopeId: hostile,
+      upstreamValid: hostile,
+      evidenceEligible: hostile,
     }],
     findings: [{
       code: hostile,
@@ -751,6 +754,57 @@ test("caller-pinned external trust verifies a signed source checkpoint without e
   assert.equal(report.externalTrustStatus, "satisfied");
   assert.equal(report.coverageStatus, "satisfied");
   assert.equal(report.nativeBundle.trustChecked, false);
+
+  const lateKeySnapshot = sealExternalTrustSnapshot({
+    ...externalTrustSnapshot,
+    keys: [{
+      ...externalTrustSnapshot.keys[0],
+      validFrom: "2026-07-22T13:00:00.000Z",
+    }],
+    snapshotDigest: undefined,
+  });
+  const lateKeyReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, externalTrustSnapshot: lateKeySnapshot }),
+    {
+      ...anchors,
+      externalTrustSnapshotDigest: lateKeySnapshot.snapshotDigest,
+    },
+  );
+  assert.equal(lateKeyReport.valid, false);
+  assert.equal(lateKeyReport.coverageStatus, "conflicting");
+
+  const futureUnsigned = sealSourceCheckpoint({
+    ...unsigned,
+    issuedAt: "2026-07-24T00:00:00.000Z",
+    checkpointDigest: undefined,
+  });
+  const futureCheckpoint = {
+    ...futureUnsigned,
+    proofs: [createSourceCheckpointProof(futureUnsigned, privateKey, keyId)],
+  };
+  const futureReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, sourceCheckpoints: [futureCheckpoint] }),
+    anchors,
+  );
+  assert.equal(futureReport.valid, false);
+  assert.equal(futureReport.coverageStatus, "missing");
+
+  const excludedUnsigned = sealSourceCheckpoint({
+    ...unsigned,
+    windowStart: "2026-07-22T12:00:01.000Z",
+    windowEnd: "2026-07-22T12:00:01.000Z",
+    checkpointDigest: undefined,
+  });
+  const excludedCheckpoint = {
+    ...excludedUnsigned,
+    proofs: [createSourceCheckpointProof(excludedUnsigned, privateKey, keyId)],
+  };
+  const excludedReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, sourceCheckpoints: [excludedCheckpoint] }),
+    anchors,
+  );
+  assert.equal(excludedReport.valid, false);
+  assert.equal(excludedReport.coverageStatus, "conflicting");
 
   const altered = structuredClone(checkpoint);
   const alteredSignature = Buffer.from(altered.proofs[0].signature, "base64url");

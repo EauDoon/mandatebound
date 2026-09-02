@@ -89,8 +89,10 @@ function recordFor(payload, overrides = {}) {
     sequence: overrides.sequence ?? 1,
     ...(overrides.previousHash === undefined ? {} : { previousHash: overrides.previousHash }),
     recordType,
-    recordId: overrides.recordId ?? `${recordType}:${payload.artifactId}`,
-    entityId: overrides.entityId ?? payload.artifactId,
+    recordId: overrides.recordId
+      ?? `${recordType === "appeal_event" ? "appeal" : "decision"}:${payload.artifactId}`,
+    entityId: overrides.entityId
+      ?? (recordType === "appeal_event" ? payload.appealId : payload.artifactId),
     payload,
   };
   return { ...body, recordHash: overrides.recordHash ?? storeRecordHash(body) };
@@ -148,13 +150,11 @@ test("store record verification is bounded and detects corruption, duplication, 
   const second = recordFor(secondDecision, {
     sequence: 2,
     previousHash: first.recordHash,
-    recordId: "shared-record-id",
   });
   const thirdDecision = decision({ caseId: "case-3", evidenceBundleId: "bundle-3" });
   const third = recordFor(thirdDecision, {
     sequence: 3,
     previousHash: second.recordHash,
-    recordId: "third-record-id",
   });
 
   const verified = verifyStoreRecords([first, second, third], { sequence: 3, headHash: third.recordHash });
@@ -195,6 +195,11 @@ test("store record verification is bounded and detects corruption, duplication, 
   const nonCanonicalIssues = verifyStoreRecords([nonCanonical]).issues.map((issue) => issue.code);
   assert(nonCanonicalIssues.includes("ALB_STORE_ARTIFACT"));
   assert(nonCanonicalIssues.includes("ALB_STORE_RECORD"));
+  const unboundRecord = recordFor(firstDecision, { recordId: "unbound-decision-record" });
+  assert(
+    verifyStoreRecords([unboundRecord]).issues
+      .some((issue) => issue.code === "ALB_STORE_DECISION_BINDING"),
+  );
   assert.throws(() => new MemoryStore({ records: [tampered] }), (error) => error.code === "ALB_STORE_CORRUPT");
 });
 
@@ -259,6 +264,21 @@ test("supersession and appeal references must exist and remain case-bound", asyn
     verifyStoreRecords([originalRecord, unrelatedRecord, appealRecord, crossBoundRecord])
       .issues.some((issue) => issue.code === "ALB_STORE_SUPERSESSION"),
   );
+  for (const overrides of [
+    { recordId: "appeal:unbound-event" },
+    { entityId: "appeal-unbound" },
+  ]) {
+    const unboundAppealRecord = recordFor(filed, {
+      recordType: "appeal_event",
+      sequence: 2,
+      previousHash: originalRecord.recordHash,
+      ...overrides,
+    });
+    assert(
+      verifyStoreRecords([originalRecord, unboundAppealRecord]).issues
+        .some((issue) => issue.code === "ALB_STORE_APPEAL_BINDING"),
+    );
+  }
 
   await assert.rejects(
     store.putDecision(decision({
@@ -287,6 +307,51 @@ test("supersession and appeal references must exist and remain case-bound", asyn
     reasonCodes: ["different_assertion"],
   });
   await assert.rejects(store.appendAppeal(conflictingId), (error) => error.code === "ALB_STORE_CONFLICT");
+  await store.close();
+});
+
+test("one appeal cannot create divergent superseding decisions", async () => {
+  const store = new MemoryStore();
+  const original = decision();
+  const filed = event({ decisionId: original.artifactId });
+  await store.putDecision(original);
+  await store.appendAppeal(filed);
+  const first = decision({
+    outcome: "operator",
+    supersedesDecisionId: original.artifactId,
+    appealId: filed.appealId,
+    reasonCodes: ["appeal_reversed"],
+  });
+  const second = decision({
+    outcome: "unresolved",
+    supersedesDecisionId: original.artifactId,
+    appealId: filed.appealId,
+    reasonCodes: ["appeal_reversed"],
+  });
+  await store.putDecision(first);
+  await assert.rejects(
+    store.putDecision(second),
+    (error) => error.code === "ALB_STORE_SUPERSESSION",
+  );
+
+  const originalRecord = recordFor(original);
+  const appealRecord = recordFor(filed, {
+    recordType: "appeal_event",
+    sequence: 2,
+    previousHash: originalRecord.recordHash,
+  });
+  const firstRecord = recordFor(first, {
+    sequence: 3,
+    previousHash: appealRecord.recordHash,
+  });
+  const secondRecord = recordFor(second, {
+    sequence: 4,
+    previousHash: firstRecord.recordHash,
+  });
+  assert(
+    verifyStoreRecords([originalRecord, appealRecord, firstRecord, secondRecord]).issues
+      .some((issue) => issue.code === "ALB_STORE_SUPERSESSION"),
+  );
   await store.close();
 });
 
@@ -622,7 +687,9 @@ test("JsonlStore rejects invalid UTF-8 that decodes to a valid record", async ()
   const file = join(directory, "store.jsonl");
   try {
     const replacementCharacter = String.fromCodePoint(0xfffd);
-    const valid = recordFor(decision(), { recordId: `decision:${replacementCharacter}` });
+    const valid = recordFor(decision({
+      verifiedFacts: [{ name: "replacement", value: replacementCharacter, sourceRefs: [] }],
+    }));
     assert.equal(verifyStoreRecords([valid]).valid, true);
     const canonical = Buffer.from(`${canonicalize(valid)}\n`, "utf8");
     const replacement = Buffer.from(replacementCharacter, "utf8");

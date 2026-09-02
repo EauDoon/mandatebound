@@ -1551,12 +1551,11 @@ function verifyCheckpointProof(
   checkpoint: SourceCheckpoint,
   snapshot: ExternalTrustSnapshot | undefined,
   snapshotTrusted: boolean,
-  asOf: Rfc3339Timestamp,
 ): CasePackStatus {
   if (checkpoint.proofs.length === 0) return "missing";
   if (snapshot === undefined) return "missing";
   if (!snapshotTrusted) return "unknown";
-  const instant = timestampMillis(asOf);
+  const instant = timestampMillis(checkpoint.issuedAt);
   for (const proof of checkpoint.proofs) {
     const key = snapshot.keys.find((candidate) =>
       candidate.keyId === proof.keyId
@@ -1585,9 +1584,12 @@ function verifyCheckpointInclusion(
 ): CasePackStatus {
   const inclusion = envelope.checkpointInclusion;
   if (inclusion === undefined) return "missing";
+  const capturedAt = timestampMillis(envelope.capturedAt);
   if (
     inclusion.checkpointId !== checkpoint.checkpointId
     || checkpoint.sourceId !== envelope.sourceId
+    || capturedAt < timestampMillis(checkpoint.windowStart)
+    || capturedAt > timestampMillis(checkpoint.windowEnd)
     || inclusion.treeSize !== checkpoint.eventCount
     || inclusion.leafIndex >= inclusion.treeSize
     || inclusion.sequence !== checkpoint.firstSequence + inclusion.leafIndex
@@ -1648,16 +1650,19 @@ function verifyCheckpointForEnvelope(
   const checkpoint = checkpoints.find((candidate) => candidate.checkpointId === inclusion.checkpointId);
   if (checkpoint === undefined) return "missing";
   if (checkpoint.declaredGaps.length > 0) return "missing";
+  const verificationTime = timestampMillis(asOf);
+  const checkpointTime = timestampMillis(checkpoint.issuedAt);
+  if (checkpointTime > verificationTime) return "missing";
   const maximumAge = requirement.maxCheckpointAgeSeconds;
   if (
     maximumAge !== undefined
-    && timestampMillis(asOf) - timestampMillis(checkpoint.issuedAt) > maximumAge * 1_000
+    && verificationTime - checkpointTime > maximumAge * 1_000
   ) {
     return "missing";
   }
   const inclusionStatus = verifyCheckpointInclusion(envelope, checkpoint);
   if (inclusionStatus !== "satisfied") return inclusionStatus;
-  const proofStatus = verifyCheckpointProof(checkpoint, snapshot, snapshotTrusted, asOf);
+  const proofStatus = verifyCheckpointProof(checkpoint, snapshot, snapshotTrusted);
   if (requirement.checkpointRequirement === "optional" && proofStatus === "missing") return "satisfied";
   return proofStatus;
 }

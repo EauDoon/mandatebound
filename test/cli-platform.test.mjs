@@ -158,6 +158,11 @@ test("appeal and replay commands preserve append order", async () => {
   const replayed = await invoke(["replay", "-"], JSON.stringify([filed]));
   assert.equal(replayed.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(replayed.stdout).result.completeness.state, "unproven");
+  const malformed = { ...filed };
+  delete malformed.occurredAt;
+  const rejected = await invoke(["replay", "-"], JSON.stringify([malformed]));
+  assert.equal(rejected.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(rejected.stdout).error.code, "ALB_CLI_INPUT");
   await store.close();
 });
 
@@ -630,4 +635,8 @@ test("simulate command runs a named synthetic scenario", async () => {
   const option = await invoke(["simulate", "--scenario", "operator", "--format", "json"], "");
   assert.equal(option.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(option.stdout).result.scenario, "operator");
+
+  const ambiguous = await invoke(["simulate", "principal", "--scenario", "operator"], "");
+  assert.equal(ambiguous.code, CLI_EXIT.USAGE);
+  assert.equal(JSON.parse(ambiguous.stdout).error.code, "ALB_CLI_USAGE");
 });

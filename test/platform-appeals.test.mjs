@@ -109,6 +109,10 @@ test("replay exposes binding, sequence, chain, identity, fork, and terminal conf
 
   const duplicateCodes = replayAppealEvents([filed, filed]).issues.map((issue) => issue.code);
   assert(duplicateCodes.includes("ALB_APPEAL_DUPLICATE"));
+  const secondFiled = child(filed, { eventType: "filed" });
+  assert(replayAppealEvents([filed, secondFiled]).issues.some(
+    (issue) => issue.code === "ALB_APPEAL_GENESIS",
+  ));
   const equivocation = { ...filed, eventType: "review_started" };
   assert(replayAppealEvents([filed, equivocation]).issues.some((issue) => issue.code === "ALB_APPEAL_EQUIVOCATION"));
   assert(replayAppealEvents([filed, firstChild, afterTerminal, tooLate]).issues.some(
@@ -155,6 +159,10 @@ test("append guards reject invalid genesis, conflicts, terminal writes, forks, d
   expectAppealCode(
     () => assertAppealAppendable([filed], child(filed, { artifactId: filed.artifactId })),
     "ALB_APPEAL_DUPLICATE",
+  );
+  expectAppealCode(
+    () => assertAppealAppendable([filed], child(filed, { eventType: "filed" })),
+    "ALB_APPEAL_GENESIS",
   );
   expectAppealCode(
     () => assertAppealAppendable([filed], child(filed, { eventType: "evidence_added" })),

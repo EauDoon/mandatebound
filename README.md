@@ -199,8 +199,8 @@ An unresolved policy result is a successful evaluation and exits with code `0`.
 ```bash
 mandatebound ap2-dispute resolve --input ap2-dispute-input.json
 mandatebound ap2-dispute pack --input ap2-pack-input.json > ap2-pack.json
-mandatebound ap2-dispute verify --input ap2-pack.json --expected-pack-digest sha256:<64-hex-characters>
-mandatebound ap2-dispute render --input ap2-pack.json --expected-pack-digest sha256:<64-hex-characters> --format html
+mandatebound ap2-dispute verify --input ap2-pack.json --expected-pack-digest "sha256:<64-hex-characters>"
+mandatebound ap2-dispute render --input ap2-pack.json --expected-pack-digest "sha256:<64-hex-characters>" --format html
 ```
 
 The commands consume materialized sources and a separate caller-owned verification plan. They do not contact merchants, agents, providers, networks, or revocation services. Retain `result.packDigest` from `pack` in a separate trusted case record, then provide it to `verify` and `render`; the Pack cannot authenticate itself. The Pack contains raw sensitive evidence; the rendered timeline does not. A positive resolver or Pack verification exits with code `0`; an evidence gap returns the conflict exit class and a bounded `unresolved` result. See [`docs/V1_2.md`](docs/V1_2.md) for the exact contract.

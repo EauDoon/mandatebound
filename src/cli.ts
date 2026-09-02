@@ -53,6 +53,7 @@ import { parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
 import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
+import { validateArtifact } from "./validation.js";
 
 export const CLI_EXIT = Object.freeze({
   SUCCESS: 0,
@@ -610,8 +611,15 @@ export async function runCli(
         const record = Array.isArray(input) ? { events: input } : asObject(input);
         const events = record["events"];
         if (!Array.isArray(events)) throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay input is invalid.");
+        const validatedEvents = events.map((event) => {
+          const validation = validateArtifact<AppealEvent>("appeal_event", event);
+          if (!validation.ok) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay event is invalid.");
+          }
+          return validation.value;
+        });
         const checkpoint = record["checkpoint"] as AppealCheckpoint | undefined;
-        const replay = replayAppealEvents(events as unknown as AppealEvent[], checkpoint);
+        const replay = replayAppealEvents(validatedEvents, checkpoint);
         writeJson(stdout, { ok: replay.issues.length === 0, result: replay });
         return replay.issues.length === 0 ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
       }
@@ -622,6 +630,9 @@ export async function runCli(
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate accepts one scenario.");
         }
         const optionScenario = args.options["scenario"];
+        if (args.positionals.length === 1 && typeof optionScenario === "string") {
+          throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate scenario must be provided once.");
+        }
         const scenario = typeof optionScenario === "string" ? optionScenario : (args.positionals[0] ?? "all");
         const result = await simulateScenario(scenario);
         writeJson(stdout, { ok: true, result });

@@ -659,12 +659,27 @@ function verifyRawEcdsa(
 }
 
 function checkKeySnapshot(
-  snapshot: PinnedEcKeySnapshot,
+  snapshotValue: unknown,
   expectedDigest: Sha256Digest,
   asOf: string | number,
   issues: InteropIssue[],
   path: string,
-): void {
+): boolean {
+  if (
+    !isObject(snapshotValue)
+    || typeof snapshotValue.kid !== "string"
+    || typeof snapshotValue.capturedAt !== "string"
+    || typeof snapshotValue.validUntil !== "string"
+    || !isObject(snapshotValue.jwk)
+  ) {
+    issues.push(upstreamIssue(
+      "INTEROP_KEY_SNAPSHOT_INVALID",
+      path,
+      "External key snapshot has an invalid shape",
+    ));
+    return false;
+  }
+  const snapshot = snapshotValue as unknown as PinnedEcKeySnapshot;
   if (!isSha256Digest(snapshot.sourceDigest) || snapshot.sourceDigest !== expectedDigest) {
     issues.push(eligibilityIssue(
       "INTEROP_KEY_SOURCE_PIN_MISMATCH",
@@ -733,6 +748,7 @@ function checkKeySnapshot(
       error instanceof Error ? error.message : "Invalid key snapshot time",
     ));
   }
+  return true;
 }
 
 function extractCapabilityEntries(
@@ -977,6 +993,15 @@ export function verifyDetachedMerchantAuthorization(
   options: VerifyDetachedMerchantAuthorizationOptions,
 ): InteropVerification<DetachedMerchantAuthorization> {
   const issues: InteropIssue[] = [];
+  if (!checkKeySnapshot(
+    options.keySnapshot,
+    options.expectedKeySourceDigest,
+    options.asOf,
+    issues,
+    "merchantKeySnapshot",
+  )) {
+    return finish<DetachedMerchantAuthorization>(null, issues);
+  }
   let protectedHeader: JsonObject;
   let kid = options.keySnapshot.kid;
   let algorithm: JoseEcAlgorithm = "ES256";
@@ -1063,13 +1088,6 @@ export function verifyDetachedMerchantAuthorization(
     return finish<DetachedMerchantAuthorization>(null, issues);
   }
 
-  checkKeySnapshot(
-    options.keySnapshot,
-    options.expectedKeySourceDigest,
-    options.asOf,
-    issues,
-    "merchantKeySnapshot",
-  );
   return finish(Object.freeze({
     exactCompact: detachedJws,
     protectedHeader,
@@ -1579,13 +1597,13 @@ export function verifyAp2MandateChain(
   options: VerifyAp2MandateOptions,
 ): InteropVerification<VerifiedAp2MandateChain> {
   const issues: InteropIssue[] = [];
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "issuerKeySnapshot",
-  );
+  )) return finish<VerifiedAp2MandateChain>(null, issues);
   try {
     requireString(options.expectedIssuer, "expectedIssuer");
     const segments = parseAp2MandateChainSegments(options.token);
@@ -1678,6 +1696,12 @@ export function verifyAp2MandateChain(
           asOf,
           `token.chain[${String(index)}].delegate_payload`,
           false,
+        );
+        verifyExpiryClaims(
+          payload,
+          asOf,
+          issues,
+          `token.chain[${String(index)}].delegate_payload`,
         );
         const nextCnf = cnfJwkFromPayload(payload);
         if ((isLast && nextCnf !== null) || (!isLast && nextCnf === null)) {
@@ -1989,6 +2013,7 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
   const sink = requirementOffset + requirements.length;
   const graph: FlowEdge[][] = Array.from({ length: sink + 1 }, () => []);
   let totalQuantity = 0;
+  let requiredQuantity = 0;
   for (let skuIndex = 0; skuIndex < skus.length; skuIndex += 1) {
     const sku = skus[skuIndex] as string;
     const quantity = cart.get(sku) as number;
@@ -2011,9 +2036,13 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
     }
   }
   for (let index = 0; index < requirements.length; index += 1) {
-    addFlowEdge(graph, requirementOffset + index, sink, (requirements[index] as { quantity: number }).quantity);
+    const quantity = (requirements[index] as { quantity: number }).quantity;
+    requiredQuantity += quantity;
+    if (!Number.isSafeInteger(requiredQuantity)) return false;
+    addFlowEdge(graph, requirementOffset + index, sink, quantity);
   }
-  return boundedMaxFlow(graph, source, sink) === totalQuantity;
+  return totalQuantity === requiredQuantity
+    && boundedMaxFlow(graph, source, sink) === requiredQuantity;
 }
 
 function verifyConstraints(
@@ -2143,13 +2172,13 @@ export function verifyAp2Mandate(
     return finish<VerifiedAp2Mandate>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "issuerKeySnapshot",
-  );
+  )) return finish<VerifiedAp2Mandate>(null, issues);
 
   let issuerHeader: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {
@@ -2410,13 +2439,15 @@ export function verifyAp2CheckoutJwt(
     return finish<VerifiedAp2CheckoutJwt>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.merchantKeySnapshot,
     options.expectedMerchantKeySourceDigest,
     options.asOf,
     issues,
     "checkoutMerchantKeySnapshot",
-  );
+  )) {
+    return finish<VerifiedAp2CheckoutJwt>(null, issues);
+  }
   let header: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {
     header = verifyParsedJwtSignature(
@@ -2613,13 +2644,15 @@ export function verifyAp2Receipt(
     return finish<VerifiedAp2Receipt>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "receiptIssuerKeySnapshot",
-  );
+  )) {
+    return finish<VerifiedAp2Receipt>(null, issues);
+  }
 
   let issuerHeader: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {
@@ -3130,7 +3163,7 @@ export function correlateTransactionLifecycle(
     for (const [eventId, entries] of byId) {
       if (entries.length > 1) {
         duplicateEventIds.push(eventId);
-        if (new Set(entries.map((entry) => entry.sourceDigest)).size > 1) {
+        if (new Set(entries.map((entry) => canonicalize(entry))).size > 1) {
           conflictingEventIds.push(eventId);
         }
       }
@@ -3140,7 +3173,9 @@ export function correlateTransactionLifecycle(
       .filter((entry) => (entry.parentEventIds ?? []).some((parent) => !eventIds.has(parent)))
       .map((entry) => entry.eventId);
 
-    const eligible = sorted.filter((entry) => entry.upstreamValid && entry.evidenceEligible);
+    const conflictingIds = new Set(conflictingEventIds);
+    const eligible = sorted.filter((entry) =>
+      entry.upstreamValid && entry.evidenceEligible && !conflictingIds.has(entry.eventId));
     const coverage: EvidenceCoverageItem[] = [
       Object.freeze({
         requirement: "checkout_evidence",

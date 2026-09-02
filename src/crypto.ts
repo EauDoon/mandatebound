@@ -328,6 +328,9 @@ export function decodeProofHeader(proof: DetachedProof): ValidationResult<ProofH
   try {
     const encoded = base64UrlDecode(proof.protected, 4_096);
     const parsed = parseStrictJsonObject(encoded.toString("utf8"), { maxBytes: 4_096, maxDepth: 4, maxObjectKeys: 16 });
+    if (!encoded.equals(Buffer.from(canonicalize(parsed), "utf8"))) {
+      return issue("ALB_PROOF_BINDING", "Protected proof header is not canonically encoded");
+    }
     const keys = Object.keys(parsed).sort();
     if (keys.length !== HEADER_KEYS.length || HEADER_KEYS.some((key, index) => keys[index] !== key)) {
       return issue("ALB_PROOF_BINDING", "Protected proof header has an invalid shape");

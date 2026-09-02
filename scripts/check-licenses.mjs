@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve("node_modules");
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const root = join(repositoryRoot, "node_modules");
 const allowed = new Set(["Apache-2.0", "BSD-3-Clause", "MIT"]);
 const packages = [];
 const issues = [];
@@ -23,21 +25,26 @@ function readPackage(directory) {
   }
 }
 
-for (const entry of readdirSync(root, { withFileTypes: true })) {
-  if (!entry.isDirectory() || entry.name === ".bin") {
-    continue;
-  }
-  const directory = join(root, entry.name);
-  if (entry.name.startsWith("@")) {
-    for (const scoped of readdirSync(directory, { withFileTypes: true })) {
-      if (scoped.isDirectory()) {
-        readPackage(join(directory, scoped.name));
+function scanNodeModules(directory) {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === ".bin") continue;
+    const candidate = join(directory, entry.name);
+    if (entry.name.startsWith("@")) {
+      for (const scoped of readdirSync(candidate, { withFileTypes: true })) {
+        if (!scoped.isDirectory()) continue;
+        const packageDirectory = join(candidate, scoped.name);
+        readPackage(packageDirectory);
+        scanNodeModules(join(packageDirectory, "node_modules"));
       }
+    } else {
+      readPackage(candidate);
+      scanNodeModules(join(candidate, "node_modules"));
     }
-  } else {
-    readPackage(directory);
   }
 }
+
+scanNodeModules(root);
 
 for (const dependency of packages) {
   if (!allowed.has(dependency.license)) {

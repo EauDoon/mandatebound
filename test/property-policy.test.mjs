@@ -76,6 +76,15 @@ test("not is bounded, traced, and cannot resolve object paths", () => {
   assert.equal(validateRulebook(arbitraryPath).valid, false);
 });
 
+test("direct rulebook evaluation rejects inherited policy facts", () => {
+  const inherited = Object.create(principalFacts);
+  assert.throws(
+    () => evaluateRulebook(rulebook, inherited),
+    (error) => error instanceof PolicyConfigurationError
+      && error.issues.some((issue) => issue.path === "$facts"),
+  );
+});
+
 test("rejects executable, numeric, floating, unsupported, and open-ended DSL forms", () => {
   const mutations = [
     (value) => { value.rules[0].when = { op: "lt", fact: "input_state", value: 1 }; },

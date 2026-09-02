@@ -57,6 +57,11 @@ test("malformed proof headers, signatures, and key confusion fail closed", () =>
     artifactType: "runtime_event", schemaDigest, purpose: "runtime_observation", signedAt,
   });
   const header = JSON.parse(Buffer.from(proof.protected, "base64url").toString("utf8"));
+  const nonCanonicalHeader = {
+    ...proof,
+    protected: Buffer.from(JSON.stringify(header, null, 2), "utf8").toString("base64url"),
+  };
+  assert.equal(decodeProofHeader(nonCanonicalHeader).ok, false);
   const wrongAlgorithm = {
     ...proof,
     protected: Buffer.from(JSON.stringify({ ...header, alg: "HS256" }), "utf8").toString("base64url"),
@@ -273,6 +278,18 @@ test("trust accepts only exact pinned snapshots and keys within them", () => {
   const digestOnly = verifyDigestPinnedTrustSnapshot(signedSnapshot, pin);
   assert.equal(digestOnly.ok, true);
   assert.equal(digestOnly.value.publisherAuthenticated, false);
+  const futureIssuedSnapshot = {
+    ...snapshot,
+    artifactId: "trust-future-issued",
+    issuedAt: "2026-01-20T00:00:00.000Z",
+  };
+  const futureIssuedResult = verifyDigestPinnedTrustSnapshot(
+    signTrust(futureIssuedSnapshot),
+    sha256Digest(futureIssuedSnapshot),
+    "2026-01-15T00:00:00.000Z",
+  );
+  assert.equal(futureIssuedResult.ok, false);
+  assert.equal(futureIssuedResult.issues[0].path, "/payload/issuedAt");
   assert.equal(resolveTrustedKey(verified.value, {
     kid: operatorKid, role: "operator", purpose: "execution_attestation", at: signedAt, scope: "operator-1",
   }).ok, true);
