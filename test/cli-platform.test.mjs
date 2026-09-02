@@ -158,6 +158,11 @@ test("appeal and replay commands preserve append order", async () => {
   const replayed = await invoke(["replay", "-"], JSON.stringify([filed]));
   assert.equal(replayed.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(replayed.stdout).result.completeness.state, "unproven");
+  const malformed = { ...filed };
+  delete malformed.occurredAt;
+  const rejected = await invoke(["replay", "-"], JSON.stringify([malformed]));
+  assert.equal(rejected.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(rejected.stdout).error.code, "ALB_CLI_INPUT");
   await store.close();
 });
 
