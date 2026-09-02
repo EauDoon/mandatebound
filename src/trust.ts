@@ -160,6 +160,9 @@ export function verifyPinnedTrustSnapshot(
     if (!isTimestamp(evaluationCutoff)) {
       return fail("ALB_SCHEMA_INVALID", "/evaluationCutoff", "Trust evaluation timestamp is invalid");
     }
+    if (artifact.payload.issuedAt > evaluationCutoff) {
+      return fail("ALB_PROOF_BINDING", "/payload/issuedAt", "Trust snapshot was issued after the evaluation cutoff");
+    }
     if (artifact.payload.asOf > evaluationCutoff) {
       return fail("ALB_PROOF_BINDING", "/payload/asOf", "Trust snapshot is newer than the evaluation cutoff");
     }
