@@ -630,6 +630,9 @@ export async function runCli(
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate accepts one scenario.");
         }
         const optionScenario = args.options["scenario"];
+        if (args.positionals.length === 1 && typeof optionScenario === "string") {
+          throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate scenario must be provided once.");
+        }
         const scenario = typeof optionScenario === "string" ? optionScenario : (args.positionals[0] ?? "all");
         const result = await simulateScenario(scenario);
         writeJson(stdout, { ok: true, result });
