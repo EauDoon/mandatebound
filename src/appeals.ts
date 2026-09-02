@@ -124,6 +124,9 @@ export function replayAppealEvents(
         issues.push({ code: "ALB_APPEAL_GENESIS", message: "Appeal genesis event is invalid." });
       }
     } else {
+      if (event.eventType === "filed") {
+        issues.push({ code: "ALB_APPEAL_GENESIS", message: "Appeal filed event may appear only at genesis." });
+      }
       if (event.previousEventDigest !== previousDigest) {
         issues.push({ code: "ALB_APPEAL_CHAIN", message: "Appeal event chain is invalid." });
       }
