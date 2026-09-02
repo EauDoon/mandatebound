@@ -417,6 +417,15 @@ test("merchant detached JWS verifies JCS checkout-without-ap2 and fails closed",
   assert.equal(valid.upstreamValid, true, JSON.stringify(valid.issues));
   assert.equal(valid.evidenceEligible, true);
   assert.equal(valid.value.exactCompact, detached);
+  for (const keySnapshot of [null, undefined, {}]) {
+    const malformedSnapshot = verifyDetachedMerchantAuthorization(checkout, detached, {
+      ...options,
+      keySnapshot,
+    });
+    assert.equal(malformedSnapshot.upstreamValid, false);
+    assert.equal(malformedSnapshot.value, null);
+    assert.equal(malformedSnapshot.issues[0].code, "INTEROP_KEY_SNAPSHOT_INVALID");
+  }
 
   const mutated = {
     ...checkout,

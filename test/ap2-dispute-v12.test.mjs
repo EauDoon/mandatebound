@@ -868,6 +868,19 @@ test("receipt verification enforces signatures and the pinned AP2 receipt schema
     expectedMandateToken: fixture.checkoutMandate,
   });
   assert.equal(valid.evidenceEligible, true, JSON.stringify(valid.issues));
+  for (const issuerKeySnapshot of [null, undefined, {}]) {
+    const malformedSnapshot = verifyAp2Receipt({
+      ...plan,
+      token: fixture.checkoutReceipt,
+      kind: "checkout_receipt",
+      issuerKeySnapshot,
+      asOf,
+      expectedMandateToken: fixture.checkoutMandate,
+    });
+    assert.equal(malformedSnapshot.upstreamValid, false);
+    assert.equal(malformedSnapshot.value, null);
+    assert.equal(malformedSnapshot.issues[0].code, "INTEROP_KEY_SNAPSHOT_INVALID");
+  }
 
   const mutated = verifyAp2Receipt({
     ...plan,
@@ -902,6 +915,17 @@ test("embedded Checkout JWT verification binds the merchant signature and histor
   const plan = fixture.verificationPlan.checkoutJwt;
   const valid = verifyAp2CheckoutJwt({ ...plan, token: fixture.checkoutJwt, asOf });
   assert.equal(valid.evidenceEligible, true, JSON.stringify(valid.issues));
+  for (const merchantKeySnapshot of [null, undefined, {}]) {
+    const malformedSnapshot = verifyAp2CheckoutJwt({
+      ...plan,
+      token: fixture.checkoutJwt,
+      merchantKeySnapshot,
+      asOf,
+    });
+    assert.equal(malformedSnapshot.upstreamValid, false);
+    assert.equal(malformedSnapshot.value, null);
+    assert.equal(malformedSnapshot.issues[0].code, "INTEROP_KEY_SNAPSHOT_INVALID");
+  }
   const mutated = verifyAp2CheckoutJwt({
     ...plan,
     token: mutateSignature(fixture.checkoutJwt),

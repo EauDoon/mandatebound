@@ -993,6 +993,15 @@ export function verifyDetachedMerchantAuthorization(
   options: VerifyDetachedMerchantAuthorizationOptions,
 ): InteropVerification<DetachedMerchantAuthorization> {
   const issues: InteropIssue[] = [];
+  if (!checkKeySnapshot(
+    options.keySnapshot,
+    options.expectedKeySourceDigest,
+    options.asOf,
+    issues,
+    "merchantKeySnapshot",
+  )) {
+    return finish<DetachedMerchantAuthorization>(null, issues);
+  }
   let protectedHeader: JsonObject;
   let kid = options.keySnapshot.kid;
   let algorithm: JoseEcAlgorithm = "ES256";
@@ -1079,13 +1088,6 @@ export function verifyDetachedMerchantAuthorization(
     return finish<DetachedMerchantAuthorization>(null, issues);
   }
 
-  checkKeySnapshot(
-    options.keySnapshot,
-    options.expectedKeySourceDigest,
-    options.asOf,
-    issues,
-    "merchantKeySnapshot",
-  );
   return finish(Object.freeze({
     exactCompact: detachedJws,
     protectedHeader,
@@ -2437,13 +2439,15 @@ export function verifyAp2CheckoutJwt(
     return finish<VerifiedAp2CheckoutJwt>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.merchantKeySnapshot,
     options.expectedMerchantKeySourceDigest,
     options.asOf,
     issues,
     "checkoutMerchantKeySnapshot",
-  );
+  )) {
+    return finish<VerifiedAp2CheckoutJwt>(null, issues);
+  }
   let header: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {
     header = verifyParsedJwtSignature(
@@ -2640,13 +2644,15 @@ export function verifyAp2Receipt(
     return finish<VerifiedAp2Receipt>(null, issues);
   }
 
-  checkKeySnapshot(
+  if (!checkKeySnapshot(
     options.issuerKeySnapshot,
     options.expectedIssuerKeySourceDigest,
     options.asOf,
     issues,
     "receiptIssuerKeySnapshot",
-  );
+  )) {
+    return finish<VerifiedAp2Receipt>(null, issues);
+  }
 
   let issuerHeader: { readonly algorithm: JoseEcAlgorithm; readonly kid: string | null } | null = null;
   try {
