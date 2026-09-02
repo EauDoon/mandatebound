@@ -346,6 +346,20 @@ export function assertValidRulebook(rulebook: unknown): asserts rulebook is Rule
   }
 }
 
+function assertValidPolicyFacts(facts: unknown): asserts facts is PolicyFacts {
+  if (
+    !isPlainObject(facts)
+    || !hasExactKeys(facts, POLICY_FACT_NAMES)
+    || POLICY_FACT_NAMES.some((name) => !isAllowedFactValue(name, facts[name]))
+  ) {
+    throw new PolicyConfigurationError([{
+      path: "$facts",
+      code: "invalid_shape",
+      message: "Policy facts must use the complete closed vocabulary",
+    }]);
+  }
+}
+
 function evaluateCondition(
   condition: RuleCondition,
   facts: PolicyFacts,
@@ -401,6 +415,7 @@ function orderedRules(rulebook: Rulebook): readonly PolicyRule[] {
 
 export function evaluateRulebook(rulebook: Rulebook, facts: PolicyFacts): PolicyEvaluation {
   assertValidRulebook(rulebook);
+  assertValidPolicyFacts(facts);
   const ruleTrace: RuleEvaluationTrace[] = [];
   for (const rule of orderedRules(rulebook)) {
     const conditions: ConditionEvaluationTrace[] = [];
