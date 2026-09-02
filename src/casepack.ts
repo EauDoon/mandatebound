@@ -1648,10 +1648,13 @@ function verifyCheckpointForEnvelope(
   const checkpoint = checkpoints.find((candidate) => candidate.checkpointId === inclusion.checkpointId);
   if (checkpoint === undefined) return "missing";
   if (checkpoint.declaredGaps.length > 0) return "missing";
+  const verificationTime = timestampMillis(asOf);
+  const checkpointTime = timestampMillis(checkpoint.issuedAt);
+  if (checkpointTime > verificationTime) return "missing";
   const maximumAge = requirement.maxCheckpointAgeSeconds;
   if (
     maximumAge !== undefined
-    && timestampMillis(asOf) - timestampMillis(checkpoint.issuedAt) > maximumAge * 1_000
+    && verificationTime - checkpointTime > maximumAge * 1_000
   ) {
     return "missing";
   }

@@ -752,6 +752,22 @@ test("caller-pinned external trust verifies a signed source checkpoint without e
   assert.equal(report.coverageStatus, "satisfied");
   assert.equal(report.nativeBundle.trustChecked, false);
 
+  const futureUnsigned = sealSourceCheckpoint({
+    ...unsigned,
+    issuedAt: "2026-07-24T00:00:00.000Z",
+    checkpointDigest: undefined,
+  });
+  const futureCheckpoint = {
+    ...futureUnsigned,
+    proofs: [createSourceCheckpointProof(futureUnsigned, privateKey, keyId)],
+  };
+  const futureReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, sourceCheckpoints: [futureCheckpoint] }),
+    anchors,
+  );
+  assert.equal(futureReport.valid, false);
+  assert.equal(futureReport.coverageStatus, "missing");
+
   const altered = structuredClone(checkpoint);
   const alteredSignature = Buffer.from(altered.proofs[0].signature, "base64url");
   alteredSignature[0] ^= 1;
