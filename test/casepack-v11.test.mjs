@@ -752,6 +752,24 @@ test("caller-pinned external trust verifies a signed source checkpoint without e
   assert.equal(report.coverageStatus, "satisfied");
   assert.equal(report.nativeBundle.trustChecked, false);
 
+  const lateKeySnapshot = sealExternalTrustSnapshot({
+    ...externalTrustSnapshot,
+    keys: [{
+      ...externalTrustSnapshot.keys[0],
+      validFrom: "2026-07-22T13:00:00.000Z",
+    }],
+    snapshotDigest: undefined,
+  });
+  const lateKeyReport = verifyMandateBoundCasePack(
+    resealPack({ ...candidate, externalTrustSnapshot: lateKeySnapshot }),
+    {
+      ...anchors,
+      externalTrustSnapshotDigest: lateKeySnapshot.snapshotDigest,
+    },
+  );
+  assert.equal(lateKeyReport.valid, false);
+  assert.equal(lateKeyReport.coverageStatus, "conflicting");
+
   const futureUnsigned = sealSourceCheckpoint({
     ...unsigned,
     issuedAt: "2026-07-24T00:00:00.000Z",

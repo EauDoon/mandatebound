@@ -1551,12 +1551,11 @@ function verifyCheckpointProof(
   checkpoint: SourceCheckpoint,
   snapshot: ExternalTrustSnapshot | undefined,
   snapshotTrusted: boolean,
-  asOf: Rfc3339Timestamp,
 ): CasePackStatus {
   if (checkpoint.proofs.length === 0) return "missing";
   if (snapshot === undefined) return "missing";
   if (!snapshotTrusted) return "unknown";
-  const instant = timestampMillis(asOf);
+  const instant = timestampMillis(checkpoint.issuedAt);
   for (const proof of checkpoint.proofs) {
     const key = snapshot.keys.find((candidate) =>
       candidate.keyId === proof.keyId
@@ -1663,7 +1662,7 @@ function verifyCheckpointForEnvelope(
   }
   const inclusionStatus = verifyCheckpointInclusion(envelope, checkpoint);
   if (inclusionStatus !== "satisfied") return inclusionStatus;
-  const proofStatus = verifyCheckpointProof(checkpoint, snapshot, snapshotTrusted, asOf);
+  const proofStatus = verifyCheckpointProof(checkpoint, snapshot, snapshotTrusted);
   if (requirement.checkpointRequirement === "optional" && proofStatus === "missing") return "satisfied";
   return proofStatus;
 }
