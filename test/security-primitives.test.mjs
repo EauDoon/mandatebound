@@ -57,6 +57,11 @@ test("malformed proof headers, signatures, and key confusion fail closed", () =>
     artifactType: "runtime_event", schemaDigest, purpose: "runtime_observation", signedAt,
   });
   const header = JSON.parse(Buffer.from(proof.protected, "base64url").toString("utf8"));
+  const nonCanonicalHeader = {
+    ...proof,
+    protected: Buffer.from(JSON.stringify(header, null, 2), "utf8").toString("base64url"),
+  };
+  assert.equal(decodeProofHeader(nonCanonicalHeader).ok, false);
   const wrongAlgorithm = {
     ...proof,
     protected: Buffer.from(JSON.stringify({ ...header, alg: "HS256" }), "utf8").toString("base64url"),
