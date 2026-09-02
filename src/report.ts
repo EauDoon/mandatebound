@@ -123,12 +123,12 @@ export function renderCaseReportHtml(report: MandateBoundCaseReport): string {
   const coverageRows = report.coverage.length === 0
     ? "<tr><td colspan=\"3\">No applicable coverage requirements were reported.</td></tr>"
     : report.coverage.map((item) =>
-      `<tr><td>${escapeHtml(item.requirementId)}</td><td>${statusCell(item.status)}</td><td>${String(item.matchedEnvelopes)}</td></tr>`)
+      `<tr><td>${escapeHtml(item.requirementId)}</td><td>${statusCell(item.status)}</td><td>${escapeHtml(item.matchedEnvelopes)}</td></tr>`)
       .join("");
   const envelopeRows = report.envelopes.length === 0
     ? "<tr><td colspan=\"5\">No protocol evidence envelopes were reported.</td></tr>"
     : report.envelopes.map((item) =>
-      `<tr><td>${escapeHtml(item.envelopeId)}</td><td>${statusCell(item.integrityStatus)}</td><td>${statusCell(item.coverageStatus)}</td><td>${String(item.upstreamValid)}</td><td>${String(item.evidenceEligible)}</td></tr>`)
+      `<tr><td>${escapeHtml(item.envelopeId)}</td><td>${statusCell(item.integrityStatus)}</td><td>${statusCell(item.coverageStatus)}</td><td>${escapeHtml(item.upstreamValid)}</td><td>${escapeHtml(item.evidenceEligible)}</td></tr>`)
       .join("");
   const findingRows = report.findings.length === 0
     ? "<li>No verifier findings.</li>"

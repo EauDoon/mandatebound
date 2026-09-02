@@ -527,10 +527,13 @@ test("static CasePack HTML escapes report strings and contains no raw evidence",
     coverage: [{
       ...report.coverage[0],
       requirementId: hostile,
+      matchedEnvelopes: hostile,
     }],
     envelopes: [{
       ...report.envelopes[0],
       envelopeId: hostile,
+      upstreamValid: hostile,
+      evidenceEligible: hostile,
     }],
     findings: [{
       code: hostile,
