@@ -916,6 +916,14 @@ function traceEntry(
   return { stage, result, reasonCode, artifactRefs: [...refs].sort((a, b) => compareAscii(a.digest, b.digest)) };
 }
 
+function logMalformedInternalError(context: string, error: unknown): void {
+  if (error instanceof Error) {
+    console.error(`[mandatebound] ${context}: ${error.name}: ${error.message}`);
+  } else {
+    console.error(`[mandatebound] ${context}:`, error);
+  }
+}
+
 function bundleForInput(input: EvaluationCase): EvidenceBundle {
   if (input.evidenceBundle !== undefined) return input.evidenceBundle;
   return createEvidenceBundle(input);
@@ -1347,7 +1355,11 @@ function safeInputString(input: unknown, key: "caseId" | "asOf", fallback: strin
   return fallback;
 }
 
-function malformedDecision(input: unknown, reasonCode: string): EngineLiabilityDecision {
+function malformedDecision(
+  input: unknown,
+  reasonCode: string,
+  internalError?: unknown,
+): EngineLiabilityDecision {
   const caseId = safeInputString(input, "caseId", "malformed-case");
   const evaluatedAt = safeInputString(input, "asOf", "1970-01-01T00:00:00.000Z");
   const facts: PolicyFacts = {
@@ -1419,7 +1431,8 @@ function malformedDecision(input: unknown, reasonCode: string): EngineLiabilityD
 export function evaluateCase(input: EvaluationCase): EngineLiabilityDecision {
   try {
     return evaluateCaseInternal(input);
-  } catch {
+  } catch (error) {
+    logMalformedInternalError("evaluateCase", error);
     return malformedDecision(input, "ALB_SCHEMA_INVALID");
   }
 }
@@ -1448,7 +1461,8 @@ export function evaluateBundle(
       (anchors.expectedBundleRootDigest === undefined || anchors.expectedBundleRootDigest === bundle.rootDigest);
     const input = evaluationCaseFromBundle(bundle, anchors);
     return evaluateCaseInternal(input, anchorsMatch ? undefined : "ALB_BUNDLE_ANCHOR_MISMATCH");
-  } catch {
+  } catch (error) {
+    logMalformedInternalError("evaluateBundle", error);
     return malformedDecision(bundle, "ALB_BUNDLE_INVALID");
   }
 }

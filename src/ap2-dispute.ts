@@ -497,7 +497,8 @@ function safeMandateVerification(
       asOf: input.asOf,
       ...(expectedOpenCheckoutHash === undefined ? {} : { expectedOpenCheckoutHash }),
     });
-  } catch {
+  } catch (error) {
+    logAp2InternalError("safeMandateVerification", error);
     return Object.freeze({
       upstreamValid: false,
       evidenceEligible: false,
@@ -529,7 +530,8 @@ function safeReceiptVerification(
       asOf: input.asOf,
       ...(expectedMandateToken === undefined ? {} : { expectedMandateToken }),
     });
-  } catch {
+  } catch (error) {
+    logAp2InternalError("safeReceiptVerification", error);
     return Object.freeze({
       upstreamValid: false,
       evidenceEligible: false,
@@ -541,6 +543,14 @@ function safeReceiptVerification(
         impact: "upstream_validity" as const,
       })]),
     });
+  }
+}
+
+function logAp2InternalError(context: string, error: unknown): void {
+  if (error instanceof Error) {
+    console.error(`[mandatebound] ${context}: ${error.name}: ${error.message}`);
+  } else {
+    console.error(`[mandatebound] ${context}:`, error);
   }
 }
 
