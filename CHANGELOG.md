@@ -16,9 +16,11 @@ All notable changes are documented here.
 - AP2 imports now require delegated expiry, bound key-snapshot sizes, non-future source checkpoints, capture-window consistency, issuance-valid checkpoint keys, exact required line-item quantities, and consistent lifecycle duplicates.
 - Direct policy-fact evaluation, appeal replay input, trust-snapshot cutoffs, and CLI simulation arguments now fail closed on malformed, future-issued, or ambiguous input.
 - License and package checks now resolve the repository from their script location and include nested installed dependencies.
+- `npm run verify` now runs `scripts/check-dependencies.mjs`, which fails closed when an installed dependency falls inside a recorded advisory window, when a manifest cannot be parsed, or when the dependency tree is absent. An `overrides` floor keeps a clean install resolved above the fast-uri advisory window.
 
 ### Security
 
+- Upgraded the transitive `fast-uri` dependency out of the 3.0.0 to 3.1.5 URI parsing advisory window (GHSA-5jgf-p345-68v8, GHSA-7p8r-x3mc-p8w7, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp), which covers host confusion and server-side request forgery through URI normalization.
 - Removed the remote-binding escape hatch from the API and CLI. The reference server now requires a loopback bind and rejects non-loopback peers, mismatched Host headers, and foreign Origins before routing.
 - Detached proof verification now requires canonical protected-header bytes, report rendering escapes every table value, and appeal replay rejects repeated genesis events.
 
