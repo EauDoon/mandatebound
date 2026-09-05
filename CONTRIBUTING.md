@@ -11,6 +11,10 @@ npm run verify
 
 Node.js 22.12 or newer is required.
 
+## Dependency advisories
+
+`scripts/check-dependencies.mjs` compares every installed package against the advisory windows recorded at the top of that script, and runs as part of `npm run verify`. It fails closed on a vulnerable version, an unreadable manifest, or a missing dependency tree. When a dependency needs a minimum safe version, add an entry there with a window no wider than the published advisory, and keep any matching `overrides` floor in `package.json` at or above the recorded fixed version.
+
 ## Pull requests
 
 Keep changes narrow and explain:
