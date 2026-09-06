@@ -22,6 +22,11 @@ test("conformance statement names the exact evidence-import profile and its limi
     byId.get("ap2_0_2_0_dispute_evidence_resolution").boundary,
     /never a claim outcome/u,
   );
+  assert.equal(byId.get("external_evidence_review_v1").status, "supported");
+  assert.match(
+    byId.get("external_evidence_review_v1").boundary,
+    /never re-verified here/u,
+  );
   assert.equal(byId.get("ucp_mcp_transport").status, "deferred");
   assert.equal(byId.get("ucp_a2a_transport").status, "deferred");
   assert.equal(byId.get("external_trust_auto_promotion").status, "unsupported");
