@@ -48,6 +48,7 @@ import {
   validatePolicyPack,
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml } from "./report.js";
+import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
 import { parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
@@ -143,6 +144,7 @@ const CLI_COMMANDS = Object.freeze([
   { name: "appeal", summary: "Append an appeal event" },
   { name: "replay", summary: "Replay an appeal event history" },
   { name: "simulate", summary: "Run a named synthetic scenario" },
+  { name: "review", summary: "Bind external source evidence to a review record" },
   { name: "serve", summary: "Listen on loopback with the reference API" },
   { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack" },
   { name: "policy", summary: "Validate, test, or diff a policy pack" },
@@ -152,7 +154,7 @@ const CLI_COMMANDS = Object.freeze([
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
 const CLI_USAGE =
-  "mandatebound <verify|decide|explain|appeal|replay|simulate|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]";
+  "mandatebound <verify|decide|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]";
 const CLI_INPUT_HELP =
   "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
@@ -637,6 +639,24 @@ export async function runCli(
         const result = await simulateScenario(scenario);
         writeJson(stdout, { ok: true, result });
         return CLI_EXIT.SUCCESS;
+      }
+      case "review": {
+        assertOutputFormat(args, ["json"]);
+        assertAllowedOptions(args, ["input"]);
+        const input = await readInput(requireSingleInput(args), stdin);
+        let result;
+        try {
+          result = reviewExternalEvidence(input);
+        } catch (error) {
+          if (error instanceof ReviewInputError) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, error.message, { cause: error });
+          }
+          throw error;
+        }
+        writeJson(stdout, { ok: result.verdict === "recorded", result });
+        if (result.verdict === "recorded") return CLI_EXIT.SUCCESS;
+        if (result.verdict === "conflicting") return CLI_EXIT.CONFLICT;
+        return CLI_EXIT.INVALID;
       }
       case "serve": {
         assertOutputFormat(args, ["json"]);

@@ -4,6 +4,10 @@ All notable changes are documented here.
 
 ## Unreleased corrective candidate
 
+### Added
+
+- New `review` CLI command binds external source evidence to a deterministic review record. It digest-binds caller-supplied evidence bytes to anchors, extracts the source action identity and receipt outcome, cross-checks caller-asserted upstream verification, and reports `recorded`, `conflicting`, or `unsupported` verdicts with stable exit codes. Source truth stays unknown, legal effect stays not determined, and no rail signatures are re-verified here: upstream validity remains a caller assertion over separately supplied trust inputs.
+
 ### Changed
 
 - Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.

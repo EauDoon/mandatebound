@@ -11,6 +11,7 @@ export * from "./domain.js";
 export * from "./policy.js";
 export * from "./policy-tools.js";
 export * from "./report.js";
+export * from "./review.js";
 export * from "./simulator.js";
 export * from "./store.js";
 export * from "./strict-json.js";
