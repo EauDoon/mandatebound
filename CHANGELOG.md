@@ -6,7 +6,7 @@ All notable changes are documented here.
 
 ### Added
 
-- New `review` CLI command binds external source evidence to a deterministic review record. It digest-binds caller-supplied evidence bytes to anchors, extracts the source action identity and receipt outcome, cross-checks caller-asserted upstream verification, and reports `recorded`, `conflicting`, or `unsupported` verdicts with stable exit codes. Source truth stays unknown, legal effect stays not determined, and no rail signatures are re-verified here: upstream validity remains a caller assertion over separately supplied trust inputs.
+- New `review` CLI command binds external source evidence to a deterministic review record, declared as the supported `external_evidence_review_v1` capability in the conformance statement. It digest-binds caller-supplied evidence bytes to anchors, extracts the source action identity and receipt outcome, cross-checks caller-asserted upstream verification, and reports `recorded`, `conflicting`, or `unsupported` verdicts with stable exit codes. Source truth stays unknown, legal effect stays not determined, and no rail signatures are re-verified here: upstream validity remains a caller assertion over separately supplied trust inputs.
 
 ### Changed
 

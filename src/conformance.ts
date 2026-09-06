@@ -65,6 +65,12 @@ const CAPABILITIES: readonly CapabilityDeclaration[] = Object.freeze([
     boundary: "The Pack is sensitive, and imported revocation states are reports rather than authenticated protocol facts.",
   }),
   Object.freeze({
+    id: "external_evidence_review_v1",
+    status: "supported",
+    scope: "Digest-bind caller-supplied external source evidence to a deterministic review record with recorded, conflicting, and unsupported verdicts.",
+    boundary: "Source truth stays unknown, legal effect stays not determined, and upstream validity remains a caller assertion; source signatures are never re-verified here.",
+  }),
+  Object.freeze({
     id: "ucp_mcp_transport",
     status: "deferred",
     scope: "UCP transport over MCP.",
