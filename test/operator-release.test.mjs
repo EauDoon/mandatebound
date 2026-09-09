@@ -4,7 +4,8 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage } from "../dist/operator-review.js";
+import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
 function invocation(fixture = operatorFixture()) {
@@ -28,6 +29,27 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+function removedEnvelope(fixture) {
+  const { casePackDigest: ignored, ...material } = fixture.pack;
+  return { ...fixture, pack: createMandateBoundCasePack({ ...material, protocolEvidence: material.protocolEvidence.slice(1) }) };
+}
+
+test("coverage comparison locates lost requirements under unchanged coverage pins", async () => {
+  const fixture = operatorFixture();
+  const revised = removedEnvelope(fixture);
+  const before = { casePack: fixture.pack, anchors: fixture.anchors };
+  const after = { casePack: revised.pack, anchors: revised.anchors };
+  const result = compareCaseCoverage(before, after);
+  assert.equal(result.comparable, true);
+  assert.equal(result.hasRegression, true);
+  assert.equal(result.changes[0].requirementId, "requirement.alpha");
+  assert.deepEqual(compareCaseCoverage(before, before).changes, []);
+  assert.equal(compareCaseCoverage(before, { casePack: null, anchors: fixture.anchors }).comparable, false);
+  assert.equal((await cli(["operator", "coverage-diff"], { before: invocation(fixture), after: invocation(revised) })).code, 5);
+  assert.equal((await cli(["operator", "coverage-diff"], { before: invocation(fixture), after: invocation(fixture) })).code, 0);
+  assert.equal((await cli(["operator", "coverage-diff"], {})).code, 3);
 });
 
 test("queue CSV preserves task-free cases and neutralizes hostile presentation fields", async () => {

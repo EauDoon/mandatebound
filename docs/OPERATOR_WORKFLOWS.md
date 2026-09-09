@@ -65,6 +65,13 @@ A lost satisfied assurance status or a previously valid case becoming invalid is
 
 ## Audit a persisted snapshot
 
+`operator coverage-diff` accepts the same `{before, after}` invocations and
+compares individual requirement statuses and matched-envelope counts. It requires
+the same case ID and coverage anchors; noncomparable inputs exit 3. Losing a
+previously satisfied requirement exits 5, even if the aggregate coverage status
+was already unresolved. Other changes are reported without a confidence score.
+Both assessment times and overall verification results remain visible.
+
 Provide an existing JSONL file and a JSON input containing `{}` or `{checkpoint: {sequence, headHash}}`. Retain checkpoints independently before an incident. Deriving an anchor from the file currently under investigation cannot establish that historical records were never removed.
 
 ```bash

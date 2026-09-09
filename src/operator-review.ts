@@ -46,3 +46,28 @@ export function inventoryCaseEvidence(input: CaseAssessmentInput) {
     findings: report.findings,
   };
 }
+
+function comparisonContext(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const left = createCaseReport(before.casePack, before.anchors);
+  const right = createCaseReport(after.casePack, after.anchors);
+  const comparable = left.casePackId !== undefined && left.casePackId === right.casePackId
+    && before.anchors.coveragePolicyDigest === after.anchors.coveragePolicyDigest
+    && before.anchors.coverageContractDigest === after.anchors.coverageContractDigest;
+  return { left, right, comparable };
+}
+
+/** Same-case, same-coverage-anchor changes, not a confidence score. */
+export function compareCaseCoverage(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const { left, right, comparable } = comparisonContext(before, after);
+  const old = new Map(left.coverage.map((item) => [item.requirementId, item]));
+  const current = new Map(right.coverage.map((item) => [item.requirementId, item]));
+  const changes = comparable ? [...new Set([...old.keys(), ...current.keys()])].sort().flatMap((id) => {
+    const previous = old.get(id) ?? null;
+    const next = current.get(id) ?? null;
+    return JSON.stringify(previous) === JSON.stringify(next) ? [] : [{ requirementId: id, before: previous, after: next,
+      regression: previous?.status === "satisfied" && next?.status !== "satisfied" }];
+  }) : [];
+  return { format: "MandateBoundCoverageComparison/v1" as const, comparable,
+    legalEffect: "not-determined" as const, beforeAssessedAt: left.assessedAt, afterAssessedAt: right.assessedAt,
+    beforeValid: left.valid, afterValid: right.valid, changes, hasRegression: changes.some((item) => item.regression) };
+}
