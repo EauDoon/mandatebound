@@ -6,6 +6,46 @@ export interface CaseAssessmentInput {
   readonly anchors: CasePackVerificationAnchors;
 }
 
+export class OperatorInputError extends Error {
+  readonly code = "ALB_OPERATOR_INPUT";
+  constructor(message: string) {
+    super(message);
+    this.name = "OperatorInputError";
+  }
+}
+
+export interface NamedCaseAssessment extends CaseAssessmentInput {
+  readonly id: string;
+}
+
+export const MAX_ASSESSMENT_CASES = 100;
+
+/** Input order is preserved and each case retains its own independently supplied anchors. */
+export function assessCases(inputs: readonly NamedCaseAssessment[]) {
+  if (!Array.isArray(inputs) || inputs.length === 0 || inputs.length > MAX_ASSESSMENT_CASES) {
+    throw new OperatorInputError("Provide between 1 and 100 cases.");
+  }
+  const ids = new Set<string>();
+  for (const input of inputs) {
+    if (input === null || typeof input !== "object" || typeof input.id !== "string"
+      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.id) || ids.has(input.id)
+      || !Object.hasOwn(input, "casePack") || !Object.hasOwn(input, "anchors")
+      || Object.keys(input).some((key) => !["id", "casePack", "anchors"].includes(key))) {
+      throw new OperatorInputError("Each case requires a unique ASCII id, casePack, and anchors.");
+    }
+    ids.add(input.id);
+  }
+  const cases = inputs.map((input) => ({ id: input.id, report: createCaseReport(input.casePack, input.anchors) }));
+  const verified = cases.filter((item) => item.report.valid).length;
+  return {
+    format: "MandateBoundCaseBatch/v1" as const,
+    valid: verified === cases.length,
+    legalEffect: "not-determined" as const,
+    summary: { total: cases.length, verified, needsReview: cases.length - verified },
+    cases,
+  };
+}
+
 export interface CaseTriageItem {
   readonly area: string;
   readonly status: CasePackStatus;

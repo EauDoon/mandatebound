@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { triageCase, createEvidenceChecklist } from "../dist/operator.js";
+import { triageCase, createEvidenceChecklist, assessCases } from "../dist/operator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
 
 test("triage re-verifies evidence and never asserts source truth", () => {
@@ -36,4 +36,19 @@ test("checklist retains satisfied requirements and exposes missing raw evidence"
   assert.ok(missing.assuranceTasks.length > 0);
   assert.ok(missing.assuranceTasks.some((item) => item.status === "unknown"));
   assert.equal(missing.globalCompleteness, "not-established");
+});
+
+test("batch assessment preserves identifiers and does not hide invalid cases", () => {
+  const { pack, anchors } = operatorFixture();
+  const inputs = [{ id: "ready", casePack: pack, anchors }, { id: "absent", casePack: null, anchors }];
+  const batch = assessCases(inputs);
+  assert.deepEqual(batch.summary, { total: 2, verified: 1, needsReview: 1 });
+  assert.equal(batch.valid, false);
+  assert.deepEqual(batch.cases.map((item) => item.id), ["ready", "absent"]);
+  assert.throws(() => assessCases([]), /between/);
+  assert.throws(() => assessCases(Array(101).fill(inputs[0])), /between/);
+  assert.throws(() => assessCases([inputs[0], inputs[0]]), /unique/);
+  assert.throws(() => assessCases([{ ...inputs[0], id: "<script>" }]), /ASCII/);
+  assert.throws(() => assessCases([{ ...inputs[0], extra: true }]), /unique/);
+  assert.throws(() => assessCases([null]), /unique/);
 });
