@@ -2,6 +2,16 @@
 
 All notable changes are documented here.
 
+## Local operator release candidate
+
+- Add stateless native decision preview and metadata-only raw-evidence inventory.
+- Prioritize case review queues and export formula-neutralized CSV task rows.
+- Compare individual coverage requirements, envelope eligibility, finding counts
+  and caller-supplied anchor context without upgrading assurance.
+- Create deterministic assessment receipts and recheck them against independently
+  retained digests, preserving invalid results and exposing changed inputs.
+- Preserve 1.2.0 release pins, native engine/protocol bytes and historical AP2 packs.
+
 ## Unreleased corrective candidate
 
 ### Added

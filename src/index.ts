@@ -1,5 +1,6 @@
 export * from "./appeals.js";
 export * from "./operator.js";
+export * from "./operator-review.js";
 export * from "./store-audit.js";
 export * from "./ap2-dispute.js";
 export * from "./api.js";

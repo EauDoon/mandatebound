@@ -137,6 +137,14 @@ The demo uses synthetic identities and ephemeral test keys. It does not contact 
 
 For prioritized triage, evidence checklists, batch verification, assurance comparisons, Markdown and CSV exports, and read-only persisted-store audits, see the [local operator workflows](docs/OPERATOR_WORKFLOWS.md).
 
+The local review workflow also provides stateless native `preview`, protocol
+reference inventory, prioritized queues with CSV tasks, requirement/envelope/finding
+comparisons, explicit anchor-context differences and independently anchored
+assessment receipts. Every view reuses the existing verification boundary; missing
+or conflicting evidence never becomes a legal finding or permission to transact.
+See the [operator release notes](docs/OPERATOR_RELEASE.md) for compatibility and
+the complete command map.
+
 `mandatebound --help` prints JSON usage, the command list, and the JSON input convention. Unknown commands exit `2`. JSON commands require one document from `--input PATH`, a positional path, or stdin (`-`). A missing path on an interactive terminal and an empty document fail closed without leaking file paths.
 
 The examples below use the installed `mandatebound` binary. From a source checkout, run `npm run build` and replace `mandatebound` with `node dist/cli.js`.

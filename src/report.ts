@@ -224,7 +224,7 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
   return `${lines.join("\n")}\n`;
 }
 
-function csvCell(value: string | number): string {
+export function csvCell(value: string | number): string {
   const text = String(value);
   // Quoting alone does not prevent spreadsheet formulas, including whitespace-prefixed ones.
   const safe = /^[\s\u0000-\u001f]*[=+@-]/u.test(text) || /^[\t\r\n]/u.test(text) ? `'${text}` : text;
