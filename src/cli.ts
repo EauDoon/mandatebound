@@ -49,6 +49,7 @@ import {
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, triageCase } from "./operator.js";
+import { inventoryCaseEvidence } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
@@ -865,7 +866,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
         assertOutputFormat(args, ["json"]);
         const input = asObject(await readInput(invocation.path, stdin));
@@ -901,7 +902,8 @@ export async function runCli(
           return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT : CLI_EXIT.SUCCESS;
         }
         const decoded = decodeCasePackInvocation(input);
-        const result = invocation.action === "triage" ? triageCase(decoded) : createEvidenceChecklist(decoded);
+        const result = invocation.action === "inventory" ? inventoryCaseEvidence(decoded)
+          : invocation.action === "triage" ? triageCase(decoded) : createEvidenceChecklist(decoded);
         writeJson(stdout, { ok: result.valid, result });
         return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }

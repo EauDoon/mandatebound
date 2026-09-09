@@ -27,6 +27,13 @@ When no coverage requirements are reported, CSV still contains one metadata row 
 
 ## Assess a queue
 
+`operator inventory` accepts the same case invocation and lists each protocol
+envelope's declared raw reference, expected digest/length and supplied-byte match.
+It lists other supplied reference IDs separately; these may belong to external
+trust material. It does not fetch missing bytes or expose raw bodies/reference
+locations. Invalid CasePack shapes yield no claimed inventory. Duplicate or
+malformed supplied raw references fail instead of selecting one copy.
+
 `operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases and share the CLI's 4 MiB document cap. Split larger queues into smaller files.
 
 ```bash
