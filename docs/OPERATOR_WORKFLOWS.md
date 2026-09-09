@@ -25,14 +25,14 @@ Reports contain metadata and verifier findings, not raw evidence. Treat identifi
 
 When no coverage requirements are reported, CSV still contains one metadata row with the case identifier, assessment time, verification result, and assurance boundaries. Its requirement, status, and matched-envelope cells are empty. An invalid empty report therefore remains visibly invalid in the exported file.
 
-## Assess a queue
-
 `operator inventory` accepts the same case invocation and lists each protocol
 envelope's declared raw reference, expected digest/length and supplied-byte match.
 It lists other supplied reference IDs separately; these may belong to external
 trust material. It does not fetch missing bytes or expose raw bodies/reference
 locations. Invalid CasePack shapes yield no claimed inventory. Duplicate or
 malformed supplied raw references fail instead of selecting one copy.
+
+## Assess a queue
 
 `operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases and share the CLI's 4 MiB document cap. Split larger queues into smaller files.
 
@@ -63,14 +63,14 @@ mandatebound operator compare --input comparison.json
 
 A lost satisfied assurance status or a previously valid case becoming invalid is flagged as a regression. This is a comparison of verifier assurance dimensions, not proof that facts improved or worsened. A change between two unresolved dimensions remains a change without an ordinal confidence score. Use `casepack diff` to inspect artifact-level additions, removals, and modifications.
 
-## Audit a persisted snapshot
-
 `operator coverage-diff` accepts the same `{before, after}` invocations and
 compares individual requirement statuses and matched-envelope counts. It requires
 the same case ID and coverage anchors; noncomparable inputs exit 3. Losing a
 previously satisfied requirement exits 5, even if the aggregate coverage status
 was already unresolved. Other changes are reported without a confidence score.
 Both assessment times and overall verification results remain visible.
+If the current assessment is invalid but that specific view shows no regression,
+the targeted comparison still exits 3 with `ok: false`.
 
 `operator envelope-diff` uses that same comparison input and boundary to show
 added, removed or changed per-envelope integrity, upstream validity and evidence
@@ -92,6 +92,8 @@ context with exit 5. It does not authenticate caller pins or rank trust changes.
 Use this alongside assurance comparisons to distinguish changed evidence from
 changed verification context.
 
+## Audit a persisted snapshot
+
 Provide an existing JSONL file and a JSON input containing `{}` or `{checkpoint: {sequence, headHash}}`. Retain checkpoints independently before an incident. Deriving an anchor from the file currently under investigation cannot establish that historical records were never removed.
 
 ```bash
@@ -101,8 +103,6 @@ mandatebound operator audit --store snapshot.jsonl --input checkpoint.json
 Audit opens the existing file read-only. It neither creates a store nor takes a writer lock, repairs records, or appends data. It checks strict JSON, artifact bindings, hash chain, appeal transitions, and optional checkpoint completeness. Missing files fail without creating anything. Detected concurrent changes fail; use a stable snapshot for repeatable results. A file size and modification-time check cannot guarantee atomic reads against a hostile concurrent writer.
 
 Without a checkpoint, completeness is `unproven` even when the local chain is valid. A matching independent checkpoint establishes completeness only relative to that checkpoint. Defaults are 32 MiB, 100,000 records, and 1 MiB per record. The SDK accepts tighter limits. Empty stores are locally valid but have no checkpoint head.
-
-## Exit codes and SDK
 
 ## Preserve an assessment receipt
 
@@ -118,6 +118,20 @@ exits 3. The receipt contains no evidence bodies. Retain its `receiptDigest`
 independently alongside the reviewed package revision. A digest is not a signature,
 permission, proof of source truth or proof that an independent reviewer acted.
 
+`operator receipt-verify --expected-receipt-digest sha256:...` consumes
+`{invocation: {casePack, anchors}, receipt}`. Supply the raw receipt object from
+the earlier result, not the surrounding CLI envelope. Verification recomputes the
+receipt's own digest against the independently retained expected digest, reruns
+the assessment and compares source, anchor, report and version pins. It never
+reads paths or retrieves evidence from the receipt.
+
+A malformed, unanchored or currently invalid assessment exits 3. A valid current
+assessment with changed receipt fields exits 5. A matching failed assessment may
+have `matches: true` but retains `valid: false` and exit 3. Replacing a receipt and
+its expected digest together cannot establish historical consistency. Archive the
+reviewed package revision: future validator releases can deliberately change the
+assessment or version pin and require review.
+
 ## Exit codes and SDK
 
 | Workflow result | Exit code |
@@ -131,6 +145,13 @@ permission, proof of source truth or proof that an independent reviewer acted.
 An unresolved native policy decision remains a successful evaluation. These operator exit codes report evidence verification, not a change to the existing `decide` contract.
 
 The root package exports `triageCase`, `createEvidenceChecklist`, `assessCases`, `compareCaseAssessments`, and `auditJsonlStore`. The report entry point also exports `renderCaseReportMarkdown` and `renderCaseCoverageCsv`. SDK assessment anchors contain raw `Uint8Array` bytes; base64 conversion applies only to the JSON CLI boundary. Report renderers accept derived reports as presentation data; re-verify the source CasePack before relying on their contents.
+
+Additional root exports are `inventoryCaseEvidence`, `createCaseReviewQueue`,
+`renderCaseReviewQueueCsv`, `compareCaseCoverage`, `compareCaseEnvelopes`,
+`compareCaseFindings`, `compareCaseAnchorContext`, `createAssessmentReceipt` and
+`verifyAssessmentReceipt`. The new raw-reference metadata views accept at most
+1,024 unique ASCII reference IDs (1 to 128 characters), 16 MiB per byte array and
+64 MiB total in memory; the JSON CLI retains its smaller 4 MiB input cap.
 
 Run the self-cleaning persistence demonstration from a source checkout:
 

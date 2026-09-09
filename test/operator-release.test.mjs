@@ -4,7 +4,7 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "../dist/operator-review.js";
 import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
@@ -29,6 +29,33 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("receipt verification requires an independent anchor and detects tampering and assessment drift", async () => {
+  const fixture = operatorFixture();
+  const input = { casePack: fixture.pack, anchors: fixture.anchors };
+  const receipt = createAssessmentReceipt(input);
+  const digest = receipt.receiptDigest;
+  assert.equal(verifyAssessmentReceipt(input, receipt, digest).matches, true);
+  assert.equal(verifyAssessmentReceipt(input, { ...receipt, valid: false }, digest).anchored, false);
+  assert.equal(verifyAssessmentReceipt(input, receipt, "sha256:" + "0".repeat(64)).matches, false);
+  assert.throws(() => verifyAssessmentReceipt(input, receipt, "bad"));
+  assert.throws(() => verifyAssessmentReceipt(input, { ...receipt, extra: true }, digest));
+  assert.throws(() => verifyAssessmentReceipt(input, { ...receipt, legalEffect: "decided" }, digest));
+  const later = { ...input, anchors: { ...input.anchors, asOf: "2026-07-24T00:00:00.000Z" } };
+  assert.ok(verifyAssessmentReceipt(later, receipt, digest).differences.includes("anchorDigest"));
+  const invalid = { casePack: null, anchors: input.anchors };
+  const failedReceipt = createAssessmentReceipt(invalid);
+  const verifiedFailure = verifyAssessmentReceipt(invalid, failedReceipt, failedReceipt.receiptDigest);
+  assert.equal(verifiedFailure.matches, true);
+  assert.equal(verifiedFailure.valid, false);
+  const jsonInput = { invocation: invocation(fixture), receipt };
+  const args = ["operator", "receipt-verify", "--expected-receipt-digest", digest];
+  assert.equal((await cli(args, jsonInput)).code, 0);
+  assert.equal((await cli(["operator", "receipt-verify"], jsonInput)).code, 2);
+  assert.equal((await cli(args, { ...jsonInput, extra: true })).code, 3);
+  assert.equal((await cli(args, { ...jsonInput, receipt: { ...receipt, valid: false } })).code, 3);
+  assert.equal((await cli(args, { ...jsonInput, invocation: { ...jsonInput.invocation, anchors: { ...jsonInput.invocation.anchors, asOf: later.anchors.asOf } } })).code, 5);
 });
 
 test("assessment receipts bind the case, exact evidence, anchors and verifier result", async () => {
@@ -111,6 +138,11 @@ test("coverage comparison locates lost requirements under unchanged coverage pin
   assert.equal((await cli(["operator", "coverage-diff"], { before: invocation(fixture), after: invocation(revised) })).code, 5);
   assert.equal((await cli(["operator", "coverage-diff"], { before: invocation(fixture), after: invocation(fixture) })).code, 0);
   assert.equal((await cli(["operator", "coverage-diff"], {})).code, 3);
+  const json = invocation(fixture);
+  const missingRaw = { ...json, anchors: { ...json.anchors, rawEvidence: [] } };
+  const invalidUnchangedCoverage = await cli(["operator", "coverage-diff"], { before: missingRaw, after: missingRaw });
+  assert.equal(invalidUnchangedCoverage.code, 3);
+  assert.equal(invalidUnchangedCoverage.json().ok, false);
 });
 
 test("queue CSV preserves task-free cases and neutralizes hostile presentation fields", async () => {

@@ -49,7 +49,7 @@ import {
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt } from "./operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
@@ -136,6 +136,7 @@ const VALUE_OPTIONS = new Set([
   "--input",
   "--format",
   "--expected-pack-digest",
+  "--expected-receipt-digest",
 ]);
 const FLAG_OPTIONS = new Set(["--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
@@ -153,10 +154,10 @@ const CLI_COMMANDS = Object.freeze([
   { name: "serve", summary: "Listen on loopback with the reference API" },
   { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack" },
   { name: "policy", summary: "Validate, test, or diff a policy pack" },
-  { name: "case-report", summary: "Render a CasePack report as JSON or HTML" },
+  { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
   { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence" },
   { name: "conformance", summary: "Print the bounded capability statement" },
-  { name: "operator", summary: "Triage, checklist, batch, compare, or audit local evidence" },
+  { name: "operator", summary: "Inspect evidence, prioritize review, compare revisions, anchor receipts or audit snapshots" },
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
 const CLI_USAGE =
@@ -866,10 +867,23 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt"]);
-        assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify"]);
+        assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
+          : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
         const input = asObject(await readInput(invocation.path, stdin));
+        if (invocation.action === "receipt-verify") {
+          const expected = args.options["expected-receipt-digest"];
+          if (typeof expected !== "string" || !isSha256Digest(expected)) {
+            throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Receipt verification requires an independently retained --expected-receipt-digest.");
+          }
+          if (!hasExactKeys(input, ["invocation", "receipt"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Receipt verification requires invocation and receipt.");
+          }
+          const result = verifyAssessmentReceipt(decodeCasePackInvocation(input["invocation"]), input["receipt"], expected);
+          writeJson(stdout, { ok: result.matches && result.valid, result });
+          return !result.anchored || !result.valid ? CLI_EXIT.INVALID : result.matches ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+        }
         if (invocation.action === "audit") {
           if (!hasExactKeys(input, [], ["checkpoint"]) || typeof args.options["store"] !== "string") {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Audit requires --store and an optional checkpoint object.");
@@ -912,8 +926,10 @@ export async function runCli(
             : invocation.action === "envelope-diff" ? compareCaseEnvelopes
             : invocation.action === "finding-diff" ? compareCaseFindings : compareCaseAssessments;
           const result = compare(decodeCasePackInvocation(input["before"]), decodeCasePackInvocation(input["after"]));
-          writeJson(stdout, { ok: result.comparable && !result.hasRegression, result });
-          return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT : CLI_EXIT.SUCCESS;
+          const currentInvalid = "afterValid" in result && !result.afterValid;
+          writeJson(stdout, { ok: result.comparable && !result.hasRegression && !currentInvalid, result });
+          return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT
+            : currentInvalid ? CLI_EXIT.INVALID : CLI_EXIT.SUCCESS;
         }
         const decoded = decodeCasePackInvocation(input);
         const result = invocation.action === "receipt" ? createAssessmentReceipt(decoded)

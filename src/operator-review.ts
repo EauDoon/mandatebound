@@ -153,3 +153,29 @@ export function createAssessmentReceipt(input: CaseAssessmentInput) {
   };
   return { ...material, receiptDigest: sha256Digest(material) };
 }
+
+/** The expected digest must come from a record retained independently of this receipt. */
+export function verifyAssessmentReceipt(input: CaseAssessmentInput, receipt: unknown, expectedReceiptDigest: string) {
+  if (!isSha256Digest(expectedReceiptDigest) || receipt === null || typeof receipt !== "object" || Array.isArray(receipt)) {
+    throw new OperatorInputError("Receipt and independently retained digest are required.");
+  }
+  const current = createAssessmentReceipt(input);
+  const record = receipt as Record<string, unknown>;
+  if (Object.keys(record).length !== Object.keys(current).length
+    || Object.keys(current).some((key) => !Object.hasOwn(record, key))
+    || record["format"] !== current.format || typeof record["valid"] !== "boolean"
+    || ["releaseVersion", "engineVersion", "protocolVersion"].some((key) => typeof record[key] !== "string")
+    || ["caseInputDigest", "anchorDigest", "reportDigest", "receiptDigest"].some((key) => !isSha256Digest(record[key]))
+    || record["legalEffect"] !== "not-determined" || record["sourceTruth"] !== "unknown"
+    || record["globalCompleteness"] !== "not-established") {
+    throw new OperatorInputError("Assessment receipt is invalid.");
+  }
+  const { receiptDigest, ...material } = record;
+  const anchored = receiptDigest === expectedReceiptDigest && sha256Digest(material) === expectedReceiptDigest;
+  const differences = anchored ? (Object.keys(current) as (keyof typeof current)[])
+    .filter((key) => key !== "receiptDigest" && record[key] !== current[key]) : ["receipt_anchor"];
+  return { format: "MandateBoundAssessmentReceiptVerification/v1" as const,
+    anchored, matches: differences.length === 0, valid: current.valid, differences,
+    legalEffect: "not-determined" as const, sourceTruth: "unknown" as const,
+    note: "A matching anchored receipt establishes assessment consistency, not evidence truth or independent review." };
+}
