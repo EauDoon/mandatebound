@@ -79,6 +79,8 @@ export function triageCase(input: CaseAssessmentInput) {
   const report = createCaseReport(input.casePack, input.anchors);
   return {
     format: "MandateBoundCaseTriage/v1" as const,
+    ...(report.casePackId === undefined ? {} : { casePackId: report.casePackId }),
+    ...(report.casePackDigest === undefined ? {} : { casePackDigest: report.casePackDigest }),
     assessedAt: report.assessedAt,
     valid: report.valid,
     legalEffect: "not-determined" as const,
@@ -94,6 +96,9 @@ export function createEvidenceChecklist(input: CaseAssessmentInput) {
   const report = createCaseReport(input.casePack, input.anchors);
   return {
     format: "MandateBoundEvidenceChecklist/v1" as const,
+    ...(report.casePackId === undefined ? {} : { casePackId: report.casePackId }),
+    ...(report.casePackDigest === undefined ? {} : { casePackDigest: report.casePackDigest }),
+    assessedAt: report.assessedAt,
     valid: report.valid,
     legalEffect: "not-determined" as const,
     globalCompleteness: "not-established" as const,
@@ -124,8 +129,10 @@ export function compareCaseAssessments(before: CaseAssessmentInput, after: CaseA
     format: "MandateBoundAssessmentComparison/v1" as const,
     comparable,
     legalEffect: "not-determined" as const,
-    before: { assessedAt: left.assessedAt, valid: left.valid },
-    after: { assessedAt: right.assessedAt, valid: right.valid },
+    before: { assessedAt: left.assessedAt, valid: left.valid,
+      ...(left.casePackDigest === undefined ? {} : { casePackDigest: left.casePackDigest }) },
+    after: { assessedAt: right.assessedAt, valid: right.valid,
+      ...(right.casePackDigest === undefined ? {} : { casePackDigest: right.casePackDigest }) },
     changes,
     hasRegression: comparable && ((left.valid && !right.valid) || changes.some((item) => item.regression)),
     reason: comparable ? "Same case identifier and coverage anchors." : "Case identifier or coverage anchors differ or are unavailable.",

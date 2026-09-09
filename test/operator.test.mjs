@@ -9,6 +9,8 @@ test("triage re-verifies evidence and never asserts source truth", () => {
   const before = structuredClone(pack);
   const result = triageCase({ casePack: pack, anchors });
   assert.equal(result.valid, true);
+  assert.equal(result.casePackId, pack.casePackId);
+  assert.equal(result.casePackDigest, pack.casePackDigest);
   assert.deepEqual(result.items, []);
   assert.equal(result.sourceTruth, "unknown");
   assert.equal(result.legalEffect, "not-determined");
@@ -31,6 +33,8 @@ test("checklist retains satisfied requirements and exposes missing raw evidence"
   const { pack, anchors } = operatorFixture();
   const ready = createEvidenceChecklist({ casePack: pack, anchors });
   assert.equal(ready.requirements.length, 2);
+  assert.equal(ready.casePackDigest, pack.casePackDigest);
+  assert.equal(ready.assessedAt, anchors.asOf);
   assert.ok(ready.requirements.every((item) => !item.needsReview));
   const missing = createEvidenceChecklist({ casePack: pack, anchors: { ...anchors, rawEvidence: [] } });
   assert.equal(missing.valid, false);
@@ -59,6 +63,7 @@ test("comparison identifies assurance regression without comparing unrelated cov
   const before = { casePack: pack, anchors };
   const after = { casePack: pack, anchors: { ...anchors, rawEvidence: [] } };
   assert.equal(compareCaseAssessments(before, before).hasRegression, false);
+  assert.equal(compareCaseAssessments(before, before).before.casePackDigest, pack.casePackDigest);
   assert.equal(compareCaseAssessments(before, after).hasRegression, true);
   assert.equal(compareCaseAssessments(after, before).hasRegression, false);
   assert.ok(compareCaseAssessments(before, after).changes.length > 0);
