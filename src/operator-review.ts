@@ -1,5 +1,5 @@
 import type { CasePackVerificationAnchors, MandateBoundCasePack } from "./casepack.js";
-import { sha256Bytes } from "./canonical.js";
+import { isSha256Digest, sha256Bytes } from "./canonical.js";
 import { OperatorInputError, type CaseAssessmentInput } from "./operator.js";
 import { createCaseReport } from "./report.js";
 
@@ -20,6 +20,17 @@ function rawSnapshots(anchors: CasePackVerificationAnchors) {
     if (bytes > 67_108_864) throw new OperatorInputError("Raw evidence total exceeds the limit.");
     return { referenceId: item.referenceId, byteLength: item.bytes.byteLength, digest: sha256Bytes(item.bytes) };
   }).sort((left, right) => left.referenceId < right.referenceId ? -1 : left.referenceId > right.referenceId ? 1 : 0);
+}
+
+function anchorContext(anchors: CasePackVerificationAnchors) {
+  if (typeof anchors.asOf !== "string" || !isSha256Digest(anchors.coveragePolicyDigest)
+    || !isSha256Digest(anchors.coverageContractDigest)
+    || (anchors.externalTrustSnapshotDigest !== undefined && !isSha256Digest(anchors.externalTrustSnapshotDigest))) {
+    throw new OperatorInputError("Assessment anchor metadata is invalid.");
+  }
+  return { asOf: anchors.asOf, coveragePolicyDigest: anchors.coveragePolicyDigest,
+    coverageContractDigest: anchors.coverageContractDigest,
+    externalTrustSnapshotDigest: anchors.externalTrustSnapshotDigest ?? null, rawEvidence: rawSnapshots(anchors) };
 }
 
 /** Metadata inventory only; referenced evidence is never retrieved. */
@@ -113,4 +124,17 @@ export function compareCaseFindings(before: CaseAssessmentInput, after: CaseAsse
     legalEffect: "not-determined" as const, beforeValid: left.valid, afterValid: right.valid,
     changes, hasRegression: changes.some((item) => item.afterCount > item.beforeCount),
     note: "New occurrences require review; disappearing findings do not establish source truth or closure." };
+}
+
+/** Context drift is shown explicitly and never silently treated as evidence improvement. */
+export function compareCaseAnchorContext(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const { left, right } = comparisonContext(before, after);
+  const old = anchorContext(before.anchors);
+  const current = anchorContext(after.anchors);
+  const changes = (Object.keys(old) as (keyof typeof old)[]).filter((key) => JSON.stringify(old[key]) !== JSON.stringify(current[key]));
+  return { format: "MandateBoundAnchorComparison/v1" as const,
+    sameCase: left.casePackId !== undefined && left.casePackId === right.casePackId,
+    valid: left.valid && right.valid, legalEffect: "not-determined" as const,
+    changed: changes.length > 0, changes, before: old, after: current,
+    note: "Context changes require review. Supplied anchors are not authenticated by this comparison." };
 }

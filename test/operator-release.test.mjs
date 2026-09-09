@@ -4,7 +4,7 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext } from "../dist/operator-review.js";
 import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
@@ -29,6 +29,22 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("anchor comparison exposes changed review context without raw bytes", async () => {
+  const fixture = operatorFixture();
+  const before = { casePack: fixture.pack, anchors: fixture.anchors };
+  const reordered = { ...before, anchors: { ...before.anchors, rawEvidence: [...before.anchors.rawEvidence].reverse() } };
+  assert.equal(compareCaseAnchorContext(before, reordered).changed, false);
+  const later = { ...before, anchors: { ...before.anchors, asOf: "2026-07-24T00:00:00.000Z" } };
+  const report = compareCaseAnchorContext(before, later);
+  assert.deepEqual(report.changes, ["asOf"]);
+  assert.equal(JSON.stringify(report).includes('"bytes"'), false);
+  assert.equal(compareCaseAnchorContext(before, { casePack: null, anchors: before.anchors }).sameCase, false);
+  assert.throws(() => compareCaseAnchorContext(before, { ...before, anchors: { ...before.anchors, coveragePolicyDigest: "bad" } }));
+  const input = invocation(fixture);
+  assert.equal((await cli(["operator", "anchor-diff"], { before: input, after: input })).code, 0);
+  assert.equal((await cli(["operator", "anchor-diff"], { before: input, after: { ...input, anchors: { ...input.anchors, asOf: later.anchors.asOf } } })).code, 5);
 });
 
 test("finding comparison tracks new occurrences without claiming invalid inputs are resolved", async () => {

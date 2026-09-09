@@ -84,6 +84,14 @@ new occurrences set the review-regression flag and exit 5. Disappearing findings
 are not proof of closure or truth. The result excludes evidence bodies and finding
 message text. Noncomparable cases exit 3 and never claim findings were resolved.
 
+`operator anchor-diff` compares assessment time, coverage pins, external trust
+pin and supplied raw-evidence digest/length metadata. Raw bodies never appear.
+Input order of unique raw references does not count as drift. The command checks
+both cases, rejects invalid or unrelated inputs with exit 3, and reports changed
+context with exit 5. It does not authenticate caller pins or rank trust changes.
+Use this alongside assurance comparisons to distinguish changed evidence from
+changed verification context.
+
 Provide an existing JSONL file and a JSON input containing `{}` or `{checkpoint: {sequence, headHash}}`. Retain checkpoints independently before an incident. Deriving an anchor from the file currently under investigation cannot establish that historical records were never removed.
 
 ```bash

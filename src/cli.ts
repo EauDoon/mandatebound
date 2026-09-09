@@ -49,7 +49,7 @@ import {
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings } from "./operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
@@ -866,7 +866,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
         const input = asObject(await readInput(invocation.path, stdin));
@@ -899,9 +899,14 @@ export async function runCli(
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }
-        if (["compare", "coverage-diff", "envelope-diff", "finding-diff"].includes(invocation.action)) {
+        if (["compare", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff"].includes(invocation.action)) {
           if (!hasExactKeys(input, ["before", "after"])) {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Comparison requires before and after invocations.");
+          }
+          if (invocation.action === "anchor-diff") {
+            const result = compareCaseAnchorContext(decodeCasePackInvocation(input["before"]), decodeCasePackInvocation(input["after"]));
+            writeJson(stdout, { ok: result.sameCase && result.valid && !result.changed, result });
+            return !result.sameCase || !result.valid ? CLI_EXIT.INVALID : result.changed ? CLI_EXIT.CONFLICT : CLI_EXIT.SUCCESS;
           }
           const compare = invocation.action === "coverage-diff" ? compareCaseCoverage
             : invocation.action === "envelope-diff" ? compareCaseEnvelopes
