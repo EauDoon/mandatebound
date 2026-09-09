@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { triageCase, createEvidenceChecklist, assessCases, compareCaseAssessments } from "../dist/operator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { createCaseReport, renderCaseReportMarkdown, renderCaseCoverageCsv } from "../dist/report.js";
+import { createCaseReport, renderCaseReportMarkdown, renderCaseCoverageCsv, renderCaseReportHtml } from "../dist/report.js";
 
 test("triage re-verifies evidence and never asserts source truth", () => {
   const { pack, anchors } = operatorFixture();
@@ -92,4 +92,23 @@ test("CSV covers requirements and neutralizes spreadsheet formulas", () => {
   const escaped = renderCaseCoverageCsv({ ...report, casePackId: 'a,"b' });
   assert.ok(escaped.includes('"a,""b"'));
   assert.equal(renderCaseCoverageCsv({ ...report, coverage: [] }).split("\r\n").length, 2);
+});
+
+test("HTML reports provide safe offline navigation, review summaries, and print styles", () => {
+  const { pack, anchors } = operatorFixture();
+  const report = createCaseReport(pack, anchors);
+  const html = renderCaseReportHtml(report);
+  assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /default-src 'none'/);
+  assert.match(html, /Verification passed/);
+  assert.match(html, /0 coverage requirements need review/);
+  assert.match(html, /@media print/);
+  assert.match(html, /Skip to report/);
+  for (const id of ["assurance", "coverage", "evidence", "findings"]) {
+    assert.ok(html.includes(`href="#${id}"`));
+    assert.ok(html.includes(`id="${id}"`));
+  }
+  const hostile = renderCaseReportHtml({ ...report, casePackId: '<script>alert("x")</script>', valid: false });
+  assert.ok(!hostile.includes("<script>"));
+  assert.match(hostile, /Review required/);
 });
