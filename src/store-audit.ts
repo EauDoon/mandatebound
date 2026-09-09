@@ -1,4 +1,5 @@
 import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { isSha256Digest } from "./canonical.js";
 import { parseStrictJson } from "./strict-json.js";
 import { DEFAULT_JSONL_STORE_LIMITS, StoreError, verifyStoreRecords,
@@ -19,7 +20,8 @@ export async function auditJsonlStore(path: string, checkpoint?: StoreCheckpoint
     || Object.keys(checkpoint).length !== 2)) {
     throw new StoreError("ALB_STORE_CHECKPOINT", "Audit checkpoint is invalid.");
   }
-  const handle = await open(path, "r").catch((error: unknown) => {
+  // A FIFO must not block before the descriptor can be rejected as non-regular.
+  const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch((error: unknown) => {
     throw new StoreError("ALB_STORE_OPEN", "Store snapshot could not be opened.", { cause: error });
   });
   try {

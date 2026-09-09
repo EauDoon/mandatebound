@@ -3,9 +3,23 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { execFileSync } from "node:child_process";
 import { auditJsonlStore } from "../dist/store-audit.js";
 import { JsonlStore } from "../dist/store.js";
 import { simulateScenario } from "../dist/simulator.js";
+
+test("audit rejects a FIFO without waiting for a writer", { skip: process.platform === "win32" ? "POSIX FIFO" : false }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mandatebound-audit-fifo-"));
+  try {
+    const path = join(dir, "input.fifo");
+    execFileSync("mkfifo", [path]);
+    const moduleUrl = new URL("../dist/store-audit.js", import.meta.url).href;
+    const script = `const { auditJsonlStore } = await import(${JSON.stringify(moduleUrl)});
+      try { await auditJsonlStore(process.argv[1]); process.exitCode = 1; }
+      catch (error) { if (error.code !== "ALB_STORE_LIMIT") throw error; }`;
+    execFileSync(process.execPath, ["--input-type=module", "-e", script, path], { timeout: 3000 });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("audit reads persisted decisions without locks or mutations and detects truncation", async () => {
   const dir = await mkdtemp(join(tmpdir(), "mandatebound-audit-"));
