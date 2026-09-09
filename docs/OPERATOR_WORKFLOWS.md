@@ -72,6 +72,12 @@ previously satisfied requirement exits 5, even if the aggregate coverage status
 was already unresolved. Other changes are reported without a confidence score.
 Both assessment times and overall verification results remain visible.
 
+`operator envelope-diff` uses that same comparison input and boundary to show
+added, removed or changed per-envelope integrity, upstream validity and evidence
+eligibility. Loss of eligible evidence or satisfied integrity exits 5. This helps
+locate individual failures that an already unresolved aggregate status can hide.
+It compares verifier results; use `casepack diff` for committed artifact bytes.
+
 Provide an existing JSONL file and a JSON input containing `{}` or `{checkpoint: {sequence, headHash}}`. Retain checkpoints independently before an incident. Deriving an anchor from the file currently under investigation cannot establish that historical records were never removed.
 
 ```bash

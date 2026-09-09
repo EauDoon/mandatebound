@@ -4,7 +4,7 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence, compareCaseCoverage } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes } from "../dist/operator-review.js";
 import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
@@ -29,6 +29,20 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("envelope comparison preserves removed and newly ineligible evidence", async () => {
+  const fixture = operatorFixture();
+  const before = { casePack: fixture.pack, anchors: fixture.anchors };
+  const missing = { ...before, anchors: { ...fixture.anchors, rawEvidence: [] } };
+  assert.equal(compareCaseEnvelopes(before, missing).hasRegression, true);
+  assert.equal(compareCaseEnvelopes(missing, before).hasRegression, false);
+  assert.deepEqual(compareCaseEnvelopes(before, before).changes, []);
+  const removed = compareCaseEnvelopes(before, { casePack: removedEnvelope(fixture).pack, anchors: fixture.anchors });
+  assert.equal(removed.changes[0].after, null);
+  assert.equal(compareCaseEnvelopes(before, { casePack: null, anchors: fixture.anchors }).comparable, false);
+  const input = invocation(fixture);
+  assert.equal((await cli(["operator", "envelope-diff"], { before: input, after: { ...input, anchors: { ...input.anchors, rawEvidence: [] } } })).code, 5);
 });
 
 function removedEnvelope(fixture) {

@@ -71,3 +71,20 @@ export function compareCaseCoverage(before: CaseAssessmentInput, after: CaseAsse
     legalEffect: "not-determined" as const, beforeAssessedAt: left.assessedAt, afterAssessedAt: right.assessedAt,
     beforeValid: left.valid, afterValid: right.valid, changes, hasRegression: changes.some((item) => item.regression) };
 }
+
+/** Show eligibility transitions even when aggregate assurance is unchanged. */
+export function compareCaseEnvelopes(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const { left, right, comparable } = comparisonContext(before, after);
+  const old = new Map(left.envelopes.map((item) => [item.envelopeId, item]));
+  const current = new Map(right.envelopes.map((item) => [item.envelopeId, item]));
+  const changes = comparable ? [...new Set([...old.keys(), ...current.keys()])].sort().flatMap((id) => {
+    const previous = old.get(id) ?? null;
+    const next = current.get(id) ?? null;
+    return JSON.stringify(previous) === JSON.stringify(next) ? [] : [{ envelopeId: id, before: previous, after: next,
+      regression: (previous?.evidenceEligible === true && next?.evidenceEligible !== true)
+        || (previous?.integrityStatus === "satisfied" && next?.integrityStatus !== "satisfied") }];
+  }) : [];
+  return { format: "MandateBoundEnvelopeComparison/v1" as const, comparable,
+    legalEffect: "not-determined" as const, beforeAssessedAt: left.assessedAt, afterAssessedAt: right.assessedAt,
+    beforeValid: left.valid, afterValid: right.valid, changes, hasRegression: changes.some((item) => item.regression) };
+}
