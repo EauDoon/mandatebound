@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { triageCase, createEvidenceChecklist, assessCases, compareCaseAssessments } from "../dist/operator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
+import { createCaseReport, renderCaseReportMarkdown } from "../dist/report.js";
 
 test("triage re-verifies evidence and never asserts source truth", () => {
   const { pack, anchors } = operatorFixture();
@@ -63,4 +64,17 @@ test("comparison identifies assurance regression without comparing unrelated cov
   assert.ok(compareCaseAssessments(before, after).changes.length > 0);
   assert.equal(compareCaseAssessments(before, { casePack: null, anchors }).comparable, false);
   assert.equal(compareCaseAssessments(before, { ...before, anchors: { ...anchors, coveragePolicyDigest: "sha256:" + "0".repeat(64) } }).comparable, false);
+});
+
+test("Markdown reports are portable and escape active markup and table delimiters", () => {
+  const { pack, anchors } = operatorFixture();
+  const report = createCaseReport(pack, anchors);
+  const rendered = renderCaseReportMarkdown(report);
+  assert.match(rendered, /Legal effect is not determined/);
+  assert.match(rendered, /Coverage requirements/);
+  const hostile = renderCaseReportMarkdown({ ...report, casePackId: "<img src=x>|[click](javascript:x)\n# fake", findings: [{ code: "bad", path: "/", message: "<script>alert(1)</script>" }] });
+  assert.ok(!hostile.includes("<script>"));
+  assert.ok(!hostile.includes("<img"));
+  assert.ok(!hostile.includes("\n# fake"));
+  assert.ok(hostile.includes("\\|"));
 });

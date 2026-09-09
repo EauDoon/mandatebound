@@ -184,3 +184,27 @@ export function isCaseReportFor(
   return report.casePackId === casePack.casePackId
     && report.casePackDigest === casePack.casePackDigest;
 }
+
+function markdownText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replace(/[\\`*_{}\[\]()#+.!|>-]/g, "\\$&").replace(/[\r\n]+/g, " ");
+}
+
+/** Presentation only. Re-verify the source CasePack to establish assurance. */
+export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string {
+  const lines = [
+    `# Case report: ${markdownText(report.casePackId ?? "unidentified-casepack")}`,
+    "", `Assessed at: ${markdownText(report.assessedAt)}`,
+    `Verification: ${report.valid ? "valid" : "not valid"}`,
+    `CasePack digest: ${markdownText(report.casePackDigest ?? "unavailable")}`,
+    "", "Legal effect is not determined. Global completeness is not established. Source truth remains unknown.",
+    "", "## Assurance status", "", "| Area | Status |", "| --- | --- |",
+    ...Object.entries(report.status).map(([key, value]) => `| ${markdownText(key)} | ${markdownText(value)} |`),
+    "", "## Coverage requirements", "", "| Requirement | Status | Matched envelopes |", "| --- | --- | --- |",
+    ...report.coverage.map((item) => `| ${markdownText(item.requirementId)} | ${markdownText(item.status)} | ${item.matchedEnvelopes} |`),
+    "", "## Verifier findings", "",
+    ...(report.findings.length === 0 ? ["No verifier findings."] : report.findings.map((item) =>
+      `- ${markdownText(item.code)} at ${markdownText(item.path)}: ${markdownText(item.message)}`)),
+  ];
+  return `${lines.join("\n")}\n`;
+}
