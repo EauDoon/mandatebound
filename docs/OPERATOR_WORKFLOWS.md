@@ -104,6 +104,22 @@ Without a checkpoint, completeness is `unproven` even when the local chain is va
 
 ## Exit codes and SDK
 
+## Preserve an assessment receipt
+
+`operator receipt` accepts a case invocation, reruns verification and returns a
+`MandateBoundAssessmentReceipt/v1` metadata record. It binds canonical CasePack
+input, exact raw-evidence digests, supplied anchor context, derived report and
+release/engine/protocol versions. Canonical input is bounded to 4 MiB with the
+existing canonical depth/node limits. Object-key order and raw-reference order
+do not change the receipt; raw-byte or assessment-time changes do.
+
+Receipts can preserve failed assessments: `valid: false` stays false and the CLI
+exits 3. The receipt contains no evidence bodies. Retain its `receiptDigest`
+independently alongside the reviewed package revision. A digest is not a signature,
+permission, proof of source truth or proof that an independent reviewer acted.
+
+## Exit codes and SDK
+
 | Workflow result | Exit code |
 | --- | --- |
 | Verified assessment, valid audit, or comparable assessment without regression | 0 |

@@ -1,7 +1,8 @@
 import type { CasePackVerificationAnchors, MandateBoundCasePack } from "./casepack.js";
-import { isSha256Digest, sha256Bytes } from "./canonical.js";
+import { canonicalBytes, isSha256Digest, sha256Bytes, sha256Digest } from "./canonical.js";
 import { OperatorInputError, type CaseAssessmentInput } from "./operator.js";
 import { createCaseReport } from "./report.js";
+import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 
 function rawSnapshots(anchors: CasePackVerificationAnchors) {
   const values = anchors.rawEvidence ?? [];
@@ -137,4 +138,18 @@ export function compareCaseAnchorContext(before: CaseAssessmentInput, after: Cas
     valid: left.valid && right.valid, legalEffect: "not-determined" as const,
     changed: changes.length > 0, changes, before: old, after: current,
     note: "Context changes require review. Supplied anchors are not authenticated by this comparison." };
+}
+
+/** Preserve reproducible assessment metadata without including evidence bodies. */
+export function createAssessmentReceipt(input: CaseAssessmentInput) {
+  const report = createCaseReport(input.casePack, input.anchors);
+  const material = {
+    format: "MandateBoundAssessmentReceipt/v1" as const,
+    releaseVersion: RELEASE_VERSION, engineVersion: ENGINE_VERSION, protocolVersion: PROTOCOL_VERSION,
+    caseInputDigest: sha256Bytes(canonicalBytes(input.casePack, { maxBytes: 4 * 1024 * 1024 })),
+    anchorDigest: sha256Digest(anchorContext(input.anchors)), reportDigest: sha256Digest(report),
+    valid: report.valid, legalEffect: "not-determined" as const,
+    sourceTruth: "unknown" as const, globalCompleteness: "not-established" as const,
+  };
+  return { ...material, receiptDigest: sha256Digest(material) };
 }

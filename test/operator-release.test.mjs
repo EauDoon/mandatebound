@@ -4,7 +4,7 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt } from "../dist/operator-review.js";
 import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
@@ -29,6 +29,21 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("assessment receipts bind the case, exact evidence, anchors and verifier result", async () => {
+  const fixture = operatorFixture();
+  const input = { casePack: fixture.pack, anchors: fixture.anchors };
+  const receipt = createAssessmentReceipt(input);
+  assert.equal(receipt.valid, true);
+  assert.equal(receipt.legalEffect, "not-determined");
+  assert.deepEqual(receipt, createAssessmentReceipt(input));
+  assert.deepEqual(receipt, createAssessmentReceipt({ ...input, anchors: { ...input.anchors, rawEvidence: [...input.anchors.rawEvidence].reverse() } }));
+  assert.notEqual(receipt.receiptDigest, createAssessmentReceipt({ ...input, anchors: { ...input.anchors, rawEvidence: [] } }).receiptDigest);
+  assert.equal(createAssessmentReceipt({ casePack: null, anchors: input.anchors }).valid, false);
+  assert.equal(Object.keys(receipt).some((key) => ["casePack", "rawEvidence", "report"].includes(key)), false);
+  assert.equal((await cli(["operator", "receipt"], invocation(fixture))).json().result.receiptDigest, receipt.receiptDigest);
+  assert.equal((await cli(["operator", "receipt"], { casePack: null, anchors: invocation(fixture).anchors })).code, 3);
 });
 
 test("anchor comparison exposes changed review context without raw bytes", async () => {
