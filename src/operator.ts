@@ -48,3 +48,21 @@ export function triageCase(input: CaseAssessmentInput) {
     findings: report.findings,
   };
 }
+
+/** A collection task does not establish that newly supplied evidence is true. */
+export function createEvidenceChecklist(input: CaseAssessmentInput) {
+  const report = createCaseReport(input.casePack, input.anchors);
+  return {
+    format: "MandateBoundEvidenceChecklist/v1" as const,
+    valid: report.valid,
+    legalEffect: "not-determined" as const,
+    globalCompleteness: "not-established" as const,
+    requirements: report.coverage.map((item) => ({
+      ...item,
+      needsReview: item.status !== "satisfied" && item.status !== "not_applicable",
+      action: ACTIONS[item.status],
+    })),
+    assuranceTasks: triageReport(report),
+    findings: report.findings,
+  };
+}
