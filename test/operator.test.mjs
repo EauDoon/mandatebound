@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { triageCase, createEvidenceChecklist, assessCases, compareCaseAssessments } from "../dist/operator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { createCaseReport, renderCaseReportMarkdown } from "../dist/report.js";
+import { createCaseReport, renderCaseReportMarkdown, renderCaseCoverageCsv } from "../dist/report.js";
 
 test("triage re-verifies evidence and never asserts source truth", () => {
   const { pack, anchors } = operatorFixture();
@@ -77,4 +77,19 @@ test("Markdown reports are portable and escape active markup and table delimiter
   assert.ok(!hostile.includes("<img"));
   assert.ok(!hostile.includes("\n# fake"));
   assert.ok(hostile.includes("\\|"));
+});
+
+test("CSV covers requirements and neutralizes spreadsheet formulas", () => {
+  const { pack, anchors } = operatorFixture();
+  const report = createCaseReport(pack, anchors);
+  const csv = renderCaseCoverageCsv(report);
+  assert.equal(csv.split("\r\n").length, 4);
+  assert.match(csv, /not-determined/);
+  for (const requirementId of ["=1+1", "+cmd", "-2", "@SUM(1)", " \t=1", "\ttext", "\rtext", "\ntext"]) {
+    const hostile = renderCaseCoverageCsv({ ...report, coverage: [{ requirementId, status: "missing", matchedEnvelopes: 0 }] });
+    assert.ok(hostile.includes(`"'${requirementId}"`));
+  }
+  const escaped = renderCaseCoverageCsv({ ...report, casePackId: 'a,"b' });
+  assert.ok(escaped.includes('"a,""b"'));
+  assert.equal(renderCaseCoverageCsv({ ...report, coverage: [] }).split("\r\n").length, 2);
 });

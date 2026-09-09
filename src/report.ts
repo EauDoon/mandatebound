@@ -208,3 +208,22 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
   ];
   return `${lines.join("\n")}\n`;
 }
+
+function csvCell(value: string | number): string {
+  const text = String(value);
+  // Quoting alone does not prevent spreadsheet formulas, including whitespace-prefixed ones.
+  const safe = /^[\s\u0000-\u001f]*[=+@-]/u.test(text) || /^[\t\r\n]/u.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+/** RFC 4180 coverage export, with formula-neutralized cells and explicit assurance boundaries. */
+export function renderCaseCoverageCsv(report: MandateBoundCaseReport): string {
+  const rows: (string | number)[][] = [[
+    "casePackId", "assessedAt", "verification", "requirementId", "status", "matchedEnvelopes",
+    "legalEffect", "globalCompleteness",
+  ], ...report.coverage.map((item) => [
+    report.casePackId ?? "unidentified-casepack", report.assessedAt, report.valid ? "valid" : "not valid",
+    item.requirementId, item.status, item.matchedEnvelopes, "not-determined", "not-established",
+  ])];
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+}
