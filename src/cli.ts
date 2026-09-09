@@ -48,7 +48,7 @@ import {
   validatePolicyPack,
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
-import { assessCases, compareCaseAssessments, createEvidenceChecklist, triageCase } from "./operator.js";
+import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, triageCase } from "./operator.js";
 import { inventoryCaseEvidence } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
 import type { StoreCheckpoint } from "./store.js";
@@ -866,7 +866,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
         assertOutputFormat(args, ["json"]);
         const input = asObject(await readInput(invocation.path, stdin));
@@ -878,7 +878,7 @@ export async function runCli(
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }
-        if (invocation.action === "batch") {
+        if (invocation.action === "batch" || invocation.action === "queue") {
           if (!hasExactKeys(input, ["cases"]) || !Array.isArray(input["cases"]) || input["cases"].length > 100) {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires at most 100 named cases.");
           }
@@ -889,7 +889,7 @@ export async function runCli(
             }
             return { id: item["id"], ...decodeCasePackInvocation({ casePack: item["casePack"], anchors: item["anchors"] }) };
           });
-          const result = assessCases(cases);
+          const result = invocation.action === "queue" ? createCaseReviewQueue(cases) : assessCases(cases);
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }

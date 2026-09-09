@@ -112,6 +112,27 @@ export function createEvidenceChecklist(input: CaseAssessmentInput) {
   };
 }
 
+/** Prioritize verifier work while preserving every case and its own anchors. */
+export function createCaseReviewQueue(inputs: readonly NamedCaseAssessment[]) {
+  const batch = assessCases(inputs);
+  const cases = batch.cases.map(({ id, report }) => {
+    const tasks = triageReport(report);
+    const requirements = report.coverage.filter((item) => item.status !== "satisfied" && item.status !== "not_applicable");
+    const highPriority = tasks.some((item) => item.priority === "high") || requirements.some((item) => item.status === "conflicting");
+    return { id, casePackId: report.casePackId ?? null, casePackDigest: report.casePackDigest ?? null,
+      assessedAt: report.assessedAt, valid: report.valid, priority: highPriority ? "high" as const : "normal" as const,
+      needsReview: !report.valid || tasks.length > 0 || requirements.length > 0,
+      assuranceTasks: tasks, requirements: requirements.map((item) => ({ ...item, action: ACTIONS[item.status] })),
+      findingCount: report.findings.length };
+  }).sort((left, right) => Number(right.priority === "high") - Number(left.priority === "high")
+    || Number(right.needsReview) - Number(left.needsReview)
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  return { format: "MandateBoundReviewQueue/v1" as const, valid: batch.valid,
+    legalEffect: "not-determined" as const, globalCompleteness: "not-established" as const,
+    summary: { total: cases.length, needsReview: cases.filter((item) => item.needsReview).length,
+      highPriority: cases.filter((item) => item.priority === "high").length }, cases };
+}
+
 export function compareCaseAssessments(before: CaseAssessmentInput, after: CaseAssessmentInput) {
   const left = createCaseReport(before.casePack, before.anchors);
   const right = createCaseReport(after.casePack, after.anchors);

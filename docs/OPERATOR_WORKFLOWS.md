@@ -42,6 +42,12 @@ mandatebound operator batch --input queue.json
 
 The output preserves input order, returns each report, and counts verified cases and cases needing review. Invalid evidence remains visible and makes the batch exit with code 3. The batch does not evaluate liability or write decisions.
 
+`operator queue` consumes the same bounded batch and prioritizes conflicts first,
+then other review cases, then cases with no review tasks. ASCII ID order breaks
+ties deterministically. Each row retains its digest, assessment time, assurance
+tasks and unmet coverage requirements. Invalid cases remain visible and exit 3.
+Priority is a work-order suggestion, never a probability or liability ranking.
+
 ## Detect assurance regressions
 
 `operator compare` accepts `{before: {casePack, anchors}, after: {casePack, anchors}}`. It re-verifies both inputs. Comparison requires the same case identifier and coverage policy and contract anchors; unrelated or repinned cases are noncomparable. Assessment times may differ and are shown explicitly.

@@ -5,6 +5,7 @@ import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
 import { inventoryCaseEvidence } from "../dist/operator-review.js";
+import { createCaseReviewQueue } from "../dist/operator.js";
 
 function invocation(fixture = operatorFixture()) {
   return { casePack: fixture.pack, anchors: { ...fixture.anchors, rawEvidence: fixture.anchors.rawEvidence.map((item) =>
@@ -27,6 +28,23 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("review queue prioritizes conflicts without dropping ready or unresolved cases", async () => {
+  const { pack, anchors } = operatorFixture();
+  const inputs = [{ id: "ready", casePack: pack, anchors }, { id: "missing", casePack: pack, anchors: { ...anchors, rawEvidence: [] } },
+    { id: "conflict", casePack: null, anchors }];
+  const queue = createCaseReviewQueue(inputs);
+  assert.deepEqual(queue.cases.map((item) => item.id), ["conflict", "missing", "ready"]);
+  assert.deepEqual(queue.summary, { total: 3, needsReview: 2, highPriority: 1 });
+  assert.equal(queue.valid, false);
+  assert.deepEqual(queue, createCaseReviewQueue([...inputs].reverse()));
+  assert.throws(() => createCaseReviewQueue([inputs[0], inputs[0]]));
+  const input = invocation();
+  const result = await cli(["operator", "queue"], { cases: [{ id: "ready", ...input }] });
+  assert.equal(result.code, 0);
+  assert.equal(result.json().result.cases.length, 1);
+  assert.equal((await cli(["operator", "queue"], { cases: [] })).code, 3);
 });
 
 test("inventory distinguishes missing and wrong bytes without exposing evidence", async () => {
