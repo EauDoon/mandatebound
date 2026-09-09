@@ -47,7 +47,10 @@ import {
   testPolicyPack,
   validatePolicyPack,
 } from "./policy-tools.js";
-import { createCaseReport, renderCaseReportHtml } from "./report.js";
+import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
+import { assessCases, compareCaseAssessments, createEvidenceChecklist, triageCase } from "./operator.js";
+import { auditJsonlStore } from "./store-audit.js";
+import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
 import { parseStrictJson, StrictJsonError } from "./strict-json.js";
@@ -151,10 +154,11 @@ const CLI_COMMANDS = Object.freeze([
   { name: "case-report", summary: "Render a CasePack report as JSON or HTML" },
   { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence" },
   { name: "conformance", summary: "Print the bounded capability statement" },
+  { name: "operator", summary: "Triage, checklist, batch, compare, or audit local evidence" },
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
 const CLI_USAGE =
-  "mandatebound <verify|decide|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance> [--input PATH] [--format json|html]";
+  "mandatebound <verify|decide|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
 const CLI_INPUT_HELP =
   "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
@@ -744,11 +748,13 @@ export async function runCli(
       }
       case "case-report": {
         assertAllowedOptions(args, ["input"]);
-        const format = assertOutputFormat(args, ["json", "html"]);
+        const format = assertOutputFormat(args, ["json", "html", "markdown", "csv"]);
         const input = await readInput(requireSingleInput(args), stdin);
         const decoded = decodeCasePackInvocation(input);
         const report = createCaseReport(decoded.casePack, decoded.anchors);
         if (format === "html") stdout.write(renderCaseReportHtml(report));
+        else if (format === "markdown") stdout.write(renderCaseReportMarkdown(report));
+        else if (format === "csv") stdout.write(renderCaseCoverageCsv(report));
         else writeJson(stdout, { ok: report.valid, result: report });
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }
@@ -848,6 +854,47 @@ export async function runCli(
         }
         writeJson(stdout, { ok: true, result: getConformanceStatement() });
         return CLI_EXIT.SUCCESS;
+      }
+      case "operator": {
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit"]);
+        assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
+        assertOutputFormat(args, ["json"]);
+        const input = asObject(await readInput(invocation.path, stdin));
+        if (invocation.action === "audit") {
+          if (!hasExactKeys(input, [], ["checkpoint"]) || typeof args.options["store"] !== "string") {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Audit requires --store and an optional checkpoint object.");
+          }
+          const result = await auditJsonlStore(args.options["store"], input["checkpoint"] as StoreCheckpoint | undefined);
+          writeJson(stdout, { ok: result.valid, result });
+          return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+        }
+        if (invocation.action === "batch") {
+          if (!hasExactKeys(input, ["cases"]) || !Array.isArray(input["cases"]) || input["cases"].length > 100) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires at most 100 named cases.");
+          }
+          const cases = input["cases"].map((value: unknown) => {
+            const item = asObject(value);
+            if (!hasExactKeys(item, ["id", "casePack", "anchors"]) || typeof item["id"] !== "string") {
+              throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch cases require id, casePack, and anchors.");
+            }
+            return { id: item["id"], ...decodeCasePackInvocation({ casePack: item["casePack"], anchors: item["anchors"] }) };
+          });
+          const result = assessCases(cases);
+          writeJson(stdout, { ok: result.valid, result });
+          return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+        }
+        if (invocation.action === "compare") {
+          if (!hasExactKeys(input, ["before", "after"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Comparison requires before and after invocations.");
+          }
+          const result = compareCaseAssessments(decodeCasePackInvocation(input["before"]), decodeCasePackInvocation(input["after"]));
+          writeJson(stdout, { ok: result.comparable && !result.hasRegression, result });
+          return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT : CLI_EXIT.SUCCESS;
+        }
+        const decoded = decodeCasePackInvocation(input);
+        const result = invocation.action === "triage" ? triageCase(decoded) : createEvidenceChecklist(decoded);
+        writeJson(stdout, { ok: result.valid, result });
+        return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }
       default:
         throw new CliError(
