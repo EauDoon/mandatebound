@@ -118,7 +118,7 @@ export function compareCaseAssessments(before: CaseAssessmentInput, after: CaseA
     const previous = left.status[area];
     const current = right.status[area];
     return previous === current ? [] : [{ area, before: previous, after: current,
-      regression: previous === "satisfied" && current !== "not_applicable" }];
+      regression: previous === "satisfied" }];
   }) : [];
   return {
     format: "MandateBoundAssessmentComparison/v1" as const,

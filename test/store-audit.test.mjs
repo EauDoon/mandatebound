@@ -47,5 +47,9 @@ test("audit rejects malformed bytes and never creates missing stores", async () 
     await assert.rejects(auditJsonlStore(path, undefined, { maxRecords: 1 }), /record limit/);
     await assert.rejects(auditJsonlStore(path, undefined, { maxRecordBytes: 1 }), /invalid/);
     assert.equal((await auditJsonlStore(path)).valid, false);
+    await writeFile(path, "\n".repeat(100_001));
+    await assert.rejects(auditJsonlStore(path), /record limit/);
+    await writeFile(path, "{}");
+    assert.equal((await auditJsonlStore(path, undefined, { maxRecords: 1 })).records, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

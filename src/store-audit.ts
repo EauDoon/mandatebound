@@ -41,9 +41,13 @@ export async function auditJsonlStore(path: string, checkpoint?: StoreCheckpoint
     let text: string;
     try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer.subarray(0, length)); }
     catch { throw new StoreError("ALB_STORE_CORRUPT", "Store contains invalid UTF-8."); }
+    let recordCount = text.length === 0 || text.endsWith("\n") ? 0 : 1;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] === "\n") recordCount += 1;
+      if (recordCount > maxRecords) throw new StoreError("ALB_STORE_LIMIT", "Store exceeds the record limit.");
+    }
     const lines = text === "" ? [] : text.split("\n");
     if (lines.at(-1) === "") lines.pop();
-    if (lines.length > maxRecords) throw new StoreError("ALB_STORE_LIMIT", "Store exceeds the record limit.");
     const records = lines.map((line, index) => {
       try { return parseStrictJson(line, { maxBytes: maxRecordBytes, maxStringBytes: maxRecordBytes }); }
       catch { throw new StoreError("ALB_STORE_CORRUPT", "Store contains an invalid JSON record.", { line: index + 1 }); }
