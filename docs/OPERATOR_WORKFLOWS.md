@@ -48,6 +48,11 @@ ties deterministically. Each row retains its digest, assessment time, assurance
 tasks and unmet coverage requirements. Invalid cases remain visible and exit 3.
 Priority is a work-order suggestion, never a probability or liability ranking.
 
+`operator queue --format csv` exports one row per assurance/coverage task, or a
+summary row for a case with no tasks. Each row carries its case digest, assessment
+time, validity and nonbinding boundary. It uses the existing formula-neutralized
+CSV cells. Redirection is controlled by the caller; the command writes no files.
+
 ## Detect assurance regressions
 
 `operator compare` accepts `{before: {casePack, anchors}, after: {casePack, anchors}}`. It re-verifies both inputs. Comparison requires the same case identifier and coverage policy and contract anchors; unrelated or repinned cases are noncomparable. Assessment times may differ and are shown explicitly.

@@ -48,7 +48,7 @@ import {
   validatePolicyPack,
 } from "./policy-tools.js";
 import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
-import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, triageCase } from "./operator.js";
+import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
 import type { StoreCheckpoint } from "./store.js";
@@ -868,7 +868,7 @@ export async function runCli(
       case "operator": {
         const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"] : ["input"]);
-        assertOutputFormat(args, ["json"]);
+        const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
         const input = asObject(await readInput(invocation.path, stdin));
         if (invocation.action === "audit") {
           if (!hasExactKeys(input, [], ["checkpoint"]) || typeof args.options["store"] !== "string") {
@@ -889,7 +889,13 @@ export async function runCli(
             }
             return { id: item["id"], ...decodeCasePackInvocation({ casePack: item["casePack"], anchors: item["anchors"] }) };
           });
-          const result = invocation.action === "queue" ? createCaseReviewQueue(cases) : assessCases(cases);
+          if (invocation.action === "queue") {
+            const queue = createCaseReviewQueue(cases);
+            if (format === "csv") stdout.write(renderCaseReviewQueueCsv(queue));
+            else writeJson(stdout, { ok: queue.valid, result: queue });
+            return queue.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+          }
+          const result = assessCases(cases);
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }

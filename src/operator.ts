@@ -1,5 +1,5 @@
 import type { CasePackVerificationAnchors, CasePackStatus } from "./casepack.js";
-import { createCaseReport, type MandateBoundCaseReport } from "./report.js";
+import { createCaseReport, csvCell, type MandateBoundCaseReport } from "./report.js";
 
 export interface CaseAssessmentInput {
   readonly casePack: unknown;
@@ -131,6 +131,22 @@ export function createCaseReviewQueue(inputs: readonly NamedCaseAssessment[]) {
     legalEffect: "not-determined" as const, globalCompleteness: "not-established" as const,
     summary: { total: cases.length, needsReview: cases.filter((item) => item.needsReview).length,
       highPriority: cases.filter((item) => item.priority === "high").length }, cases };
+}
+
+/** Presentation only; rows include ready cases even when they have no tasks. */
+export function renderCaseReviewQueueCsv(queue: ReturnType<typeof createCaseReviewQueue>): string {
+  const rows: (string | number)[][] = [["id", "casePackDigest", "assessedAt", "verification", "priority", "kind", "item", "status", "action", "legalEffect"]];
+  for (const item of queue.cases) {
+    const tasks = [
+      ...item.assuranceTasks.map((task) => ({ kind: "assurance", id: task.area, ...task })),
+      ...item.requirements.map((task) => ({ kind: "coverage", id: task.requirementId, ...task })),
+    ];
+    for (const task of tasks.length === 0 ? [{ kind: "summary", id: "", status: "", action: "No review tasks reported." }] : tasks) {
+      rows.push([item.id, item.casePackDigest ?? "unavailable", item.assessedAt, item.valid ? "valid" : "not valid",
+        item.priority, task.kind, task.id, task.status, task.action, "not-determined"]);
+    }
+  }
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
 
 export function compareCaseAssessments(before: CaseAssessmentInput, after: CaseAssessmentInput) {

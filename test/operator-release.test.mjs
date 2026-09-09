@@ -5,7 +5,7 @@ import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
 import { inventoryCaseEvidence } from "../dist/operator-review.js";
-import { createCaseReviewQueue } from "../dist/operator.js";
+import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
 function invocation(fixture = operatorFixture()) {
   return { casePack: fixture.pack, anchors: { ...fixture.anchors, rawEvidence: fixture.anchors.rawEvidence.map((item) =>
@@ -28,6 +28,21 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("queue CSV preserves task-free cases and neutralizes hostile presentation fields", async () => {
+  const { pack, anchors } = operatorFixture();
+  const queue = createCaseReviewQueue([{ id: "ready", casePack: pack, anchors }]);
+  assert.match(renderCaseReviewQueueCsv(queue), /No review tasks reported/);
+  const hostile = structuredClone(queue);
+  hostile.cases[0].id = '=HYPERLINK("bad")';
+  assert.ok(renderCaseReviewQueueCsv(hostile).includes('"\'=HYPERLINK(""bad"")"'));
+  const input = invocation();
+  assert.match((await cli(["operator", "queue", "--format", "csv"], { cases: [{ id: "ready", ...input }] })).output, /^"id",/);
+  const invalid = await cli(["operator", "queue", "--format", "csv"], { cases: [{ id: "bad", casePack: null, anchors: input.anchors }] });
+  assert.equal(invalid.code, 3);
+  assert.match(invalid.output, /not valid/);
+  assert.match(invalid.output, /not-determined/);
 });
 
 test("review queue prioritizes conflicts without dropping ready or unresolved cases", async () => {
