@@ -78,6 +78,12 @@ eligibility. Loss of eligible evidence or satisfied integrity exits 5. This help
 locate individual failures that an already unresolved aggregate status can hide.
 It compares verifier results; use `casepack diff` for committed artifact bytes.
 
+`operator finding-diff` compares verifier code/path pairs and their occurrence
+counts under the same case and coverage anchors. Repeated findings remain counted;
+new occurrences set the review-regression flag and exit 5. Disappearing findings
+are not proof of closure or truth. The result excludes evidence bodies and finding
+message text. Noncomparable cases exit 3 and never claim findings were resolved.
+
 Provide an existing JSONL file and a JSON input containing `{}` or `{checkpoint: {sequence, headHash}}`. Retain checkpoints independently before an incident. Deriving an anchor from the file currently under investigation cannot establish that historical records were never removed.
 
 ```bash

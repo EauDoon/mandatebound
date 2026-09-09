@@ -88,3 +88,29 @@ export function compareCaseEnvelopes(before: CaseAssessmentInput, after: CaseAss
     legalEffect: "not-determined" as const, beforeAssessedAt: left.assessedAt, afterAssessedAt: right.assessedAt,
     beforeValid: left.valid, afterValid: right.valid, changes, hasRegression: changes.some((item) => item.regression) };
 }
+
+/** Compare verifier issue identities and multiplicities, never raw exception text. */
+export function compareCaseFindings(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const { left, right, comparable } = comparisonContext(before, after);
+  const counts = (report: typeof left) => {
+    const entries = new Map<string, { code: string; path: string; count: number }>();
+    for (const item of report.findings) {
+      const key = JSON.stringify([item.code, item.path]);
+      entries.set(key, { code: item.code, path: item.path, count: (entries.get(key)?.count ?? 0) + 1 });
+    }
+    return entries;
+  };
+  const old = counts(left);
+  const current = counts(right);
+  const changes = comparable ? [...new Set([...old.keys(), ...current.keys()])].sort().flatMap((key) => {
+    const previous = old.get(key);
+    const next = current.get(key);
+    const identity = next ?? previous;
+    if (identity === undefined || previous?.count === next?.count) return [];
+    return [{ code: identity.code, path: identity.path, beforeCount: previous?.count ?? 0, afterCount: next?.count ?? 0 }];
+  }) : [];
+  return { format: "MandateBoundFindingComparison/v1" as const, comparable,
+    legalEffect: "not-determined" as const, beforeValid: left.valid, afterValid: right.valid,
+    changes, hasRegression: changes.some((item) => item.afterCount > item.beforeCount),
+    note: "New occurrences require review; disappearing findings do not establish source truth or closure." };
+}

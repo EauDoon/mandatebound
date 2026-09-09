@@ -4,7 +4,7 @@ import test from "node:test";
 import { runCli } from "../dist/cli.js";
 import { buildScenario } from "../dist/simulator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
-import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes } from "../dist/operator-review.js";
+import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings } from "../dist/operator-review.js";
 import { createMandateBoundCasePack } from "../dist/casepack.js";
 import { createCaseReviewQueue, renderCaseReviewQueueCsv } from "../dist/operator.js";
 
@@ -29,6 +29,22 @@ test("native preview uses the existing engine without touching a store", async (
   assert.equal(result.json().result.legalEffect, "not-determined");
   assert.equal((await cli(["preview", "--store", "unused"], input)).code, 2);
   assert.equal((await cli(["preview", "--format", "html"], input)).code, 2);
+});
+
+test("finding comparison tracks new occurrences without claiming invalid inputs are resolved", async () => {
+  const fixture = operatorFixture();
+  const before = { casePack: fixture.pack, anchors: fixture.anchors };
+  const after = { ...before, anchors: { ...fixture.anchors, rawEvidence: fixture.anchors.rawEvidence.map((item) => ({ ...item, bytes: Buffer.from("wrong") })) } };
+  const result = compareCaseFindings(before, after);
+  assert.equal(result.hasRegression, true);
+  assert.ok(result.changes.every((item) => item.afterCount > item.beforeCount));
+  assert.equal(result.changes.some((item) => Object.hasOwn(item, "message")), false);
+  assert.equal(compareCaseFindings(after, before).hasRegression, false);
+  assert.deepEqual(compareCaseFindings(before, before).changes, []);
+  assert.equal(compareCaseFindings(before, { casePack: null, anchors: fixture.anchors }).comparable, false);
+  const input = invocation(fixture);
+  const wrong = { ...input, anchors: { ...input.anchors, rawEvidence: input.anchors.rawEvidence.map((item) => ({ ...item, bytesBase64: Buffer.from("wrong").toString("base64") })) } };
+  assert.equal((await cli(["operator", "finding-diff"], { before: input, after: wrong })).code, 5);
 });
 
 test("envelope comparison preserves removed and newly ineligible evidence", async () => {
