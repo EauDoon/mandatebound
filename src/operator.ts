@@ -106,3 +106,28 @@ export function createEvidenceChecklist(input: CaseAssessmentInput) {
     findings: report.findings,
   };
 }
+
+export function compareCaseAssessments(before: CaseAssessmentInput, after: CaseAssessmentInput) {
+  const left = createCaseReport(before.casePack, before.anchors);
+  const right = createCaseReport(after.casePack, after.anchors);
+  const comparable = left.casePackId !== undefined && left.casePackId === right.casePackId
+    && before.anchors.coveragePolicyDigest === after.anchors.coveragePolicyDigest
+    && before.anchors.coverageContractDigest === after.anchors.coverageContractDigest;
+  const changes = comparable ? Object.keys(left.status).flatMap((key) => {
+    const area = key as keyof typeof left.status;
+    const previous = left.status[area];
+    const current = right.status[area];
+    return previous === current ? [] : [{ area, before: previous, after: current,
+      regression: previous === "satisfied" && current !== "not_applicable" }];
+  }) : [];
+  return {
+    format: "MandateBoundAssessmentComparison/v1" as const,
+    comparable,
+    legalEffect: "not-determined" as const,
+    before: { assessedAt: left.assessedAt, valid: left.valid },
+    after: { assessedAt: right.assessedAt, valid: right.valid },
+    changes,
+    hasRegression: comparable && ((left.valid && !right.valid) || changes.some((item) => item.regression)),
+    reason: comparable ? "Same case identifier and coverage anchors." : "Case identifier or coverage anchors differ or are unavailable.",
+  };
+}

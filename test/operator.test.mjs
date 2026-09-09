@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { triageCase, createEvidenceChecklist, assessCases } from "../dist/operator.js";
+import { triageCase, createEvidenceChecklist, assessCases, compareCaseAssessments } from "../dist/operator.js";
 import { operatorFixture } from "./fixtures/operator-fixture.mjs";
 
 test("triage re-verifies evidence and never asserts source truth", () => {
@@ -51,4 +51,16 @@ test("batch assessment preserves identifiers and does not hide invalid cases", (
   assert.throws(() => assessCases([{ ...inputs[0], id: "<script>" }]), /ASCII/);
   assert.throws(() => assessCases([{ ...inputs[0], extra: true }]), /unique/);
   assert.throws(() => assessCases([null]), /unique/);
+});
+
+test("comparison identifies assurance regression without comparing unrelated coverage", () => {
+  const { pack, anchors } = operatorFixture();
+  const before = { casePack: pack, anchors };
+  const after = { casePack: pack, anchors: { ...anchors, rawEvidence: [] } };
+  assert.equal(compareCaseAssessments(before, before).hasRegression, false);
+  assert.equal(compareCaseAssessments(before, after).hasRegression, true);
+  assert.equal(compareCaseAssessments(after, before).hasRegression, false);
+  assert.ok(compareCaseAssessments(before, after).changes.length > 0);
+  assert.equal(compareCaseAssessments(before, { casePack: null, anchors }).comparable, false);
+  assert.equal(compareCaseAssessments(before, { ...before, anchors: { ...anchors, coveragePolicyDigest: "sha256:" + "0".repeat(64) } }).comparable, false);
 });
