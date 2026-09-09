@@ -18,6 +18,8 @@ Triage prioritizes conflicting assurance dimensions. The checklist includes ever
 
 Reports contain metadata and verifier findings, not raw evidence. Treat identifiers and finding metadata as potentially sensitive. HTML is a static offline document with section navigation, keyboard-accessible tables, a review summary, and print styles. Markdown escapes active markup. CSV quotes every cell and prefixes spreadsheet formula-like content with an apostrophe. CSV is a presentation export, not an artifact to re-import for verification.
 
+When no coverage requirements are reported, CSV still contains one metadata row with the case identifier, assessment time, verification result, and assurance boundaries. Its requirement, status, and matched-envelope cells are empty. An invalid empty report therefore remains visibly invalid in the exported file.
+
 ## Assess a queue
 
 `operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases and share the CLI's 4 MiB document cap. Split larger queues into smaller files.

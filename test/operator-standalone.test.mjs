@@ -35,6 +35,12 @@ test("standalone CLI reads files, exports reports, and audits without creating w
       assert.equal(result.status, 0, result.stderr);
       assert.ok(result.stdout.length > 100);
     }
+    const invalidCsv = run(["dist/cli.js", "case-report", "--format", "csv"],
+      JSON.stringify({ casePack: null, anchors: input.anchors }));
+    assert.equal(invalidCsv.status, 3, invalidCsv.stderr);
+    const invalidRows = invalidCsv.stdout.split("\r\n");
+    assert.equal(invalidRows.length, 3);
+    assert.equal(invalidRows[1], `"unidentified-casepack","${anchors.asOf}","not valid","","","","not-determined","not-established"`);
     const snapshot = join(dir, "snapshot.jsonl");
     await writeFile(snapshot, "");
     const audit = run(["dist/cli.js", "operator", "audit", "--store", snapshot], "{}");

@@ -96,7 +96,23 @@ test("CSV covers requirements and neutralizes spreadsheet formulas", () => {
   }
   const escaped = renderCaseCoverageCsv({ ...report, casePackId: 'a,"b' });
   assert.ok(escaped.includes('"a,""b"'));
-  assert.equal(renderCaseCoverageCsv({ ...report, coverage: [] }).split("\r\n").length, 2);
+  const empty = renderCaseCoverageCsv({ ...report, coverage: [] }).split("\r\n");
+  assert.equal(empty.length, 3);
+  assert.equal(empty[1], `"${pack.casePackId}","${anchors.asOf}","valid","","","","not-determined","not-established"`);
+});
+
+test("empty coverage CSV preserves invalid verification and safely quoted report metadata", () => {
+  const { anchors } = operatorFixture();
+  const report = createCaseReport(null, anchors);
+  assert.equal(report.valid, false);
+  assert.deepEqual(report.coverage, []);
+  const csv = renderCaseCoverageCsv(report).split("\r\n");
+  assert.equal(csv.length, 3);
+  assert.equal(csv[1], `"unidentified-casepack","${anchors.asOf}","not valid","","","","not-determined","not-established"`);
+  const named = renderCaseCoverageCsv({ ...report, casePackId: 'case,"review' }).split("\r\n");
+  assert.equal(named[1], `"case,""review","${anchors.asOf}","not valid","","","","not-determined","not-established"`);
+  const hostile = renderCaseCoverageCsv({ ...report, casePackId: "=1+1", assessedAt: "+cmd" }).split("\r\n");
+  assert.equal(hostile[1], '"\'=1+1","\'+cmd","not valid","","","","not-determined","not-established"');
 });
 
 test("HTML reports provide safe offline navigation, review summaries, and print styles", () => {

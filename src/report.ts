@@ -233,10 +233,13 @@ function csvCell(value: string | number): string {
 
 /** RFC 4180 coverage export, with formula-neutralized cells and explicit assurance boundaries. */
 export function renderCaseCoverageCsv(report: MandateBoundCaseReport): string {
+  const coverage = report.coverage.length === 0
+    ? [{ requirementId: "", status: "", matchedEnvelopes: "" }]
+    : report.coverage;
   const rows: (string | number)[][] = [[
     "casePackId", "assessedAt", "verification", "requirementId", "status", "matchedEnvelopes",
     "legalEffect", "globalCompleteness",
-  ], ...report.coverage.map((item) => [
+  ], ...coverage.map((item) => [
     report.casePackId ?? "unidentified-casepack", report.assessedAt, report.valid ? "valid" : "not valid",
     item.requirementId, item.status, item.matchedEnvelopes, "not-determined", "not-established",
   ])];
