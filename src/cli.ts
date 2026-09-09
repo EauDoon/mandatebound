@@ -143,6 +143,7 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
   { name: "decide", summary: "Evaluate a case and persist the policy result" },
+  { name: "preview", summary: "Evaluate a native case without creating or writing a store" },
   { name: "explain", summary: "Explain a stored decision without legal effect" },
   { name: "appeal", summary: "Append an appeal event" },
   { name: "replay", summary: "Replay an appeal event history" },
@@ -158,7 +159,7 @@ const CLI_COMMANDS = Object.freeze([
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
 const CLI_USAGE =
-  "mandatebound <verify|decide|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
+  "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
 const CLI_INPUT_HELP =
   "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
@@ -576,6 +577,14 @@ export async function runCli(
         const report = await engine.verifyEvidenceBundle(bundle);
         writeJson(stdout, { ok: report.valid, result: report });
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
+      }
+      case "preview": {
+        assertOutputFormat(args, ["json"]);
+        assertAllowedOptions(args, ["input"]);
+        const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
+        const decision = await engine.evaluateCase(input);
+        writeJson(stdout, { ok: true, result: decision });
+        return CLI_EXIT.SUCCESS;
       }
       case "decide": {
         assertOutputFormat(args, ["json"]);

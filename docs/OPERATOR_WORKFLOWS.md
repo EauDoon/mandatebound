@@ -4,6 +4,11 @@ These workflows turn verifier output into review tasks and portable reports. The
 
 ## Assess one case
 
+`mandatebound preview --input evaluation.json` uses the same native evaluation
+input and engine as `decide`, but never opens or writes a store. It rejects
+`--store`. An unresolved result remains a successful evaluation with
+`legalEffect: "not-determined"`; preview neither approves nor executes a transaction.
+
 Use the same `{casePack, anchors}` JSON input accepted by `case-report`. Keep coverage policy and contract digests in an independently trusted case record. Encode optional `anchors.rawEvidence` entries as `{referenceId, bytesBase64}` using canonical standard base64.
 
 ```bash
