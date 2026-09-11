@@ -171,7 +171,7 @@ export function findBatchCollectionBottlenecks(inputs: readonly NamedCaseAssessm
         minEnvelopes: item.minEnvelopes, coverageContractDigest: pack.coverageContract.contractDigest,
       }];
     });
-  }).sort((a, b) => `${a.caseId}:${a.requirementId}` < `${b.caseId}:${b.requirementId}` ? -1 : 1);
+  }).sort((a, b) => JSON.stringify([a.caseId, a.requirementId]) < JSON.stringify([b.caseId, b.requirementId]) ? -1 : 1);
   const grouped = new Map<string, typeof rows>();
   for (const row of rows) {
     const key = JSON.stringify([row.sourceId, row.eventClass]);

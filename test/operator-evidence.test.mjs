@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { runCli } from "../dist/cli.js";
@@ -238,4 +239,48 @@ test("batch revision comparison retains additions, removals, invalid cases and a
   assert.equal((await cli("batch-diff", { before: unchanged, after: later })).code, 5);
   assert.equal((await cli("batch-diff", { before: invalid, after: invalid })).code, 3);
   assert.equal((await cli("batch-diff", { before, after, extra: true })).code, 3);
+});
+
+test("discovery and checkpoint-key windows expose expiry without promoting trust", () => {
+  const value = input();
+  const publicJwk = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" });
+  const snapshot = sdk.sealExternalTrustSnapshot({ format: "MandateBoundExternalTrustSnapshot/v1",
+    snapshotId: "snapshot.windows", issuedAt: "2026-07-22T00:00:00.000Z", expiresAt: "2026-07-25T00:00:00.000Z",
+    trustEffect: "discovery_only", nativeTrustPromotion: "forbidden", discoveryMaterials: [],
+    keys: [{ keyId: "key.one", sourceId: "source.alpha", publicJwk, purposes: ["source_checkpoint"],
+      validFrom: "2026-07-22T00:00:00.000Z", validUntil: value.anchors.asOf }] });
+  const changed = repack(value, { externalTrustSnapshot: snapshot });
+  const report = sdk.inspectCaseValidityWindows(changed);
+  assert.equal(report.windows[0].kind, "checkpoint_key");
+  assert.equal(report.windows[0].state, "expired");
+  assert.equal(report.windows[1].kind, "discovery");
+  assert.equal(report.windows[1].state, "within_window");
+  assert.equal(report.legalEffect, "not-determined");
+});
+
+test("batch row ordering cannot collide through punctuation inside caller IDs", () => {
+  const value = input();
+  const withRequirement = (id, requirementId) => {
+    const { contractDigest: _ignored, ...contract } = value.casePack.coverageContract;
+    const coverageContract = sdk.sealEvidenceCoverageContract({ ...contract, requirements: [
+      { ...contract.requirements[0], requirementId }, contract.requirements[1],
+    ] });
+    const changed = repack(value, { coverageContract, protocolEvidence: value.casePack.protocolEvidence.slice(1) });
+    return { id, ...changed, anchors: { ...value.anchors, coverageContractDigest: coverageContract.contractDigest } };
+  };
+  const cases = [withRequirement("a:b", "c"), withRequirement("a", "b:c")];
+  assert.deepEqual(sdk.findBatchCollectionBottlenecks(cases), sdk.findBatchCollectionBottlenecks([...cases].reverse()));
+});
+
+test("evidence commands reject extra input fields and preserve all source bytes", async () => {
+  const value = input();
+  const snapshot = JSON.stringify(value);
+  for (const action of ["collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse"]) {
+    assert.equal((await cli(action, { ...value, extra: true })).code, 3);
+    const result = await cli(action, value);
+    assert.equal(result.code, 0);
+    assert.equal(JSON.stringify(result.body).includes('"bytesBase64"'), false);
+    assert.equal(JSON.stringify(result.body).includes('"action":"authorize"'), false);
+  }
+  assert.equal(JSON.stringify(value), snapshot);
 });
