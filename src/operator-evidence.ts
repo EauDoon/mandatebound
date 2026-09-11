@@ -114,3 +114,25 @@ export function inspectCaseCheckpoints(input: CaseAssessmentInput) {
     missingCheckpointReferences: inclusions.filter((item) => !ids.has(item.checkpointId)),
     note: "Proof counts and supplied inclusion references do not establish authenticated inclusion or global completeness." };
 }
+
+/** Time-window membership is separate from cryptographic validity and authority. */
+export function inspectCaseValidityWindows(input: CaseAssessmentInput) {
+  const { pack, boundary } = evidenceContext(input);
+  const snapshot = pack?.externalTrustSnapshot;
+  const declared = pack === undefined ? [] : [
+    { kind: "coverage", id: pack.coverageContract.contractId, from: pack.coverageContract.validFrom, until: pack.coverageContract.validUntil },
+    { kind: "delegation", id: pack.delegationContext.delegationId, from: pack.delegationContext.validFrom, until: pack.delegationContext.validUntil },
+    ...(snapshot === undefined ? [] : [
+      { kind: "discovery", id: snapshot.snapshotId, from: snapshot.issuedAt, until: snapshot.expiresAt },
+      ...snapshot.keys.map((key) => ({ kind: "checkpoint_key", id: key.keyId, from: key.validFrom, until: key.validUntil })),
+    ]),
+  ];
+  const now = Date.parse(input.anchors.asOf);
+  const windows = declared.map((item) => ({ ...item,
+    state: !Number.isFinite(now) ? "unknown" : now < Date.parse(item.from) ? "not_yet_valid"
+      : now >= Date.parse(item.until) ? "expired" : "within_window",
+    remainingSeconds: Number.isFinite(now) ? Math.max(0, (Date.parse(item.until) - now) / 1_000) : null,
+  })).sort((a, b) => Date.parse(a.until) - Date.parse(b.until) || (`${a.kind}:${a.id}` < `${b.kind}:${b.id}` ? -1 : 1));
+  return { format: "MandateBoundValidityWindows/v1" as const, ...boundary, windows,
+    note: "Windows include their start and exclude their end. Membership grants no legal authority or trust promotion." };
+}

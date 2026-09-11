@@ -51,3 +51,12 @@ each checkpoint. References to an absent checkpoint remain visible separately.
 This helps reviewers find a broken capture chain without printing proofs or raw
 evidence. A listed reference or nonzero proof count is not an inclusion-verification
 result. Even authenticated bounded inclusion cannot establish global completeness.
+
+## Validity windows
+
+`operator windows` (`inspectCaseValidityWindows`) shows coverage, delegation,
+external discovery and checkpoint-key windows, sorted by expiry. It compares each
+window to the caller's explicit `asOf`, never the machine clock. Starts are inclusive,
+ends exclusive. States are `not_yet_valid`, `within_window`, `expired`, or `unknown`
+for an unusable assessment instant. Remaining seconds are clamped to zero after
+expiry. Window membership grants no authority and does not validate a key or proof.

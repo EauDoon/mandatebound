@@ -143,3 +143,19 @@ test("checkpoint inventory exposes declared gaps and dangling inclusion referenc
   assert.equal((await cli("checkpoints", dangling)).code, 0); // This fixture does not require checkpoints.
   assert.equal((await cli("checkpoints", { ...value, casePack: null })).code, 3);
 });
+
+test("validity windows use explicit time and exclusive expiry without granting authority", async () => {
+  const value = input();
+  assert.equal(typeof sdk.inspectCaseValidityWindows, "function");
+  const current = sdk.inspectCaseValidityWindows(value);
+  assert.ok(current.windows.every((item) => item.state === "within_window"));
+  const atEnd = { ...value, anchors: { ...value.anchors, asOf: value.casePack.coverageContract.validUntil } };
+  assert.ok(sdk.inspectCaseValidityWindows(atEnd).windows.every((item) => item.state === "expired" && item.remainingSeconds === 0));
+  const early = { ...value, anchors: { ...value.anchors, asOf: "2026-07-21T00:00:00.000Z" } };
+  assert.ok(sdk.inspectCaseValidityWindows(early).windows.every((item) => item.state === "not_yet_valid"));
+  const start = { ...value, anchors: { ...value.anchors, asOf: value.casePack.coverageContract.validFrom } };
+  assert.ok(sdk.inspectCaseValidityWindows(start).windows.every((item) => item.state === "within_window"));
+  assert.deepEqual(sdk.inspectCaseValidityWindows({ ...value, casePack: null }).windows, []);
+  assert.equal((await cli("windows", value)).code, 0);
+  assert.equal((await cli("windows", atEnd)).code, 3);
+});
