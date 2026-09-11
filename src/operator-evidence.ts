@@ -75,3 +75,21 @@ export function createCaseCaptureTimeline(input: CaseAssessmentInput) {
   return { format: "MandateBoundCaptureTimeline/v1" as const, ...boundary, events,
     note: "Times are supplied capture metadata; ordering does not establish causation or actual event time." };
 }
+
+/** Trace declared mapping edges; a matching hash is not proof the transformation is truthful. */
+export function traceCaseMappings(input: CaseAssessmentInput) {
+  const { pack, report, boundary } = evidenceContext(input);
+  const entries = new Map((pack?.nativeEvidenceBundle.manifest.entries ?? []).map((item) => [item.path, item.digest]));
+  const verified = new Map(report.envelopes.map((item) => [item.envelopeId, item]));
+  const links = (pack?.protocolEvidence ?? []).flatMap((item) => item.mapping.outputArtifacts.map((output) => ({
+    envelopeId: item.envelopeId, sourceId: item.sourceId, mapperId: item.mapping.mapperId,
+    mapperVersion: item.mapping.mapperVersion, mappingPolicyDigest: item.mapping.mappingPolicyDigest,
+    traceDigest: item.mapping.traceDigest, path: output.path, expectedDigest: output.digest,
+    actualDigest: entries.get(output.path) ?? null, digestMatches: entries.get(output.path) === output.digest,
+    evidenceEligible: verified.get(item.envelopeId)?.evidenceEligible === true,
+  }))).sort((a, b) => a.envelopeId < b.envelopeId ? -1 : a.envelopeId > b.envelopeId ? 1 : a.path < b.path ? -1 : 1);
+  const referenced = new Set(links.map((item) => item.path));
+  return { format: "MandateBoundMappingLineage/v1" as const, ...boundary, links,
+    unreferencedPaths: [...entries.keys()].filter((path) => !referenced.has(path)).sort(),
+    note: "Unreferenced native entries may be legitimate. Mapping links do not establish source truth or transformation correctness." };
+}

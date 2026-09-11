@@ -97,3 +97,22 @@ test("capture timeline orders instants, preserves ties, and flags future capture
   assert.equal((await cli("timeline", value)).code, 0);
   assert.equal((await cli("timeline", changed)).code, 3);
 });
+
+test("mapping lineage locates native artifacts, broken digests and unreferenced entries", async () => {
+  const value = input();
+  assert.equal(typeof sdk.traceCaseMappings, "function");
+  const report = sdk.traceCaseMappings(value);
+  assert.ok(report.links.every((item) => item.digestMatches));
+  assert.ok(report.unreferencedPaths.length > 0);
+  assert.ok(report.links.every((item) => item.mapperId === "mandatebound.test-mapper"));
+  const original = value.casePack.protocolEvidence[0];
+  const { traceDigest: _ignored, ...mapping } = original.mapping;
+  const changed = repack(value, { protocolEvidence: [envelope(original, { mapping: sdk.sealDeterministicMappingTrace({
+    ...mapping, outputArtifacts: [{ ...mapping.outputArtifacts[0], digest: "sha256:" + "0".repeat(64) }],
+  }) }), value.casePack.protocolEvidence[1]] });
+  assert.equal(sdk.traceCaseMappings(changed).links[0].digestMatches, false);
+  assert.equal(sdk.traceCaseMappings(changed).valid, false);
+  assert.deepEqual(sdk.traceCaseMappings({ ...value, casePack: null }).links, []);
+  assert.equal((await cli("lineage", value)).code, 0);
+  assert.equal((await cli("lineage", changed)).code, 3);
+});

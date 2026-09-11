@@ -33,3 +33,12 @@ capture instant, then ASCII envelope ID for ties. Each row retains its verifier
 eligibility and integrity, and flags a capture after the explicit assessment time.
 Use it to investigate timing gaps without exposing payloads. Capture times are
 source assertions, not proof of actual event order, causation, or settlement.
+
+## Mapping lineage
+
+`operator lineage` (`traceCaseMappings`) connects each protocol envelope's mapping
+trace to its named native bundle paths, comparing expected and manifest digests.
+It includes the mapper version and policy digest for reproducible investigation,
+and lists native entries with no mapping reference. Unreferenced entries are not
+automatically defects. Matching links do not prove the mapper's interpretation is
+correct; eligibility remains the verifier's result. Artifact bodies are omitted.
