@@ -284,3 +284,36 @@ test("evidence commands reject extra input fields and preserve all source bytes"
   }
   assert.equal(JSON.stringify(value), snapshot);
 });
+
+test("SDK timing views leave invalid assessment instants unavailable and retain verifier findings", () => {
+  const value = input();
+  for (const asOf of ["invalid", "July 23, 2026", "2026-02-30T00:00:00.000Z", "+010000-01-01T00:00:00.000Z"]) {
+    const changed = { ...value, anchors: { ...value.anchors, asOf } };
+    const timeline = sdk.createCaseCaptureTimeline(changed);
+    assert.equal(timeline.valid, false);
+    assert.equal(timeline.events.length, 2);
+    assert.ok(timeline.events.every((item) => item.afterAssessment === null), JSON.stringify(timeline.events));
+    assert.ok(timeline.findings.some((item) => item.code === "MBCP_ANCHOR_INVALID"));
+    const windows = sdk.inspectCaseValidityWindows(changed);
+    assert.equal(windows.valid, false);
+    assert.ok(windows.windows.every((item) => item.state === "unknown" && item.remainingSeconds === null));
+    assert.deepEqual(windows.findings, timeline.findings);
+  }
+});
+
+test("CLI timing views return invalid with unavailable comparisons for malformed assessment time", async () => {
+  const value = input();
+  for (const asOf of ["invalid", "July 23, 2026", "2026-02-30T00:00:00.000Z", "+010000-01-01T00:00:00.000Z"]) {
+    const changed = { ...value, anchors: { ...value.anchors, asOf } };
+    const timeline = await cli("timeline", changed);
+    assert.equal(timeline.code, 3);
+    assert.equal(timeline.body.ok, false);
+    assert.ok(timeline.body.result.events.every((item) => item.afterAssessment === null), JSON.stringify(timeline.body.result.events));
+    assert.ok(timeline.body.result.findings.some((item) => item.code === "MBCP_ANCHOR_INVALID"));
+    const windows = await cli("windows", changed);
+    assert.equal(windows.code, 3);
+    assert.ok(windows.body.result.windows.every((item) => item.state === "unknown" && item.remainingSeconds === null));
+    assert.deepEqual(windows.body.result.findings, timeline.body.result.findings);
+    assert.equal(JSON.stringify(timeline.body).includes('"bytesBase64"'), false);
+  }
+});

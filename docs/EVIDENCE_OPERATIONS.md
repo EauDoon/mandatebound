@@ -31,6 +31,11 @@ view to direct collection to the missing source; counts are not completeness sco
 `operator timeline` (`createCaseCaptureTimeline`) orders protocol envelopes by
 capture instant, then ASCII envelope ID for ties. Each row retains its verifier
 eligibility and integrity, and flags a capture after the explicit assessment time.
+`afterAssessment` is `boolean | null` in the SDK and JSON: `null` means the supplied
+assessment time is unavailable or invalid under the canonical timestamp profile,
+including date strings JavaScript can parse but the verifier rejects. It never
+means the capture was on time. The view retains verifier code/path findings and
+the CLI still exits 3 for invalid verification; diagnostic bodies remain omitted.
 Use it to investigate timing gaps without exposing payloads. Capture times are
 source assertions, not proof of actual event order, causation, or settlement.
 
@@ -58,7 +63,9 @@ result. Even authenticated bounded inclusion cannot establish global completenes
 external discovery and checkpoint-key windows, sorted by expiry. It compares each
 window to the caller's explicit `asOf`, never the machine clock. Starts are inclusive,
 ends exclusive. States are `not_yet_valid`, `within_window`, `expired`, or `unknown`
-for an unusable assessment instant. Remaining seconds are clamped to zero after
+for an unusable assessment instant. As with the timeline, parseable noncanonical
+dates remain unknown; `remainingSeconds` is `null`, and verifier code/path findings
+are retained. Remaining seconds are clamped to zero after
 expiry. Window membership grants no authority and does not validate a key or proof.
 
 ## Reused content

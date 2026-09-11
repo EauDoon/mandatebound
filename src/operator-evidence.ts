@@ -6,11 +6,15 @@ import { createCaseReport } from "./report.js";
 
 function evidenceContext(input: CaseAssessmentInput) {
   const report = createCaseReport(input.casePack, input.anchors);
+  const parsedTime = Date.parse(report.assessedAt);
+  const assessmentMillis = Number.isFinite(parsedTime) && report.assessedAt.length === 24
+    && new Date(parsedTime).toISOString() === report.assessedAt
+    ? parsedTime : null;
   const pack = report.casePackDigest === undefined ? undefined : input.casePack as MandateBoundCasePack;
   const boundary = { valid: report.valid, casePackDigest: report.casePackDigest ?? null,
     assessedAt: report.assessedAt, legalEffect: "not-determined" as const,
     sourceTruth: "unknown" as const, globalCompleteness: "not-established" as const };
-  return { report, pack, boundary };
+  return { report, pack, boundary, assessmentMillis };
 }
 
 /** Group requests by reference ID without retrieving or exposing evidence bodies or locations. */
@@ -64,15 +68,16 @@ export function summarizeCaseSources(input: CaseAssessmentInput) {
 
 /** Capture time is a supplied assertion, not proof of event order or settlement. */
 export function createCaseCaptureTimeline(input: CaseAssessmentInput) {
-  const { pack, report, boundary } = evidenceContext(input);
+  const { pack, report, boundary, assessmentMillis } = evidenceContext(input);
   const verified = new Map(report.envelopes.map((item) => [item.envelopeId, item]));
   const events = (pack?.protocolEvidence ?? []).map((item) => ({
     envelopeId: item.envelopeId, sourceId: item.sourceId, eventClass: item.eventClass,
-    capturedAt: item.capturedAt, afterAssessment: Date.parse(item.capturedAt) > Date.parse(report.assessedAt),
+    capturedAt: item.capturedAt, afterAssessment: assessmentMillis === null ? null : Date.parse(item.capturedAt) > assessmentMillis,
     evidenceEligible: verified.get(item.envelopeId)?.evidenceEligible === true,
     integrityStatus: verified.get(item.envelopeId)?.integrityStatus ?? "unknown",
   })).sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt) || (a.envelopeId < b.envelopeId ? -1 : 1));
   return { format: "MandateBoundCaptureTimeline/v1" as const, ...boundary, events,
+    findings: report.findings.map(({ code, path }) => ({ code, path })),
     note: "Times are supplied capture metadata; ordering does not establish causation or actual event time." };
 }
 
@@ -117,7 +122,7 @@ export function inspectCaseCheckpoints(input: CaseAssessmentInput) {
 
 /** Time-window membership is separate from cryptographic validity and authority. */
 export function inspectCaseValidityWindows(input: CaseAssessmentInput) {
-  const { pack, boundary } = evidenceContext(input);
+  const { pack, report, boundary, assessmentMillis } = evidenceContext(input);
   const snapshot = pack?.externalTrustSnapshot;
   const declared = pack === undefined ? [] : [
     { kind: "coverage", id: pack.coverageContract.contractId, from: pack.coverageContract.validFrom, until: pack.coverageContract.validUntil },
@@ -127,13 +132,13 @@ export function inspectCaseValidityWindows(input: CaseAssessmentInput) {
       ...snapshot.keys.map((key) => ({ kind: "checkpoint_key", id: key.keyId, from: key.validFrom, until: key.validUntil })),
     ]),
   ];
-  const now = Date.parse(input.anchors.asOf);
   const windows = declared.map((item) => ({ ...item,
-    state: !Number.isFinite(now) ? "unknown" : now < Date.parse(item.from) ? "not_yet_valid"
-      : now >= Date.parse(item.until) ? "expired" : "within_window",
-    remainingSeconds: Number.isFinite(now) ? Math.max(0, (Date.parse(item.until) - now) / 1_000) : null,
+    state: assessmentMillis === null ? "unknown" : assessmentMillis < Date.parse(item.from) ? "not_yet_valid"
+      : assessmentMillis >= Date.parse(item.until) ? "expired" : "within_window",
+    remainingSeconds: assessmentMillis === null ? null : Math.max(0, (Date.parse(item.until) - assessmentMillis) / 1_000),
   })).sort((a, b) => Date.parse(a.until) - Date.parse(b.until) || (`${a.kind}:${a.id}` < `${b.kind}:${b.id}` ? -1 : 1));
   return { format: "MandateBoundValidityWindows/v1" as const, ...boundary, windows,
+    findings: report.findings.map(({ code, path }) => ({ code, path })),
     note: "Windows include their start and exclude their end. Membership grants no legal authority or trust promotion." };
 }
 
