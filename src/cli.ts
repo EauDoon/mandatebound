@@ -51,6 +51,7 @@ import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, rende
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
+import { planCaseCollection } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
@@ -867,7 +868,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
@@ -932,7 +933,8 @@ export async function runCli(
             : currentInvalid ? CLI_EXIT.INVALID : CLI_EXIT.SUCCESS;
         }
         const decoded = decodeCasePackInvocation(input);
-        const result = invocation.action === "receipt" ? createAssessmentReceipt(decoded)
+        const result = invocation.action === "collect" ? planCaseCollection(decoded)
+          : invocation.action === "receipt" ? createAssessmentReceipt(decoded)
           : invocation.action === "inventory" ? inventoryCaseEvidence(decoded)
           : invocation.action === "triage" ? triageCase(decoded) : createEvidenceChecklist(decoded);
         writeJson(stdout, { ok: result.valid, result });
