@@ -1,0 +1,116 @@
+# Evidence operations
+
+These additive SDK and `operator` commands reverify the supplied CasePack with its
+caller-owned anchors. They preserve failed assessments, expose metadata only, and
+never retrieve evidence, write a store, establish source truth, or decide legal
+effect. Version 1.2.0, artifact bytes and policy semantics remain unchanged.
+
+## Collection plan
+
+`mandatebound operator collect --input invocation.json` accepts the same exact
+`{casePack, anchors}` document as `casepack verify`. The SDK exports
+`planCaseCollection`. Protocol, discovery and delegation references are grouped by
+reference ID, with every consumer retained. Status is `missing`, `mismatched`,
+`conflicting` (incompatible expected hashes or lengths), or `supplied`.
+Delegation references do not declare a byte length. No reference locations or raw
+bodies are emitted. Matching bytes do not establish their provenance. Resolve
+conflicting descriptors before collecting replacements. Exit 0 means the existing
+CasePack verifier passed, 3 means it did not; `needsCollection` is a separate
+collection-work flag, including ancillary references the verifier does not require.
+
+## Source collection coverage
+
+`operator sources` (`summarizeCaseSources`) uses a case invocation and retains
+every source declared by the coverage contract, even when no envelope was supplied.
+It separates received envelope count from verifier-eligible count, and lists each
+requirement's actual verifier status, matched count and declared minimum. Use this
+view to direct collection to the missing source; counts are not completeness scores.
+
+## Capture chronology
+
+`operator timeline` (`createCaseCaptureTimeline`) orders protocol envelopes by
+capture instant, then ASCII envelope ID for ties. Each row retains its verifier
+eligibility and integrity, and flags a capture after the explicit assessment time.
+`afterAssessment` is `boolean | null` in the SDK and JSON: `null` means the supplied
+assessment time is unavailable or invalid under the canonical timestamp profile,
+including date strings JavaScript can parse but the verifier rejects. It never
+means the capture was on time. The view retains verifier code/path findings and
+the CLI still exits 3 for invalid verification; diagnostic bodies remain omitted.
+Nonstring SDK assessment inputs are treated as unavailable without date coercion:
+`assessedAt` is `null`, timing is unavailable, and invalid-anchor findings remain.
+The supplied input is not mutated. The CLI rejects nonstring assessment inputs
+before evaluation with `ALB_CLI_INPUT` and exit 3.
+Use it to investigate timing gaps without exposing payloads. Capture times are
+source assertions, not proof of actual event order, causation, or settlement.
+
+## Mapping lineage
+
+`operator lineage` (`traceCaseMappings`) connects each protocol envelope's mapping
+trace to its named native bundle paths, comparing expected and manifest digests.
+It includes the mapper version and policy digest for reproducible investigation,
+and lists native entries with no mapping reference. Unreferenced entries are not
+automatically defects. Matching links do not prove the mapper's interpretation is
+correct; eligibility remains the verifier's result. Artifact bodies are omitted.
+
+## Checkpoint review
+
+`operator checkpoints` (`inspectCaseCheckpoints`) lists checkpoint sequence bounds,
+declared gaps, predecessor digests, proof counts and the envelopes that reference
+each checkpoint. References to an absent checkpoint remain visible separately.
+This helps reviewers find a broken capture chain without printing proofs or raw
+evidence. A listed reference or nonzero proof count is not an inclusion-verification
+result. Even authenticated bounded inclusion cannot establish global completeness.
+
+## Validity windows
+
+`operator windows` (`inspectCaseValidityWindows`) shows coverage, delegation,
+external discovery and checkpoint-key windows, sorted by expiry. It compares each
+window to the caller's explicit `asOf`, never the machine clock. Starts are inclusive,
+ends exclusive. States are `not_yet_valid`, `within_window`, `expired`, or `unknown`
+for an unusable assessment instant. As with the timeline, parseable noncanonical
+dates remain unknown; `remainingSeconds` is `null`, and verifier code/path findings
+are retained. Remaining seconds are clamped to zero after
+expiry. Window membership grants no authority and does not validate a key or proof.
+
+## Reused content
+
+`operator reuse` (`findCaseContentReuse`) groups protocol envelopes that declare the
+same raw-evidence digest under distinct references. It retains each expected size,
+source, reference, and supplied-byte match result. Use this to recognize duplicated
+material during review. Shared hashes do not establish independent corroboration,
+fraud, or truth; missing bytes remain missing and no evidence is deduplicated away.
+
+## Cross-case collection bottlenecks
+
+`operator bottlenecks` (`findBatchCollectionBottlenecks`) accepts `{cases}` with
+1 to 100 unique named `{id, casePack, anchors}` entries, like `operator batch`.
+It groups unmet requirements by source ID and event class, retaining each case,
+requirement status, count and coverage-contract digest. Every case remains listed;
+structurally rejected packs also appear under `unassessableCaseIds`. Source names
+are caller-scoped labels, not authenticated cross-case identities. Grouping work
+does not combine policies or establish evidence completeness.
+
+## Recurring verifier findings
+
+`operator findings` (`summarizeBatchFindings`) accepts the same named batch and
+groups verifier code/path identities, preserving per-case occurrence counts. Groups
+sort by affected-case count, then occurrences, then identity. Cases with no findings
+remain listed. No diagnostic message or evidence body is copied into this view.
+Frequency is a review aid, not severity, proof of a shared cause, or case closure.
+
+## Batch revision review
+
+`operator batch-diff` (`compareCaseBatches(before, after)`) accepts exact
+`{before, after}` arrays of named cases, each containing 1 to 100 unique IDs. It
+matches caller IDs, retains added and removed cases, and runs the existing aggregate
+assurance and anchor-context comparisons on retained cases. A removed case requires
+review, never silently counts as resolved. Anchor drift includes assessment time,
+coverage pins, external-trust pin and supplied raw-evidence hashes. IDs are labels,
+not proof of identity. Use `coverage-diff`, `envelope-diff` and `finding-diff` for
+requirement-level detail beyond aggregate assurance.
+
+Exit 0 means the current batch is valid, all retained cases are comparable, and no
+regression or context drift was detected. Exit 3 means invalid or incomparable input;
+exit 5 flags removals, aggregate regressions or context drift (including invalid
+current cases when a comparable regression was identified). Additions are retained
+without being labeled regressions. No command mutates either input or persisted state.

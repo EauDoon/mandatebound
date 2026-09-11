@@ -137,6 +137,8 @@ The demo uses synthetic identities and ephemeral test keys. It does not contact 
 
 For prioritized triage, evidence checklists, batch verification, assurance comparisons, Markdown and CSV exports, and read-only persisted-store audits, see the [local operator workflows](docs/OPERATOR_WORKFLOWS.md).
 
+For reference collection and provenance drilldowns, see [evidence operations](docs/EVIDENCE_OPERATIONS.md).
+
 The local review workflow also provides stateless native `preview`, protocol
 reference inventory, prioritized queues with CSV tasks, requirement/envelope/finding
 comparisons, explicit anchor-context differences and independently anchored
