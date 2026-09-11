@@ -317,3 +317,25 @@ test("CLI timing views return invalid with unavailable comparisons for malformed
     assert.equal(JSON.stringify(timeline.body).includes('"bytesBase64"'), false);
   }
 });
+
+test("SDK timing views never coerce nonstring JSON instants and CLI rejects them", async () => {
+  const value = input();
+  const nonstrings = [{ toString: null }, null, {}, [], [1], [value.anchors.asOf], 0, 1, -1, true, false,
+    { toString: "invalid" }, { toString: null, valueOf: null }, [{ toString: null }]];
+  for (const asOf of nonstrings) {
+    const changed = { ...value, anchors: { ...value.anchors, asOf } };
+    const original = JSON.stringify(changed);
+    for (const [action, inspect] of [["timeline", sdk.createCaseCaptureTimeline], ["windows", sdk.inspectCaseValidityWindows]]) {
+      const report = inspect(changed);
+      assert.equal(report.valid, false);
+      assert.equal(report.assessedAt, null);
+      assert.ok(report.findings.some((item) => item.code === "MBCP_ANCHOR_INVALID"));
+      if (action === "timeline") assert.ok(report.events.every((item) => item.afterAssessment === null));
+      else assert.ok(report.windows.every((item) => item.state === "unknown" && item.remainingSeconds === null));
+      const result = await cli(action, changed);
+      assert.equal(result.code, 3);
+      assert.equal(result.body.error.code, "ALB_CLI_INPUT");
+    }
+    assert.equal(JSON.stringify(changed), original);
+  }
+});

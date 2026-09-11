@@ -5,14 +5,15 @@ import { compareCaseAnchorContext, inventoryCaseEvidence } from "./operator-revi
 import { createCaseReport } from "./report.js";
 
 function evidenceContext(input: CaseAssessmentInput) {
-  const report = createCaseReport(input.casePack, input.anchors);
-  const parsedTime = Date.parse(report.assessedAt);
-  const assessmentMillis = Number.isFinite(parsedTime) && report.assessedAt.length === 24
-    && new Date(parsedTime).toISOString() === report.assessedAt
+  const asOf = typeof input.anchors.asOf === "string" ? input.anchors.asOf : null;
+  const report = createCaseReport(input.casePack, asOf === null ? { ...input.anchors, asOf: "" } : input.anchors);
+  const parsedTime = asOf === null ? Number.NaN : Date.parse(asOf);
+  const assessmentMillis = asOf !== null && Number.isFinite(parsedTime) && asOf.length === 24
+    && new Date(parsedTime).toISOString() === asOf
     ? parsedTime : null;
   const pack = report.casePackDigest === undefined ? undefined : input.casePack as MandateBoundCasePack;
   const boundary = { valid: report.valid, casePackDigest: report.casePackDigest ?? null,
-    assessedAt: report.assessedAt, legalEffect: "not-determined" as const,
+    assessedAt: asOf, legalEffect: "not-determined" as const,
     sourceTruth: "unknown" as const, globalCompleteness: "not-established" as const };
   return { report, pack, boundary, assessmentMillis };
 }

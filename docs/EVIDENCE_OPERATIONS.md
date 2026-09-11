@@ -36,6 +36,10 @@ assessment time is unavailable or invalid under the canonical timestamp profile,
 including date strings JavaScript can parse but the verifier rejects. It never
 means the capture was on time. The view retains verifier code/path findings and
 the CLI still exits 3 for invalid verification; diagnostic bodies remain omitted.
+Nonstring SDK assessment inputs are treated as unavailable without date coercion:
+`assessedAt` is `null`, timing is unavailable, and invalid-anchor findings remain.
+The supplied input is not mutated. The CLI rejects nonstring assessment inputs
+before evaluation with `ALB_CLI_INPUT` and exit 3.
 Use it to investigate timing gaps without exposing payloads. Capture times are
 source assertions, not proof of actual event order, causation, or settlement.
 
