@@ -195,3 +195,21 @@ test("batch bottlenecks group unmet source requirements and preserve unassessabl
   assert.equal((await cli("bottlenecks", { cases })).code, 3);
   assert.equal((await cli("bottlenecks", { cases: [{ id: "ready", ...value }] })).code, 0);
 });
+
+test("batch findings aggregate bounded identities and retain cases without findings", async () => {
+  const value = input();
+  assert.equal(typeof sdk.summarizeBatchFindings, "function");
+  const cases = [{ id: "two", ...value, casePack: null }, { id: "one", ...value, casePack: null }, { id: "ready", ...value }];
+  const report = sdk.summarizeBatchFindings(cases);
+  assert.ok(report.findings.length > 0);
+  assert.deepEqual(report.findings[0].cases.map((item) => item.id), ["one", "two"]);
+  assert.equal(report.findings[0].caseCount, 2);
+  assert.ok(report.findings.every((item) => item.occurrences === item.cases.reduce((sum, row) => sum + row.count, 0)));
+  assert.equal(report.cases.length, 3);
+  assert.equal(JSON.stringify(report).includes('"message"'), false);
+  assert.deepEqual(report, sdk.summarizeBatchFindings([...cases].reverse()));
+  assert.throws(() => sdk.summarizeBatchFindings([]));
+  assert.throws(() => sdk.summarizeBatchFindings([cases[0], cases[0]]));
+  assert.equal((await cli("findings", { cases })).code, 3);
+  assert.deepEqual((await cli("findings", { cases: [{ id: "ready", ...value }] })).body.result.findings, []);
+});

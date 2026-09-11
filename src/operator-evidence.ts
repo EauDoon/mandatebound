@@ -190,3 +190,27 @@ export function findBatchCollectionBottlenecks(inputs: readonly NamedCaseAssessm
       assessedAt: report.assessedAt })).sort((a, b) => a.id < b.id ? -1 : 1),
     note: "Groups coordinate collection only. Each requirement keeps its case and coverage contract; source IDs are caller-scoped." };
 }
+
+/** Group verifier identities, not diagnostic text, for recurring issue investigation. */
+export function summarizeBatchFindings(inputs: readonly NamedCaseAssessment[]) {
+  const batch = assessCases(inputs);
+  const groups = new Map<string, { code: string; path: string; counts: Map<string, number> }>();
+  for (const { id, report } of batch.cases) {
+    for (const finding of report.findings) {
+      const key = JSON.stringify([finding.code, finding.path]);
+      const group = groups.get(key) ?? { code: finding.code, path: finding.path, counts: new Map<string, number>() };
+      group.counts.set(id, (group.counts.get(id) ?? 0) + 1);
+      groups.set(key, group);
+    }
+  }
+  const findings = [...groups.values()].map(({ code, path, counts }) => ({ code, path,
+    caseCount: counts.size, occurrences: [...counts.values()].reduce((sum, count) => sum + count, 0),
+    cases: [...counts.entries()].sort(([a], [b]) => a < b ? -1 : 1).map(([id, count]) => ({ id, count })),
+  })).sort((a, b) => b.caseCount - a.caseCount || b.occurrences - a.occurrences
+    || (JSON.stringify([a.code, a.path]) < JSON.stringify([b.code, b.path]) ? -1 : 1));
+  return { format: "MandateBoundBatchFindings/v1" as const, valid: batch.valid,
+    legalEffect: "not-determined" as const, sourceTruth: "unknown" as const, findings,
+    cases: batch.cases.map(({ id, report }) => ({ id, valid: report.valid, assessedAt: report.assessedAt,
+      casePackDigest: report.casePackDigest ?? null, findingCount: report.findings.length })).sort((a, b) => a.id < b.id ? -1 : 1),
+    note: "Frequency prioritizes investigation only. Matching issue identities do not establish a common cause." };
+}

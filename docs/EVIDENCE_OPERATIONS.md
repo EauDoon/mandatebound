@@ -78,3 +78,11 @@ requirement status, count and coverage-contract digest. Every case remains liste
 structurally rejected packs also appear under `unassessableCaseIds`. Source names
 are caller-scoped labels, not authenticated cross-case identities. Grouping work
 does not combine policies or establish evidence completeness.
+
+## Recurring verifier findings
+
+`operator findings` (`summarizeBatchFindings`) accepts the same named batch and
+groups verifier code/path identities, preserving per-case occurrence counts. Groups
+sort by affected-case count, then occurrences, then identity. Cases with no findings
+remain listed. No diagnostic message or evidence body is copied into this view.
+Frequency is a review aid, not severity, proof of a shared cause, or case closure.
