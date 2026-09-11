@@ -49,7 +49,7 @@ test("collection plan requests missing bytes once and rejects conflicting descri
     evidenceReferences: [{ digest: descriptor.digest, reference: descriptor.reference }] }) });
   assert.equal(sdk.planCaseCollection(shared).requests[0].consumers.length, 2);
   const conflicting = repack(value, { delegationContext: sdk.sealDelegationContext({ ...delegation,
-    evidenceReferences: [{ digest: "sha256:" + "0".repeat(64), reference: descriptor.reference }] }) });
+    evidenceReferences: [{ digest: "sha256:" + "0".repeat(64), reference: { ...descriptor.reference, value: "urn:sha256:" + "0".repeat(64) } }] }) });
   assert.equal(sdk.planCaseCollection(conflicting).requests[0].status, "conflicting");
   const discovery = sdk.sealExternalTrustSnapshot({ format: "MandateBoundExternalTrustSnapshot/v1",
     snapshotId: "snapshot.one", issuedAt: value.anchors.asOf, expiresAt: "2027-07-23T00:00:00.000Z",
