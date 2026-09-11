@@ -93,3 +93,24 @@ export function traceCaseMappings(input: CaseAssessmentInput) {
     unreferencedPaths: [...entries.keys()].filter((path) => !referenced.has(path)).sort(),
     note: "Unreferenced native entries may be legitimate. Mapping links do not establish source truth or transformation correctness." };
 }
+
+/** Declared checkpoint contents and references are distinct from proof verification. */
+export function inspectCaseCheckpoints(input: CaseAssessmentInput) {
+  const { pack, boundary } = evidenceContext(input);
+  const inclusions = (pack?.protocolEvidence ?? []).flatMap((item) => item.checkpointInclusion === undefined ? [] : [{
+    envelopeId: item.envelopeId, sourceId: item.sourceId, checkpointId: item.checkpointInclusion.checkpointId,
+    sequence: item.checkpointInclusion.sequence, leafIndex: item.checkpointInclusion.leafIndex,
+  }]).sort((a, b) => a.envelopeId < b.envelopeId ? -1 : 1);
+  const checkpoints = (pack?.sourceCheckpoints ?? []).map((item) => ({
+    checkpointId: item.checkpointId, sourceId: item.sourceId, epoch: item.epoch, checkpointDigest: item.checkpointDigest,
+    issuedAt: item.issuedAt, windowStart: item.windowStart, windowEnd: item.windowEnd,
+    firstSequence: item.firstSequence, lastSequence: item.lastSequence, eventCount: item.eventCount,
+    declaredGaps: item.declaredGaps.map((gap) => ({ ...gap })).sort((a, b) => a.fromSequence - b.fromSequence),
+    proofCount: item.proofs.length, previousCheckpointDigest: item.previousCheckpointDigest ?? null,
+    inclusions: inclusions.filter((inclusion) => inclusion.checkpointId === item.checkpointId),
+  })).sort((a, b) => a.checkpointId < b.checkpointId ? -1 : 1);
+  const ids = new Set(checkpoints.map((item) => item.checkpointId));
+  return { format: "MandateBoundCheckpointInventory/v1" as const, ...boundary, checkpoints,
+    missingCheckpointReferences: inclusions.filter((item) => !ids.has(item.checkpointId)),
+    note: "Proof counts and supplied inclusion references do not establish authenticated inclusion or global completeness." };
+}

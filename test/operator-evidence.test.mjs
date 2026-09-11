@@ -116,3 +116,30 @@ test("mapping lineage locates native artifacts, broken digests and unreferenced 
   assert.equal((await cli("lineage", value)).code, 0);
   assert.equal((await cli("lineage", changed)).code, 3);
 });
+
+test("checkpoint inventory exposes declared gaps and dangling inclusion references without implying verification", async () => {
+  const value = input();
+  assert.equal(typeof sdk.inspectCaseCheckpoints, "function");
+  const checkpoint = sdk.sealSourceCheckpoint({ format: "MandateBoundSourceCheckpoint/v1",
+    checkpointId: "checkpoint.one", sourceId: "source.alpha", epoch: "epoch.one",
+    issuedAt: "2026-07-22T12:01:00.000Z", windowStart: "2026-07-22T12:00:00.000Z",
+    windowEnd: "2026-07-22T12:00:00.000Z", firstSequence: 0, lastSequence: 2,
+    eventCount: 3, merkleRoot: sdk.computeSourceEvidenceLeaf(value.casePack.protocolEvidence[0], 0),
+    declaredGaps: [{ fromSequence: 1, toSequence: 1, reasonCode: "capture.missed" }] });
+  const inclusion = { checkpointId: checkpoint.checkpointId, sequence: 0, leafIndex: 0, treeSize: 3, auditPath: [] };
+  const changed = repack(value, { sourceCheckpoints: [checkpoint], protocolEvidence: [
+    envelope(value.casePack.protocolEvidence[0], { checkpointInclusion: inclusion }), value.casePack.protocolEvidence[1],
+  ] });
+  const report = sdk.inspectCaseCheckpoints(changed);
+  assert.equal(report.checkpoints.length, 1, JSON.stringify(sdk.createCaseReport(changed.casePack, changed.anchors).findings));
+  assert.equal(report.checkpoints[0].declaredGaps[0].reasonCode, "capture.missed");
+  assert.equal(report.checkpoints[0].proofCount, 0);
+  assert.equal(report.checkpoints[0].inclusions[0].envelopeId, "envelope.alpha");
+  const dangling = repack(changed, { sourceCheckpoints: [] });
+  assert.equal(sdk.inspectCaseCheckpoints(dangling).missingCheckpointReferences[0].checkpointId, "checkpoint.one");
+  assert.equal(report.globalCompleteness, "not-established");
+  assert.deepEqual(sdk.inspectCaseCheckpoints({ ...value, casePack: null }).checkpoints, []);
+  assert.equal((await cli("checkpoints", value)).code, 0);
+  assert.equal((await cli("checkpoints", dangling)).code, 0); // This fixture does not require checkpoints.
+  assert.equal((await cli("checkpoints", { ...value, casePack: null })).code, 3);
+});

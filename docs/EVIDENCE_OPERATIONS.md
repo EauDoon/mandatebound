@@ -42,3 +42,12 @@ It includes the mapper version and policy digest for reproducible investigation,
 and lists native entries with no mapping reference. Unreferenced entries are not
 automatically defects. Matching links do not prove the mapper's interpretation is
 correct; eligibility remains the verifier's result. Artifact bodies are omitted.
+
+## Checkpoint review
+
+`operator checkpoints` (`inspectCaseCheckpoints`) lists checkpoint sequence bounds,
+declared gaps, predecessor digests, proof counts and the envelopes that reference
+each checkpoint. References to an absent checkpoint remain visible separately.
+This helps reviewers find a broken capture chain without printing proofs or raw
+evidence. A listed reference or nonzero proof count is not an inclusion-verification
+result. Even authenticated bounded inclusion cannot establish global completeness.
