@@ -60,3 +60,11 @@ window to the caller's explicit `asOf`, never the machine clock. Starts are incl
 ends exclusive. States are `not_yet_valid`, `within_window`, `expired`, or `unknown`
 for an unusable assessment instant. Remaining seconds are clamped to zero after
 expiry. Window membership grants no authority and does not validate a key or proof.
+
+## Reused content
+
+`operator reuse` (`findCaseContentReuse`) groups protocol envelopes that declare the
+same raw-evidence digest under distinct references. It retains each expected size,
+source, reference, and supplied-byte match result. Use this to recognize duplicated
+material during review. Shared hashes do not establish independent corroboration,
+fraud, or truth; missing bytes remain missing and no evidence is deduplicated away.

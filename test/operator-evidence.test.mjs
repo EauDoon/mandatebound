@@ -159,3 +159,22 @@ test("validity windows use explicit time and exclusive expiry without granting a
   assert.equal((await cli("windows", value)).code, 0);
   assert.equal((await cli("windows", atEnd)).code, 3);
 });
+
+test("content reuse groups repeated bytes across distinct references without claiming corroboration", async () => {
+  const value = input();
+  assert.equal(typeof sdk.findCaseContentReuse, "function");
+  assert.deepEqual(sdk.findCaseContentReuse(value).groups, []);
+  const first = value.casePack.protocolEvidence[0];
+  const second = envelope(first, { envelopeId: "envelope.beta", sourceId: "source.beta", eventClass: "execution",
+    rawEvidence: { ...first.rawEvidence, reference: { ...first.rawEvidence.reference, referenceId: "raw.shared" } } });
+  const reused = repack(value, { protocolEvidence: [first, second] });
+  const report = sdk.findCaseContentReuse(reused);
+  assert.equal(report.groups.length, 1);
+  assert.deepEqual(report.groups[0].sourceIds, ["source.alpha", "source.beta"]);
+  assert.equal(report.groups[0].records.length, 2);
+  assert.equal(report.groups[0].allSuppliedMatch, false);
+  assert.equal(report.sourceTruth, "unknown");
+  assert.equal((await cli("reuse", reused)).body.result.groups.length, 1);
+  assert.equal((await cli("reuse", value)).code, 0);
+  assert.deepEqual(sdk.findCaseContentReuse({ ...value, casePack: null }).groups, []);
+});

@@ -136,3 +136,21 @@ export function inspectCaseValidityWindows(input: CaseAssessmentInput) {
   return { format: "MandateBoundValidityWindows/v1" as const, ...boundary, windows,
     note: "Windows include their start and exclude their end. Membership grants no legal authority or trust promotion." };
 }
+
+/** Repeated declared content is visible even when supplied bytes fail verification. */
+export function findCaseContentReuse(input: CaseAssessmentInput) {
+  const inventory = inventoryCaseEvidence(input);
+  const { boundary } = evidenceContext(input);
+  const byDigest = new Map<string, typeof inventory.records>();
+  for (const record of inventory.records) {
+    const group = byDigest.get(record.expectedDigest) ?? [];
+    group.push(record);
+    byDigest.set(record.expectedDigest, group);
+  }
+  const groups = [...byDigest.entries()].filter(([, records]) => records.length > 1).map(([digest, records]) => ({
+    digest, sourceIds: [...new Set(records.map((item) => item.sourceId))].sort(),
+    allSuppliedMatch: records.every((item) => item.matches), records,
+  })).sort((a, b) => a.digest < b.digest ? -1 : 1);
+  return { format: "MandateBoundContentReuse/v1" as const, ...boundary, groups,
+    note: "Shared declared hashes identify content reuse, not independent corroboration, fraud, or source truth." };
+}
