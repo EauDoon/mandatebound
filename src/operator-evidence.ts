@@ -61,3 +61,17 @@ export function summarizeCaseSources(input: CaseAssessmentInput) {
   });
   return { format: "MandateBoundSourceSummary/v1" as const, ...boundary, sources };
 }
+
+/** Capture time is a supplied assertion, not proof of event order or settlement. */
+export function createCaseCaptureTimeline(input: CaseAssessmentInput) {
+  const { pack, report, boundary } = evidenceContext(input);
+  const verified = new Map(report.envelopes.map((item) => [item.envelopeId, item]));
+  const events = (pack?.protocolEvidence ?? []).map((item) => ({
+    envelopeId: item.envelopeId, sourceId: item.sourceId, eventClass: item.eventClass,
+    capturedAt: item.capturedAt, afterAssessment: Date.parse(item.capturedAt) > Date.parse(report.assessedAt),
+    evidenceEligible: verified.get(item.envelopeId)?.evidenceEligible === true,
+    integrityStatus: verified.get(item.envelopeId)?.integrityStatus ?? "unknown",
+  })).sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt) || (a.envelopeId < b.envelopeId ? -1 : 1));
+  return { format: "MandateBoundCaptureTimeline/v1" as const, ...boundary, events,
+    note: "Times are supplied capture metadata; ordering does not establish causation or actual event time." };
+}

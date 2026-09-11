@@ -25,3 +25,11 @@ every source declared by the coverage contract, even when no envelope was suppli
 It separates received envelope count from verifier-eligible count, and lists each
 requirement's actual verifier status, matched count and declared minimum. Use this
 view to direct collection to the missing source; counts are not completeness scores.
+
+## Capture chronology
+
+`operator timeline` (`createCaseCaptureTimeline`) orders protocol envelopes by
+capture instant, then ASCII envelope ID for ties. Each row retains its verifier
+eligibility and integrity, and flags a capture after the explicit assessment time.
+Use it to investigate timing gaps without exposing payloads. Capture times are
+source assertions, not proof of actual event order, causation, or settlement.

@@ -51,7 +51,7 @@ import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, rende
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
-import { planCaseCollection, summarizeCaseSources } from "./operator-evidence.js";
+import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
@@ -868,7 +868,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
@@ -935,6 +935,7 @@ export async function runCli(
         const decoded = decodeCasePackInvocation(input);
         const result = invocation.action === "collect" ? planCaseCollection(decoded)
           : invocation.action === "sources" ? summarizeCaseSources(decoded)
+          : invocation.action === "timeline" ? createCaseCaptureTimeline(decoded)
           : invocation.action === "receipt" ? createAssessmentReceipt(decoded)
           : invocation.action === "inventory" ? inventoryCaseEvidence(decoded)
           : invocation.action === "triage" ? triageCase(decoded) : createEvidenceChecklist(decoded);

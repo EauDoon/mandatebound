@@ -14,6 +14,11 @@ function repack(value, changes) {
   return { ...value, casePack: sdk.createMandateBoundCasePack({ ...material, ...changes }) };
 }
 
+function envelope(item, changes) {
+  const { envelopeDigest: _ignored, ...material } = item;
+  return sdk.sealProtocolEvidenceEnvelope({ ...material, ...changes });
+}
+
 function jsonInput(value) {
   return JSON.parse(JSON.stringify(value, (_key, item) => item instanceof Uint8Array ? { data: [...item] } : item),
     (_key, item) => item?.referenceId && item.bytes?.data
@@ -72,4 +77,23 @@ test("source rollup retains missing declared sources and never counts invalid en
   assert.deepEqual(sdk.summarizeCaseSources({ ...value, casePack: null }).sources, []);
   assert.equal((await cli("sources", value)).code, 0);
   assert.equal((await cli("sources", missing)).code, 3);
+});
+
+test("capture timeline orders instants, preserves ties, and flags future captures", async () => {
+  const value = input();
+  assert.equal(typeof sdk.createCaseCaptureTimeline, "function");
+  const changed = repack(value, { protocolEvidence: [
+    envelope(value.casePack.protocolEvidence[0], { capturedAt: "2026-07-24T00:00:00.000Z" }),
+    value.casePack.protocolEvidence[1],
+  ] });
+  const report = sdk.createCaseCaptureTimeline(changed);
+  assert.deepEqual(report.events.map((item) => item.envelopeId), ["envelope.beta", "envelope.alpha"]);
+  assert.equal(report.events[1].afterAssessment, true);
+  assert.equal(report.events[1].evidenceEligible, false);
+  assert.equal(report.events[0].afterAssessment, false);
+  const reverse = repack(value, { protocolEvidence: [...value.casePack.protocolEvidence].reverse() });
+  assert.deepEqual(sdk.createCaseCaptureTimeline(value).events, sdk.createCaseCaptureTimeline(reverse).events);
+  assert.deepEqual(sdk.createCaseCaptureTimeline({ ...value, casePack: null }).events, []);
+  assert.equal((await cli("timeline", value)).code, 0);
+  assert.equal((await cli("timeline", changed)).code, 3);
 });
