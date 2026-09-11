@@ -51,7 +51,7 @@ import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, rende
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
-import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse, findBatchCollectionBottlenecks, summarizeBatchFindings } from "./operator-evidence.js";
+import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse, findBatchCollectionBottlenecks, summarizeBatchFindings, compareCaseBatches } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
@@ -279,6 +279,19 @@ async function readInput(
     }
     throw error;
   }
+}
+
+function decodeNamedCases(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100) {
+    throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires between 1 and 100 named cases.");
+  }
+  return value.map((entry: unknown) => {
+    const item = asObject(entry);
+    if (!hasExactKeys(item, ["id", "casePack", "anchors"]) || typeof item["id"] !== "string") {
+      throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch cases require id, casePack, and anchors.");
+    }
+    return { id: item["id"], ...decodeCasePackInvocation({ casePack: item["casePack"], anchors: item["anchors"] }) };
+  });
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -868,7 +881,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks", "findings"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks", "findings", "batch-diff"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
@@ -893,17 +906,20 @@ export async function runCli(
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }
-        if (["batch", "queue", "bottlenecks", "findings"].includes(invocation.action)) {
-          if (!hasExactKeys(input, ["cases"]) || !Array.isArray(input["cases"]) || input["cases"].length > 100) {
-            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires at most 100 named cases.");
+        if (invocation.action === "batch-diff") {
+          if (!hasExactKeys(input, ["before", "after"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch comparison requires before and after case arrays.");
           }
-          const cases = input["cases"].map((value: unknown) => {
-            const item = asObject(value);
-            if (!hasExactKeys(item, ["id", "casePack", "anchors"]) || typeof item["id"] !== "string") {
-              throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch cases require id, casePack, and anchors.");
-            }
-            return { id: item["id"], ...decodeCasePackInvocation({ casePack: item["casePack"], anchors: item["anchors"] }) };
-          });
+          const result = compareCaseBatches(decodeNamedCases(input["before"]), decodeNamedCases(input["after"]));
+          writeJson(stdout, { ok: !result.needsReview, result });
+          return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression || result.hasContextDrift ? CLI_EXIT.CONFLICT
+            : !result.valid ? CLI_EXIT.INVALID : CLI_EXIT.SUCCESS;
+        }
+        if (["batch", "queue", "bottlenecks", "findings"].includes(invocation.action)) {
+          if (!hasExactKeys(input, ["cases"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires cases.");
+          }
+          const cases = decodeNamedCases(input["cases"]);
           if (invocation.action === "queue") {
             const queue = createCaseReviewQueue(cases);
             if (format === "csv") stdout.write(renderCaseReviewQueueCsv(queue));

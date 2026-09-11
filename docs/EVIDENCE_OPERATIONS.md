@@ -86,3 +86,20 @@ groups verifier code/path identities, preserving per-case occurrence counts. Gro
 sort by affected-case count, then occurrences, then identity. Cases with no findings
 remain listed. No diagnostic message or evidence body is copied into this view.
 Frequency is a review aid, not severity, proof of a shared cause, or case closure.
+
+## Batch revision review
+
+`operator batch-diff` (`compareCaseBatches(before, after)`) accepts exact
+`{before, after}` arrays of named cases, each containing 1 to 100 unique IDs. It
+matches caller IDs, retains added and removed cases, and runs the existing aggregate
+assurance and anchor-context comparisons on retained cases. A removed case requires
+review, never silently counts as resolved. Anchor drift includes assessment time,
+coverage pins, external-trust pin and supplied raw-evidence hashes. IDs are labels,
+not proof of identity. Use `coverage-diff`, `envelope-diff` and `finding-diff` for
+requirement-level detail beyond aggregate assurance.
+
+Exit 0 means the current batch is valid, all retained cases are comparable, and no
+regression or context drift was detected. Exit 3 means invalid or incomparable input;
+exit 5 flags removals, aggregate regressions or context drift (including invalid
+current cases when a comparable regression was identified). Additions are retained
+without being labeled regressions. No command mutates either input or persisted state.

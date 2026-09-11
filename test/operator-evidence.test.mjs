@@ -213,3 +213,29 @@ test("batch findings aggregate bounded identities and retain cases without findi
   assert.equal((await cli("findings", { cases })).code, 3);
   assert.deepEqual((await cli("findings", { cases: [{ id: "ready", ...value }] })).body.result.findings, []);
 });
+
+test("batch revision comparison retains additions, removals, invalid cases and anchor drift", async () => {
+  const value = input();
+  assert.equal(typeof sdk.compareCaseBatches, "function");
+  const before = [{ id: "same", ...value }, { id: "removed", ...value }];
+  const after = [{ id: "same", ...value }, { id: "added", ...value }];
+  const report = sdk.compareCaseBatches(before, after);
+  assert.deepEqual(report.cases.map((item) => [item.id, item.change]), [["added", "added"], ["removed", "removed"], ["same", "retained"]]);
+  assert.equal(report.hasRegression, true);
+  assert.deepEqual(report, sdk.compareCaseBatches([...before].reverse(), [...after].reverse()));
+  const unchanged = [{ id: "same", ...value }];
+  assert.equal(sdk.compareCaseBatches(unchanged, unchanged).needsReview, false);
+  const later = [{ id: "same", ...value, anchors: { ...value.anchors, asOf: "2026-07-24T00:00:00.000Z" } }];
+  assert.equal(sdk.compareCaseBatches(unchanged, later).hasContextDrift, true);
+  const invalid = [{ id: "same", ...value, casePack: null }];
+  assert.equal(sdk.compareCaseBatches(invalid, invalid).needsReview, true);
+  const missing = [{ id: "same", ...value, anchors: { ...value.anchors, rawEvidence: [] } }];
+  assert.equal(sdk.compareCaseBatches(unchanged, missing).hasRegression, true);
+  assert.throws(() => sdk.compareCaseBatches([], after));
+  assert.throws(() => sdk.compareCaseBatches(before, [after[0], after[0]]));
+  assert.equal((await cli("batch-diff", { before, after })).code, 5);
+  assert.equal((await cli("batch-diff", { before: unchanged, after: unchanged })).code, 0);
+  assert.equal((await cli("batch-diff", { before: unchanged, after: later })).code, 5);
+  assert.equal((await cli("batch-diff", { before: invalid, after: invalid })).code, 3);
+  assert.equal((await cli("batch-diff", { before, after, extra: true })).code, 3);
+});

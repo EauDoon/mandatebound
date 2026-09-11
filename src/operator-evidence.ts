@@ -1,7 +1,7 @@
 import type { MandateBoundCasePack } from "./casepack.js";
 import { sha256Bytes } from "./canonical.js";
-import { assessCases, type CaseAssessmentInput, type NamedCaseAssessment } from "./operator.js";
-import { inventoryCaseEvidence } from "./operator-review.js";
+import { assessCases, compareCaseAssessments, type CaseAssessmentInput, type NamedCaseAssessment } from "./operator.js";
+import { compareCaseAnchorContext, inventoryCaseEvidence } from "./operator-review.js";
 import { createCaseReport } from "./report.js";
 
 function evidenceContext(input: CaseAssessmentInput) {
@@ -213,4 +213,30 @@ export function summarizeBatchFindings(inputs: readonly NamedCaseAssessment[]) {
     cases: batch.cases.map(({ id, report }) => ({ id, valid: report.valid, assessedAt: report.assessedAt,
       casePackDigest: report.casePackDigest ?? null, findingCount: report.findings.length })).sort((a, b) => a.id < b.id ? -1 : 1),
     note: "Frequency prioritizes investigation only. Matching issue identities do not establish a common cause." };
+}
+
+/** Match caller-owned case IDs and preserve omissions instead of treating them as resolved. */
+export function compareCaseBatches(before: readonly NamedCaseAssessment[], after: readonly NamedCaseAssessment[]) {
+  const left = assessCases(before);
+  const right = assessCases(after);
+  const old = new Map(before.map((item) => [item.id, item]));
+  const current = new Map(after.map((item) => [item.id, item]));
+  const cases = [...new Set([...old.keys(), ...current.keys()])].sort().map((id) => {
+    const previous = old.get(id);
+    const next = current.get(id);
+    const assessment = previous === undefined || next === undefined ? null : compareCaseAssessments(previous, next);
+    const context = previous === undefined || next === undefined ? null : compareCaseAnchorContext(previous, next);
+    return { id, change: previous === undefined ? "added" : next === undefined ? "removed" : "retained",
+      beforeValid: left.cases.find((item) => item.id === id)?.report.valid ?? null,
+      afterValid: right.cases.find((item) => item.id === id)?.report.valid ?? null,
+      comparable: assessment?.comparable ?? null, regression: next === undefined || assessment?.hasRegression === true,
+      contextChanges: context?.changes ?? [], assessment };
+  });
+  const hasRegression = cases.some((item) => item.regression);
+  const hasContextDrift = cases.some((item) => item.contextChanges.length > 0);
+  const comparable = cases.every((item) => item.comparable !== false);
+  return { format: "MandateBoundBatchComparison/v1" as const, valid: right.valid, beforeValid: left.valid,
+    legalEffect: "not-determined" as const, sourceTruth: "unknown" as const,
+    comparable, hasRegression, hasContextDrift, needsReview: !right.valid || !comparable || hasRegression || hasContextDrift, cases,
+    note: "Removed cases require review, not closure. Comparisons use aggregate assurance; targeted evidence diffs remain available." };
 }
