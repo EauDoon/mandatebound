@@ -1,6 +1,6 @@
 import type { MandateBoundCasePack } from "./casepack.js";
 import { sha256Bytes } from "./canonical.js";
-import type { CaseAssessmentInput } from "./operator.js";
+import { assessCases, type CaseAssessmentInput, type NamedCaseAssessment } from "./operator.js";
 import { inventoryCaseEvidence } from "./operator-review.js";
 import { createCaseReport } from "./report.js";
 
@@ -153,4 +153,40 @@ export function findCaseContentReuse(input: CaseAssessmentInput) {
   })).sort((a, b) => a.digest < b.digest ? -1 : 1);
   return { format: "MandateBoundContentReuse/v1" as const, ...boundary, groups,
     note: "Shared declared hashes identify content reuse, not independent corroboration, fraud, or source truth." };
+}
+
+/** Coordinate collection across cases without treating their coverage policies as interchangeable. */
+export function findBatchCollectionBottlenecks(inputs: readonly NamedCaseAssessment[]) {
+  const batch = assessCases(inputs);
+  const byId = new Map(inputs.map((item) => [item.id, item]));
+  const rows = batch.cases.flatMap(({ id, report }) => {
+    if (report.casePackDigest === undefined) return [];
+    const pack = byId.get(id)?.casePack as MandateBoundCasePack;
+    const status = new Map(report.coverage.map((item) => [item.requirementId, item]));
+    return pack.coverageContract.requirements.flatMap((item) => {
+      const requirement = status.get(item.requirementId);
+      return requirement?.status === "satisfied" || requirement?.status === "not_applicable" ? [] : [{
+        caseId: id, sourceId: item.sourceId, eventClass: item.eventClass, requirementId: item.requirementId,
+        status: requirement?.status ?? "unknown", matchedEnvelopes: requirement?.matchedEnvelopes ?? 0,
+        minEnvelopes: item.minEnvelopes, coverageContractDigest: pack.coverageContract.contractDigest,
+      }];
+    });
+  }).sort((a, b) => `${a.caseId}:${a.requirementId}` < `${b.caseId}:${b.requirementId}` ? -1 : 1);
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = JSON.stringify([row.sourceId, row.eventClass]);
+    const group = grouped.get(key) ?? [];
+    group.push(row);
+    grouped.set(key, group);
+  }
+  const bottlenecks = [...grouped.entries()].sort(([a], [b]) => a < b ? -1 : 1).map(([, requirements]) => ({
+    sourceId: requirements[0]?.sourceId, eventClass: requirements[0]?.eventClass,
+    caseIds: [...new Set(requirements.map((item) => item.caseId))].sort(), requirements,
+  }));
+  return { format: "MandateBoundCollectionBottlenecks/v1" as const, valid: batch.valid,
+    legalEffect: "not-determined" as const, globalCompleteness: "not-established" as const,
+    bottlenecks, unassessableCaseIds: batch.cases.filter(({ report }) => report.casePackDigest === undefined).map(({ id }) => id).sort(),
+    cases: batch.cases.map(({ id, report }) => ({ id, valid: report.valid, casePackDigest: report.casePackDigest ?? null,
+      assessedAt: report.assessedAt })).sort((a, b) => a.id < b.id ? -1 : 1),
+    note: "Groups coordinate collection only. Each requirement keeps its case and coverage contract; source IDs are caller-scoped." };
 }

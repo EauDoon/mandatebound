@@ -178,3 +178,20 @@ test("content reuse groups repeated bytes across distinct references without cla
   assert.equal((await cli("reuse", value)).code, 0);
   assert.deepEqual(sdk.findCaseContentReuse({ ...value, casePack: null }).groups, []);
 });
+
+test("batch bottlenecks group unmet source requirements and preserve unassessable cases", async () => {
+  const value = input();
+  assert.equal(typeof sdk.findBatchCollectionBottlenecks, "function");
+  const missing = repack(value, { protocolEvidence: value.casePack.protocolEvidence.slice(1) });
+  const cases = [{ id: "two", ...missing }, { id: "one", ...missing }, { id: "ready", ...value }, { id: "invalid", ...value, casePack: null }];
+  const report = sdk.findBatchCollectionBottlenecks(cases);
+  assert.equal(report.bottlenecks.length, 1);
+  assert.deepEqual(report.bottlenecks[0].caseIds, ["one", "two"]);
+  assert.deepEqual(report.unassessableCaseIds, ["invalid"]);
+  assert.equal(report.cases.length, 4);
+  assert.deepEqual(report, sdk.findBatchCollectionBottlenecks([...cases].reverse()));
+  assert.throws(() => sdk.findBatchCollectionBottlenecks([]));
+  assert.throws(() => sdk.findBatchCollectionBottlenecks([cases[0], cases[0]]));
+  assert.equal((await cli("bottlenecks", { cases })).code, 3);
+  assert.equal((await cli("bottlenecks", { cases: [{ id: "ready", ...value }] })).code, 0);
+});

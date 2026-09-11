@@ -68,3 +68,13 @@ same raw-evidence digest under distinct references. It retains each expected siz
 source, reference, and supplied-byte match result. Use this to recognize duplicated
 material during review. Shared hashes do not establish independent corroboration,
 fraud, or truth; missing bytes remain missing and no evidence is deduplicated away.
+
+## Cross-case collection bottlenecks
+
+`operator bottlenecks` (`findBatchCollectionBottlenecks`) accepts `{cases}` with
+1 to 100 unique named `{id, casePack, anchors}` entries, like `operator batch`.
+It groups unmet requirements by source ID and event class, retaining each case,
+requirement status, count and coverage-contract digest. Every case remains listed;
+structurally rejected packs also appear under `unassessableCaseIds`. Source names
+are caller-scoped labels, not authenticated cross-case identities. Grouping work
+does not combine policies or establish evidence completeness.

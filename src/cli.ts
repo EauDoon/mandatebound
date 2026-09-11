@@ -51,7 +51,7 @@ import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, rende
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
-import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse } from "./operator-evidence.js";
+import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse, findBatchCollectionBottlenecks } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { simulateScenario } from "./simulator.js";
@@ -868,7 +868,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse"]);
+        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks"]);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
@@ -893,7 +893,7 @@ export async function runCli(
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }
-        if (invocation.action === "batch" || invocation.action === "queue") {
+        if (["batch", "queue", "bottlenecks"].includes(invocation.action)) {
           if (!hasExactKeys(input, ["cases"]) || !Array.isArray(input["cases"]) || input["cases"].length > 100) {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Batch requires at most 100 named cases.");
           }
@@ -910,7 +910,7 @@ export async function runCli(
             else writeJson(stdout, { ok: queue.valid, result: queue });
             return queue.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
           }
-          const result = assessCases(cases);
+          const result = invocation.action === "bottlenecks" ? findBatchCollectionBottlenecks(cases) : assessCases(cases);
           writeJson(stdout, { ok: result.valid, result });
           return result.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
         }
