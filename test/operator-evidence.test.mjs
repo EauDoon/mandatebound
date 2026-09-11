@@ -58,3 +58,18 @@ test("collection plan requests missing bytes once and rejects conflicting descri
   const discovered = repack(value, { externalTrustSnapshot: discovery });
   assert.equal(sdk.planCaseCollection(discovered).requests[0].consumers.some((item) => item.kind === "discovery"), true);
 });
+
+test("source rollup retains missing declared sources and never counts invalid envelopes as eligible", async () => {
+  const value = input();
+  assert.equal(typeof sdk.summarizeCaseSources, "function");
+  const missing = repack(value, { protocolEvidence: value.casePack.protocolEvidence.slice(1) });
+  const report = sdk.summarizeCaseSources(missing);
+  assert.equal(report.sources[0].sourceId, "source.alpha");
+  assert.equal(report.sources[0].envelopes, 0);
+  assert.equal(report.sources[0].requirements[0].status, "missing");
+  const invalid = sdk.summarizeCaseSources({ ...value, anchors: { ...value.anchors, rawEvidence: [] } });
+  assert.ok(invalid.sources.every((item) => item.eligibleEnvelopes === 0));
+  assert.deepEqual(sdk.summarizeCaseSources({ ...value, casePack: null }).sources, []);
+  assert.equal((await cli("sources", value)).code, 0);
+  assert.equal((await cli("sources", missing)).code, 3);
+});

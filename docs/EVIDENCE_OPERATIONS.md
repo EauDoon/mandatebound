@@ -17,3 +17,11 @@ bodies are emitted. Matching bytes do not establish their provenance. Resolve
 conflicting descriptors before collecting replacements. Exit 0 means the existing
 CasePack verifier passed, 3 means it did not; `needsCollection` is a separate
 collection-work flag, including ancillary references the verifier does not require.
+
+## Source collection coverage
+
+`operator sources` (`summarizeCaseSources`) uses a case invocation and retains
+every source declared by the coverage contract, even when no envelope was supplied.
+It separates received envelope count from verifier-eligible count, and lists each
+requirement's actual verifier status, matched count and declared minimum. Use this
+view to direct collection to the missing source; counts are not completeness scores.

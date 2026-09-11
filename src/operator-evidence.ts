@@ -40,3 +40,24 @@ export function planCaseCollection(input: CaseAssessmentInput) {
     needsCollection: requests.some((item) => item.status !== "supplied"),
     note: "Collection metadata is not a retrieval instruction or proof of provenance. Conflicting descriptors require review." };
 }
+
+/** Include declared-but-absent sources so collection gaps cannot disappear in a rollup. */
+export function summarizeCaseSources(input: CaseAssessmentInput) {
+  const { pack, report, boundary } = evidenceContext(input);
+  const requirements = pack?.coverageContract.requirements ?? [];
+  const envelopes = pack?.protocolEvidence ?? [];
+  const coverage = new Map(report.coverage.map((item) => [item.requirementId, item]));
+  const verified = new Map(report.envelopes.map((item) => [item.envelopeId, item]));
+  const sources = [...new Set([...requirements, ...envelopes].map((item) => item.sourceId))].sort().map((sourceId) => {
+    const items = envelopes.filter((item) => item.sourceId === sourceId);
+    return { sourceId, envelopes: items.length,
+      eligibleEnvelopes: items.filter((item) => verified.get(item.envelopeId)?.evidenceEligible === true).length,
+      requirements: requirements.filter((item) => item.sourceId === sourceId).map((item) => ({
+        requirementId: item.requirementId, eventClass: item.eventClass,
+        status: coverage.get(item.requirementId)?.status ?? "unknown",
+        matchedEnvelopes: coverage.get(item.requirementId)?.matchedEnvelopes ?? 0,
+        minEnvelopes: item.minEnvelopes,
+      })).sort((a, b) => a.requirementId < b.requirementId ? -1 : 1) };
+  });
+  return { format: "MandateBoundSourceSummary/v1" as const, ...boundary, sources };
+}
