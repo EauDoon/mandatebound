@@ -19,7 +19,7 @@ missing case    unresolved  indeterminate missing_required_evidence
 tampered case   unresolved  invalid       invalid_evidence
 ```
 
-Run the exact reproducer in [`CASE_STUDY.md`](docs/CASE_STUDY.md):
+Run the exact **source-checkout-only** reproducer in [`CASE_STUDY.md`](docs/CASE_STUDY.md). The published npm package intentionally excludes `examples/`:
 
 ```bash
 npm run build
@@ -70,6 +70,8 @@ The evaluator performs no live key, schema, policy, revocation, DNS, or clock lo
 ## Quick start
 
 Requirements: Node.js 22.12 or newer.
+
+For the **source-checkout-only** quick start below, clone the repository first. The published npm package intentionally excludes `examples/`:
 
 ```bash
 git clone https://github.com/EauDoon/mandatebound.git

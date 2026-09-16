@@ -24,9 +24,11 @@ The scenario uses the existing native v1 policy and engine. A valid mandate, in-
 
 ## Observed output
 
-Run the existing SDK reproducer from a clean clone:
+Run the existing SDK reproducer from a clean source checkout. The published npm package intentionally excludes `examples/`, so clone the repository before running this source-checkout-only example:
 
 ```bash
+git clone https://github.com/EauDoon/mandatebound.git
+cd mandatebound
 npm ci --ignore-scripts
 npm run build
 node examples/case-study.mjs
