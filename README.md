@@ -1,5 +1,9 @@
 # MandateBound: Agentic Commerce Evidence Readiness
 
+[![build](https://img.shields.io/github/actions/workflow/status/EauDoon/mandatebound/ci.yml?branch=main)](https://github.com/EauDoon/mandatebound/actions)
+[![license](https://img.shields.io/github/license/EauDoon/mandatebound)](https://github.com/EauDoon/mandatebound/blob/main/LICENSE)
+[![last commit](https://img.shields.io/github/last-commit/EauDoon/mandatebound)](https://github.com/EauDoon/mandatebound)
+
 MandateBound is a TypeScript reference toolkit for preserving and verifying signed UCP/AP2 transaction evidence, making evidence gaps explicit, and replaying a bounded policy offline.
 
 > [!IMPORTANT]
