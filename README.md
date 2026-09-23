@@ -9,6 +9,20 @@ MandateBound is a TypeScript reference toolkit for preserving and verifying sign
 > [!IMPORTANT]
 > MandateBound is experimental reference software. It is not legal advice, legal adjudication, insurance, a claims service, a compliance certification, or a hosted production service. Every policy result keeps `legalEffect: "not-determined"`.
 
+## Quick start
+
+Requires Node.js 22.12 or newer (declared in `package.json` `engines.node`).
+
+```bash
+npm install
+npm run build
+npm run demo
+```
+
+`npm run demo` runs `npm run build && node dist/cli.js simulate --scenario all`.
+The equivalent source-checkout-only reproducer for the disputed-purchase case
+study is `node examples/case-study.mjs` (see [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md)).
+
 ## Flagship story: reviewing a disputed synthetic purchase
 
 A shopping agent's purchase enters review after a synthetic incident report alleges economic loss. The reviewer needs to answer a bounded question: does the recorded evidence show what the mandate covered, which controls passed, and whether the same result can be reproduced later?
