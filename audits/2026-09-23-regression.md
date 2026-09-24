@@ -1,4 +1,4 @@
-# mandatebound regression baseline — 2026-09-23
+# mandatebound regression baseline: 2026-09-23
 
 ## Scope
 TypeScript project `mandatebound` (`@oonyl/mandatebound@1.2.0`). Test target
