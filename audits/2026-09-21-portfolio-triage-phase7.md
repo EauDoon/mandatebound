@@ -1,4 +1,4 @@
-# Audit Log — portfolio-triage-phase7
+# Audit Log: portfolio-triage-phase7
 
 - date: 2026-09-21
 - repo: EauDoon/mandatebound
