@@ -2,6 +2,16 @@
 
 All notable changes are documented here.
 
+## Installed-consumer corrective candidate
+
+- Fix npm-installed `mandatebound` and `alb` commands silently exiting through bin
+  symlinks. Resolve entrypoint paths while keeping SDK imports inert.
+- Exercise the actual packed tarball in a fresh production-only consumer during
+  `package:check`: public exports, both binaries, signed source import, CasePack
+  readiness, failure diagnostics, and byte-identical offline replay.
+- Ship a public-export integration example and handoff guide with separate caller
+  anchors; missing or tampered source evidence withholds native policy evaluation.
+
 ## Local operator release candidate
 
 - Add stateless native decision preview and metadata-only raw-evidence inventory.

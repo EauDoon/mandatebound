@@ -9,19 +9,16 @@ MandateBound is a TypeScript reference toolkit for preserving and verifying sign
 > [!IMPORTANT]
 > MandateBound is experimental reference software. It is not legal advice, legal adjudication, insurance, a claims service, a compliance certification, or a hosted production service. Every policy result keeps `legalEffect: "not-determined"`.
 
-## Quick start
+## Start here
 
-Requires Node.js 22.12 or newer (declared in `package.json` `engines.node`).
+Requires Node.js 22.12 or newer. For an external integration, follow the
+[installed-package workflow](docs/ADOPTER_WORKFLOW.md): install a candidate tarball,
+import a signed synthetic checkout, assess CasePack readiness, export evidence and
+caller-owned anchors, and reproduce the entire result in a separate offline process.
+The runnable example ships in the package and uses only public exports.
 
-```bash
-npm install
-npm run build
-npm run demo
-```
-
-`npm run demo` runs `npm run build && node dist/cli.js simulate --scenario all`.
-The equivalent source-checkout-only reproducer for the disputed-purchase case
-study is `node examples/case-study.mjs` (see [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md)).
+For source development and the native disputed-purchase simulator, use the
+[source quick start](#quick-start) below.
 
 ## Flagship story: reviewing a disputed synthetic purchase
 
@@ -142,6 +139,7 @@ Read the [`DISCLAIMER.md`](DISCLAIMER.md), [legal boundary](docs/LEGAL_BOUNDARY.
 ## Deeper documentation
 
 - [Worked case study](docs/CASE_STUDY.md): synthetic disputed purchase, actual run output, and fail-closed variants.
+- [Installed-package workflow](docs/ADOPTER_WORKFLOW.md): clean consumer install, signed source import, readiness, export, and independent replay.
 - [Architecture](docs/ARCHITECTURE.md): components, trust boundaries, and determinism requirements.
 - [V1.1 profile](docs/V1_1.md): exact import profile, CasePack, readiness, and replay.
 - [V1.2 profile](docs/V1_2.md): AP2 dispute resolver, Evidence Pack, and metadata-only timeline.
@@ -165,7 +163,7 @@ npm run package:check
 npm run verify
 ```
 
-`npm run verify` is the release gate. It runs linting, dependency-license checks, advisory checks, strict type checking, coverage-enforced tests, and package-content verification. The repository fixture suite is synthetic and does not establish third-party certification.
+`npm run verify` is the release gate. It runs linting, dependency-license checks, advisory checks, strict type checking, coverage-enforced tests, and package-content verification with an isolated tarball consumer acceptance check. The repository fixture suite is synthetic and does not establish third-party certification.
 
 ## Upstream references and license
 
