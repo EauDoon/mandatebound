@@ -1,8 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkInstalledPackage } from "./check-package-consumer.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const temporaryRoot = mkdtempSync(join(tmpdir(), "mandatebound-package-"));
+process.on("exit", () => rmSync(temporaryRoot, { recursive: true, force: true }));
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const entryPoints = new Set();
 
@@ -32,7 +37,8 @@ const npmArgs = [
   ...(useNpmCli ? [npmCli] : []),
   ...(useWindowsNpmShim ? ["/d", "/s", "/c", "npm.cmd"] : []),
   "pack",
-  "--dry-run",
+  "--pack-destination",
+  temporaryRoot,
   "--json",
   "--ignore-scripts",
 ];
@@ -43,8 +49,7 @@ const result = spawnSync(npmCommand, npmArgs, {
 });
 
 if (result.status !== 0) {
-  const detail = result.error instanceof Error ? `: ${result.error.message}` : "";
-  process.stderr.write(`package check failed: npm pack did not complete${detail}\n`);
+  process.stderr.write(`package check failed: npm pack did not complete (exit ${result.status ?? "unavailable"}). Run npm run build first and check npm cache permissions.\n`);
   process.exit(1);
 }
 
@@ -87,6 +92,8 @@ const required = new Set([
   "README.md",
   "SECURITY.md",
   "package.json",
+  "docs/ADOPTER_WORKFLOW.md",
+  "docs/examples/adopter-workflow.mjs",
   ...entryPoints,
 ]);
 const rejected = [];
@@ -117,3 +124,11 @@ if (rejected.length > 0 || required.size > 0) {
 }
 
 process.stdout.write(`package check: ${packageReport.files.length} files allowed\n`);
+try {
+  const archive = join(temporaryRoot, packageReport.filename);
+  checkInstalledPackage({ archive, temporaryRoot, manifest, npmCommand,
+    npmPrefix: npmArgs.slice(0, npmArgs.indexOf("pack")) });
+} catch (error) {
+  process.stderr.write(`package check failed: ${error instanceof Error ? error.message : "consumer acceptance failed"}\n`);
+  process.exitCode = 1;
+}

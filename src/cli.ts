@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { Buffer } from "node:buffer";
+import { realpathSync } from "node:fs";
 import { lstat, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
 import type { Readable, Writable } from "node:stream";
 import type { AppealCheckpoint } from "./appeals.js";
@@ -983,8 +983,18 @@ export async function runCli(
   }
 }
 
-const entry = process.argv[1];
-if (entry !== undefined && import.meta.url === pathToFileURL(resolve(entry)).href) {
+function isCliEntrypoint(entry: string | undefined): boolean {
+  if (entry === undefined) return false;
+  try {
+    // npm bin links and --preserve-symlinks-main can expose either spelling.
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    // Importing the SDK must remain inert even if the caller's argv path is absent.
+    return false;
+  }
+}
+
+if (isCliEntrypoint(process.argv[1])) {
   runCli(process.argv.slice(2)).then((code) => {
     process.exitCode = code;
   }).catch(() => {
