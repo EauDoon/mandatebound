@@ -1240,3 +1240,96 @@ test("future-captured historical key pins are ineligible", () => {
   assert.equal(result.status, "unresolved");
   assert.equal(codes(result).has("INTEROP_KEY_SNAPSHOT_FROM_FUTURE"), true);
 });
+
+test("every AP2 receipt claim rejection is fail-closed with its own reason", () => {
+  const fixture = makeFixture();
+  const plan = fixture.verificationPlan.checkoutReceipt;
+  const reference = Buffer.alloc(32, 9).toString("base64url");
+  const now = 1_770_000_100;
+
+  const base = {
+    iss: "https://merchant.example",
+    iat: now,
+    reference,
+    status: "Success",
+    order_id: "order-synthetic-1",
+  };
+
+  const reject = (token, kind = "checkout_receipt") => verifyAp2Receipt({
+    ...plan,
+    token,
+    kind,
+    asOf,
+    expectedMandateToken: fixture.checkoutMandate,
+  });
+
+  // Each entry is a distinct branch of validateReceiptClaims. All of them must
+  // fail closed with AP2_RECEIPT_CLAIMS_INVALID and the specific reason.
+  const cases = [
+    [createJwt({ ...base, iss: 7 }, fixture.merchant), "Expected non-empty string at receipt.claims.iss"],
+    [createJwt({ ...base, iat: "soon" }, fixture.merchant), "Expected safe integer at receipt.claims.iat"],
+    [createJwt({ ...base, iat: -1 }, fixture.merchant), "Receipt iat must not be negative"],
+    [createJwt({ ...base, iat: 1_900_000_000 }, fixture.merchant), "Receipt issuance time is in the future"],
+    [createJwt({ ...base, status: "Pending" }, fixture.merchant), "Receipt status is not Success or Error"],
+    [createJwt({ ...base, reference: "not-base64url!" }, fixture.merchant), "Invalid unpadded base64url at receipt.claims.reference"],
+    [createJwt({ ...base, reference: Buffer.alloc(16, 9).toString("base64url") }, fixture.merchant), "Receipt reference is not a SHA-256 digest"],
+    [createJwt({ ...base, status: "Success", order_id: undefined }, fixture.merchant), "Expected non-empty string at receipt.claims.order_id"],
+    // A Success Receipt must not carry error claims.
+    [createJwt({ ...base, error: "card_declined" }, fixture.merchant), "Success Receipt contains an error claim"],
+    [createJwt({ ...base, error_description: "declined" }, fixture.merchant), "Success Receipt contains an error claim"],
+    // An Error Receipt must carry both error claims and no success-only claim.
+    [
+      createJwt({ ...base, status: "Error", error: undefined, error_description: undefined }, fixture.merchant),
+      "Expected non-empty string at receipt.claims.error",
+    ],
+    [
+      createJwt({ ...base, status: "Error", error: "card_declined", error_description: undefined }, fixture.merchant),
+      "Expected non-empty string at receipt.claims.error_description",
+    ],
+    [
+      createJwt({ ...base, status: "Error", error: "card_declined", error_description: "declined", psp_confirmation_id: "psp-1" }, fixture.merchant),
+      "Error Receipt contains a success-only claim",
+    ],
+  ];
+
+  for (const [token, expectedMessage] of cases) {
+    const report = reject(token);
+    assert.equal(report.upstreamValid, false, expectedMessage);
+    assert.equal(report.value, null, expectedMessage);
+    const issue = report.issues.find((entry) => entry.code === "AP2_RECEIPT_CLAIMS_INVALID");
+    assert.notEqual(issue, undefined, expectedMessage);
+    assert.equal(issue.message, expectedMessage);
+    assert.equal(issue.path, "receipt.claims");
+  }
+
+  // A payment_receipt demands its own success-only confirmations plus payment_id.
+  for (const drop of ["psp_confirmation_id", "network_confirmation_id", "payment_id"]) {
+    const report = reject(
+      createJwt({
+        ...base,
+        psp_confirmation_id: "psp-1",
+        network_confirmation_id: "net-1",
+        payment_id: "pay-1",
+        [drop]: undefined,
+      }, fixture.merchant),
+      "payment_receipt",
+    );
+    assert.equal(report.upstreamValid, false, drop);
+    assert.equal(
+      report.issues.some((entry) => entry.code === "AP2_RECEIPT_CLAIMS_INVALID"),
+      true,
+      drop,
+    );
+  }
+
+  // An unsupported kind is rejected before any claim is inspected.
+  const badKind = verifyAp2Receipt({
+    ...plan,
+    token: createJwt(base, fixture.merchant),
+    kind: "settlement_receipt",
+    asOf,
+  });
+  assert.equal(badKind.upstreamValid, false);
+  const kindIssue = badKind.issues.find((entry) => entry.code === "AP2_RECEIPT_INVALID");
+  assert.equal(kindIssue.message, "AP2 Receipt kind is unsupported");
+});
