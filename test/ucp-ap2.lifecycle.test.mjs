@@ -147,3 +147,51 @@ test("lifecycle correlation validates inputs, sorts transactions, and distinguis
     assert.throws(() => correlateTransactionLifecycle([invalid]));
   }
 });
+
+test("lifecycle ordering is locale independent UTF-16 code-unit order", () => {
+  // Identifiers chosen so `localeCompare` and code-unit ordering disagree.
+  // Under en-US collation "a" sorts before "B"; by code unit (0x61 > 0x42) it
+  // does not. Output ordering must follow code units so that the same input
+  // correlates identically on every host, which is what byte-identical
+  // offline replay depends on.
+  const transactionIds = ["txn-a", "txn-B", "txn-C", "txn-_", "txn-A"];
+  const events = transactionIds.map((transactionId, index) => ({
+    eventId: `evt-${index}`,
+    kind: "checkout",
+    transactionId,
+    checkoutId: `chk-${index}`,
+    occurredAt: "2026-07-23T00:00:00.000Z",
+    sourceDigest: sha256Bytes(Buffer.from(`event-${index}`, "utf8")),
+    upstreamValid: true,
+    evidenceEligible: true,
+  }));
+
+  const correlations = correlateTransactionLifecycle(events);
+  assert.deepEqual(
+    correlations.map((entry) => entry.transactionId),
+    [...transactionIds].sort(),
+  );
+
+  // Same check one level down: event ids inside a single transaction.
+  const tied = correlateTransactionLifecycle(
+    ["evt-b", "evt-A", "evt-a", "evt-B", "evt-_"].map((eventId, index) => ({
+      eventId,
+      kind: "order",
+      transactionId: "txn-tie",
+      checkoutId: "chk-tie",
+      occurredAt: "2026-07-23T00:00:00.000Z",
+      sourceDigest: sha256Bytes(Buffer.from(`tie-${index}`, "utf8")),
+      upstreamValid: true,
+      evidenceEligible: true,
+    })),
+  );
+  assert.deepEqual(
+    tied[0].events.map((entry) => entry.eventId),
+    ["evt-A", "evt-B", "evt-_", "evt-a", "evt-b"],
+  );
+
+  // Repeated runs are stable, and the result is unaffected by the default locale.
+  const once = JSON.stringify(correlateTransactionLifecycle(events));
+  const twice = JSON.stringify(correlateTransactionLifecycle(events));
+  assert.equal(once, twice);
+});
