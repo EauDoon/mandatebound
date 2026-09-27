@@ -238,3 +238,52 @@ test("review rejects oversized evidence before hashing", () => {
   request.evidence.bytesBase64 = `AAAA${"A".repeat(2_097_152)}`;
   assert.throws(() => reviewExternalEvidence(request), ReviewInputError);
 });
+
+test("review refuses ambiguous or over-nested external receipt bytes", () => {
+  // Two settlement_receipt keys: JSON.parse silently keeps the last one, so a
+  // second producer reading the same bytes can disagree about which receipt was
+  // the one verified. The strict parser rejects the document instead.
+  const shadowed = '{"profile":"audit","schema_version":"consequence-rail/settlement-bundle/v0.1",'
+    + '"action":{"action_id":"act_review_1"},'
+    + '"settlement_receipt":{"receipt_id":"receipt_review_1","action_id":"act_review_1",'
+    + '"outcome":"settled","recourse_final_status":"unconsumed","event_chain_head":"sha256:'
+    + `${"2".repeat(64)}","action_digest":"sha256:${"1".repeat(64)}"},`
+    + '"settlement_receipt":{"receipt_id":"receipt_review_1","action_id":"act_review_1",'
+    + '"outcome":"compensated","recourse_final_status":"consumed","event_chain_head":"sha256:'
+    + `${"2".repeat(64)}","action_digest":"sha256:${"1".repeat(64)}"}}`;
+  const raw = Buffer.from(shadowed, "utf8");
+  const digest = sha256Bytes(raw);
+  const request = reviewRequest(railBundle(), {
+    evidence: {
+      mediaType: "application/json",
+      bytesBase64: raw.toString("base64"),
+      digest,
+      byteLength: raw.length,
+    },
+    anchors: { expectedDigest: digest },
+    upstream: {
+      verifier: "consequence-rail:bundle-verify",
+      valid: true,
+      actionId: "act_review_1",
+      outcome: "compensated",
+      trustedKeyIds: ["demo-connector-key"],
+    },
+  });
+  const result = reviewExternalEvidence(request);
+  assert.equal(result.verdict, "unsupported");
+  assert.equal(result.receipt.receiptId, "");
+
+  // Nesting well past the 32-level default budget is refused the same way.
+  const nested = Buffer.from(`${"[".repeat(2_000)}0${"]".repeat(2_000)}`, "utf8");
+  const nestedDigest = sha256Bytes(nested);
+  const nestedResult = reviewExternalEvidence(reviewRequest(railBundle(), {
+    evidence: {
+      mediaType: "application/json",
+      bytesBase64: nested.toString("base64"),
+      digest: nestedDigest,
+      byteLength: nested.length,
+    },
+    anchors: { expectedDigest: nestedDigest },
+  }));
+  assert.equal(nestedResult.verdict, "unsupported");
+});
