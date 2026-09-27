@@ -1,8 +1,45 @@
+# Keep line endings deterministic for every tracked file.
+#
+# `text=auto` is a *heuristic*: git decides per file whether it looks like
+# text and normalizes line endings when it decides yes. A misdetection on a
+# binary asset rewrites bytes inside it. MandateBound already had that class
+# of corruption for .svg, so binary types are now declared explicitly rather
+# than left to the heuristic.
 * text=auto eol=lf
+
+# Text types we know are text: declare them so normalization never depends on
+# a content guess. `text eol=lf` is what a CRLF checkout would rewrite.
+*.cff text eol=lf
 *.json text eol=lf
 *.md text eol=lf
-*.ts text eol=lf
 *.mjs text eol=lf
-*.yml text eol=lf
+*.ts text eol=lf
+*.txt text eol=lf
 *.yaml text eol=lf
+*.yml text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+
+# Binary assets: `binary` is shorthand for `-text -diff`, so git neither
+# normalizes line endings nor tries to render a textual diff. Add a type here
+# when one is introduced rather than relying on `text=auto` detection.
+*.bmp binary
+*.gif binary
+*.gz binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.otf binary
+*.pdf binary
+*.png binary
 *.svg binary
+*.tgz binary
+*.ttf binary
+*.wasm binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary
