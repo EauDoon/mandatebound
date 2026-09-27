@@ -85,6 +85,9 @@ for (const file of files) {
   if (text.startsWith("\uFEFF")) {
     report(file, "contains a UTF-8 byte-order mark");
   }
+  if (text.length > 0 && !text.endsWith("\n")) {
+    report(file, "does not end with a final newline");
+  }
   if (text.includes("\r")) {
     report(file, "contains CR or CRLF line endings");
   }
