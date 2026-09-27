@@ -193,11 +193,13 @@ export function verifyAp2CheckoutJwt(
   }
   try {
     validateAp2CheckoutClaims(parsed.claims);
-  } catch {
+  } catch (error) {
     issues.push(upstreamIssue(
       "AP2_CHECKOUT_SCHEMA_INVALID",
       "checkoutJwt.claims",
-      "Checkout JWT does not match the bounded pinned AP2 v0.2.0 UCP Checkout schema",
+      error instanceof Error
+        ? error.message
+        : "Checkout JWT does not match the bounded pinned AP2 v0.2.0 UCP Checkout schema",
     ));
   }
   return finish(Object.freeze({

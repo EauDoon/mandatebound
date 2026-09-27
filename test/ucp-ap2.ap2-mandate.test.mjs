@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { verifyAp2Mandate, verifyAp2MandateChain } from "../dist/ucp-ap2.js";
+import {
+  verifyAp2CheckoutJwt,
+  verifyAp2Mandate,
+  verifyAp2MandateChain,
+} from "../dist/ucp-ap2.js";
 import {
   createAp2Token,
   createEcPair,
+  createJwt,
   evaluationTime,
   issueCodes,
   keySnapshot,
@@ -346,4 +351,70 @@ test("AP2 mandate chain rejections keep the underlying parse reason", () => {
   assert.equal(emptyAudience.upstreamValid, false);
   const parseIssue = emptyAudience.issues.find((issue) => issue.code === "AP2_MANDATE_CHAIN_INVALID");
   assert.equal(parseIssue.message, "AP2 Mandate chain must end with an SD-JWT separator");
+});
+
+test("AP2 checkout schema rejections keep the specific validation reason", () => {
+  const merchant = createEcPair("merchant-schema-reason");
+
+  // Each of these is a distinct bounded-schema failure. Before the fix every
+  // one collapsed into the same generic AP2_CHECKOUT_SCHEMA_INVALID message.
+  const cases = [
+    [{ id: "no-line-items" }, "Checkout line_items are missing or exceed the item limit"],
+    [
+      {
+        id: "bad-status",
+        line_items: [],
+        status: "not_a_pinned_status",
+        currency: "USD",
+        totals: [],
+        links: [],
+      },
+      "Checkout status is not in the pinned UCP enum",
+    ],
+    [
+      {
+        id: "bad-quantity",
+        line_items: [
+          {
+            id: "li-1",
+            item: { id: "item-1", title: "Thing" },
+            quantity: 0,
+            totals: [],
+          },
+        ],
+        status: "completed",
+        currency: "USD",
+        totals: [],
+        links: [],
+      },
+      "Checkout line-item quantity must be positive",
+    ],
+    [
+      {
+        id: "bad-link",
+        line_items: [],
+        status: "completed",
+        currency: "USD",
+        totals: [],
+        links: [{ type: "self", url: "not a url" }],
+      },
+      "Checkout link URL is not an absolute URI",
+    ],
+  ];
+
+  for (const [claims, expectedMessage] of cases) {
+    const report = verifyAp2CheckoutJwt({
+      token: createJwt(claims, merchant),
+      merchantKeySnapshot: keySnapshot(merchant),
+      expectedMerchantKeySourceDigest: sourceDigest,
+      asOf: evaluationTime,
+      allowedAlgorithms: ["ES256"],
+    });
+    assert.equal(report.upstreamValid, false, expectedMessage);
+    const issue = report.issues.find((entry) => entry.code === "AP2_CHECKOUT_SCHEMA_INVALID");
+    assert.notEqual(issue, undefined, expectedMessage);
+    assert.equal(issue.message, expectedMessage);
+    assert.equal(issue.path, "checkoutJwt.claims");
+    assert.equal(issue.impact, "upstream_validity");
+  }
 });
