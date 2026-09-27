@@ -6,8 +6,25 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     versioning-strategy: increase-if-necessary
+    # Roll the routine drift into one reviewable PR instead of one PR per
+    # package per week. `*` would also swallow major bumps, so the group is
+    # restricted to minor and patch: those are the semver-safe updates, while
+    # a major keeps its own PR and its own review.
+    groups:
+      npm-routine-updates:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # The workflows pin every action to a commit SHA, so a grouped bump has to
+    # move all of them together to stay internally consistent.
+    groups:
+      github-actions-updates:
+        patterns:
+          - "*"
