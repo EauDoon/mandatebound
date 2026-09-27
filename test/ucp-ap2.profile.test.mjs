@@ -189,3 +189,62 @@ test("Content-Digest parser rejects noncanonical, malformed, and wrong-length va
   assert.equal(report.upstreamValid, false);
   assert.equal(issueCodes(report).has("UCP_CONTENT_DIGEST_INVALID"), true);
 });
+
+test("UCP capability arrays must be present, non-empty, and object valued", () => {
+  const verify = (profile) => {
+    const snapshot = profileSnapshot(profile);
+    return verifyUcpProfileSnapshot(snapshot, {
+      expectedProfileDigest: snapshot.profileDigest,
+      asOf: evaluationTime,
+    });
+  };
+
+  // A capability that is missing, not an array, or empty is refused, and the
+  // refusal is distinguished from a version mismatch.
+  const capabilityCases = [
+    ["dev.ucp.shopping.checkout", "absent", undefined],
+    ["dev.ucp.shopping.checkout", "not-an-array", "checkout"],
+    ["dev.ucp.shopping.checkout", "empty", []],
+    ["dev.ucp.shopping.ap2_mandate", "empty", []],
+  ];
+  for (const [name, label, value] of capabilityCases) {
+    const profile = makeUcpProfile();
+    if (value === undefined) {
+      delete profile.ucp.capabilities[name];
+    } else {
+      profile.ucp.capabilities[name] = value;
+    }
+    const report = verify(profile);
+    assert.equal(report.upstreamValid, false, `${name} ${label} must be refused`);
+    const message = report.issues.map((issue) => issue.message).join(" | ");
+    assert.match(message, /Missing capability at/, `${name} ${label}: ${message}`);
+  }
+
+  // A capability array whose entries are not objects is refused too.
+  const notObjects = makeUcpProfile();
+  notObjects.ucp.capabilities["dev.ucp.shopping.checkout"] = ["checkout-string"];
+  const report = verify(notObjects);
+  assert.equal(report.upstreamValid, false);
+  assert.match(
+    report.issues.map((issue) => issue.message).join(" | "),
+    /Expected JSON object at/,
+  );
+
+  // A services entry that is not an array is refused by the sibling helper
+  // that resolves the service, and says so rather than reporting a capability.
+  for (const bad of ["rest", [], [{ version: UCP_AP2_EVIDENCE_PROFILE.ucpVersion }]]) {
+    const badService = makeUcpProfile();
+    badService.ucp.services["dev.ucp.shopping"] = bad;
+    const serviceReport = verify(badService);
+    assert.equal(serviceReport.upstreamValid, false, JSON.stringify(bad));
+    assert.match(
+      serviceReport.issues.map((issue) => issue.message).join(" | "),
+      /shopping service/,
+      JSON.stringify(bad),
+    );
+  }
+
+  // The unmodified reference profile still verifies, so the rules above are
+  // specific rather than blanket.
+  assert.equal(verify(makeUcpProfile()).upstreamValid, true);
+});
