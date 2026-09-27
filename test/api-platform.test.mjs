@@ -210,6 +210,33 @@ test("API binding is loopback-only and remote opt-in is not accepted", () => {
   );
 });
 
+test("API limit overrides reject unknown limit names", () => {
+  // A misspelled body limit used to be accepted and silently dropped, so a
+  // caller asking for a tighter request budget quietly got the default.
+  for (const typo of [{ maxBodyBytez: 1024 }, { headersTimeout: 1 }, { maxBodyBytes: 1024, BodyTimeoutMs: 1 }]) {
+    assert.throws(
+      () => createApiServer({ limits: typo, engine: engine() }),
+      (error) => error instanceof TypeError && error.message.startsWith("Unknown API limit:"),
+      JSON.stringify(Object.keys(typo)),
+    );
+  }
+
+  // Inherited Object.prototype members are not real limits either.
+  for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    assert.throws(
+      () => createApiServer({ limits: { [key]: 1 }, engine: engine() }),
+      (error) => error instanceof TypeError && error.message.includes("Unknown API limit"),
+      key,
+    );
+  }
+
+  // The real limits still override, and still validate their values.
+  assert.doesNotThrow(() => createApiServer({ limits: { maxBodyBytes: 2048 }, engine: engine() }));
+  assert.throws(() => createApiServer({ limits: { maxBodyBytes: 0 }, engine: engine() }), /limit/);
+  assert.doesNotThrow(() => createApiServer({ limits: {}, engine: engine() }));
+  assert.doesNotThrow(() => createApiServer({ engine: engine() }));
+});
+
 test("local request boundary rejects remote peers, rebinding Hosts, and foreign Origins", () => {
   const request = (remoteAddress, host, origin, rawHeaders = ["host", host]) => ({
     socket: { remoteAddress },
