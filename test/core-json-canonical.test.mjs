@@ -116,3 +116,34 @@ test("content identifiers are stable and timing-safe comparable", () => {
   assert.equal(sha256Bytes(canonicalBytes({ a: 1 })), sha256Digest({ a: 1 }));
   assert.notEqual(sha256Digest("raw"), sha256Digest({ value: "raw" }));
 });
+
+test("canonicalization limit overrides reject unknown limit names", () => {
+  // A misspelled DoS limit used to be accepted and silently ignored, so a
+  // caller asking for a tighter budget quietly got the defaults instead.
+  for (const typo of [{ maxNode: 1 }, { maxnodes: 1 }, { MaxNodes: 1 }, { maxByte: 1 }]) {
+    assert.throws(
+      () => canonicalize({ a: 1 }, typo),
+      (error) => error instanceof TypeError && error.message.startsWith("Unknown canonicalization limit:"),
+      JSON.stringify(Object.keys(typo)),
+    );
+  }
+
+  // Inherited Object.prototype members are not real limits either.
+  for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    assert.throws(
+      () => canonicalize({ a: 1 }, { [key]: 1 }),
+      (error) => error instanceof TypeError && error.message.includes("Unknown canonicalization limit"),
+      key,
+    );
+  }
+
+  // The three real limits still override, and still validate their values.
+  assert.equal(canonicalize({ a: 1 }, { maxBytes: 1_048_576 }), '{"a":1}');
+  assert.throws(() => canonicalize({ a: 1 }, { maxNodes: 1 }), CanonicalizationError);
+  assert.throws(() => canonicalize({ a: 1 }, { maxBytes: 0 }), TypeError);
+  assert.throws(() => canonicalize({ a: 1 }, { maxDepth: 1.5 }), TypeError);
+
+  // Undefined is treated as absent, as before.
+  assert.equal(canonicalize({ a: 1 }, undefined), '{"a":1}');
+  assert.equal(canonicalize({ a: 1 }, {}), '{"a":1}');
+});
