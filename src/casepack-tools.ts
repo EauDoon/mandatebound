@@ -108,7 +108,9 @@ function collectChanges(
 }
 
 function statusRank(status: CasePackStatus): number {
-  const rank = ["satisfied", "not_applicable", "unknown", "unsupported", "missing", "conflicting"]
+  // Same severity order as the verifier's STATUS_PRIORITY in
+  // casepack/verify.ts, which is what actually produces the reported statuses.
+  const rank = ["not_applicable", "satisfied", "unknown", "missing", "unsupported", "conflicting"]
     .indexOf(status);
   if (!CASEPACK_STATUSES.includes(status) || rank < 0) {
     throw new TypeError("Unknown CasePack status");
