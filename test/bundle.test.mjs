@@ -301,3 +301,50 @@ test("rejects duplicate artifact ids, duplicate sequences, extra index keys, and
   assert.ok(classificationReport.issues.some((entry) =>
     entry.path.endsWith(".classification") || entry.code === "ALB_SCHEMA_INVALID"));
 });
+
+test("every signed bundle artifact must carry exactly one proof", () => {
+  const base = createEvidenceBundle(withoutEmbeddedBundle(buildScenario("principal").input));
+  const signed = base.objects.filter((object) => Array.isArray(object.content?.proofs));
+  assert.ok(signed.length > 0, "the scenario must contain signed artifacts");
+  const at = (bundle, path) => bundle.objects.find((object) => object.path === path);
+
+  for (const object of signed) {
+    // A doubled proof must be refused by the proof-binding guard. This is the
+    // path that reaches `artifact.proofs.length !== 1`.
+    for (const extra of [1, 2]) {
+      const candidate = structuredClone(base);
+      const proofs = at(candidate, object.path).content.proofs;
+      for (let index = 1; index <= extra; index += 1) {
+        proofs.push(structuredClone(proofs[0]));
+      }
+      reseal(candidate);
+      const report = verifyEvidenceBundle(candidate);
+      assert.equal(report.valid, false, `${object.path} with ${proofs.length} proofs`);
+      assert.ok(
+        report.issues.some((issue) => issue.code === "ALB_PROOF_BINDING"),
+        `${object.path} with ${proofs.length} proofs: ${JSON.stringify(report.issues)}`,
+      );
+      assert.ok(
+        report.issues.some((issue) => issue.message === "Signed bundle artifact must have one proof"),
+        `${object.path} with ${proofs.length} proofs: ${JSON.stringify(report.issues)}`,
+      );
+    }
+
+    // A stripped proof is also refused, but by the signed-artifact schema guard
+    // rather than the proof-count guard, because schema validation runs first.
+    const unsigned = structuredClone(base);
+    at(unsigned, object.path).content.proofs = [];
+    reseal(unsigned);
+    const unsignedReport = verifyEvidenceBundle(unsigned);
+    assert.equal(unsignedReport.valid, false, `${object.path} with no proof`);
+    assert.ok(
+      unsignedReport.issues.some((issue) => issue.code === "ALB_SCHEMA_INVALID"),
+      `${object.path} with no proof: ${JSON.stringify(unsignedReport.issues)}`,
+    );
+  }
+
+  // The rule is specific to signed artifacts: an unsigned object is not
+  // subject to it, and the untouched bundle still verifies.
+  assert.ok(base.objects.some((object) => object.content?.proofs === undefined));
+  assert.equal(verifyEvidenceBundle(structuredClone(base)).valid, true);
+});
