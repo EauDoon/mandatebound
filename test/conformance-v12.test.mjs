@@ -72,6 +72,31 @@ test("CasePack assurance status ordering is stable", () => {
   assert.throws(() => compareCasePackStatus("other", "unknown"), TypeError);
 });
 
+test("CasePack status ordering matches the verifier's worst-status aggregation", () => {
+  // casepack/verify.ts collapses per-requirement statuses with STATUS_PRIORITY,
+  // so an exported comparator that disagrees with it would rank two cases
+  // differently from the report the verifier actually produced.
+  const ordered = [
+    "not_applicable",
+    "satisfied",
+    "unknown",
+    "missing",
+    "unsupported",
+    "conflicting",
+  ];
+  assert.deepEqual([...ordered].sort(compareCasePackStatus), ordered);
+  for (let index = 0; index < ordered.length; index += 1) {
+    for (let other = 0; other < ordered.length; other += 1) {
+      const expected = Math.sign(index - other);
+      assert.equal(
+        Math.sign(compareCasePackStatus(ordered[index], ordered[other])),
+        expected,
+        `${ordered[index]} vs ${ordered[other]}`,
+      );
+    }
+  }
+});
+
 test("release version cannot drift from the manifest, the changelog, or the published statement", () => {
   const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
