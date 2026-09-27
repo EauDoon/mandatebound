@@ -37,6 +37,7 @@ All notable changes are documented here.
 - Evidence-bundle verification now rejects duplicate signed-artifact identifiers, duplicate runtime-event sequences, extra case-index keys, decorated or oversized path lists, and non-protocol media types or classifications even when Merkle metadata is otherwise self-consistent.
 - CLI, API, and JsonlStore JSON parsers now honor the configured document-size cap for string values instead of silently applying the 256 KiB strict-JSON default. `DEFAULT_API_LIMITS` and `DEFAULT_JSONL_STORE_LIMITS` are exported; API `maxJsonStringBytes` follows `maxBodyBytes` unless a tighter cap is set, and JsonlStore `maxRecordBytes` follows the file cap.
 - Decision and appeal stores now bind persisted record keys to their artifact identifiers and reject divergent appeal supersessions.
+- Strict JSON limit overrides now reject unknown limit names, so a misspelled parser bound fails loudly instead of silently falling back to the default budget.
 - AP2 imports now require delegated expiry, bound key-snapshot sizes, non-future source checkpoints, capture-window consistency, issuance-valid checkpoint keys, exact required line-item quantities, and consistent lifecycle duplicates.
 - Direct policy-fact evaluation, appeal replay input, trust-snapshot cutoffs, and CLI simulation arguments now fail closed on malformed, future-issued, or ambiguous input.
 - License and package checks now resolve the repository from their script location and include nested installed dependencies.

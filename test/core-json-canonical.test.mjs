@@ -147,3 +147,32 @@ test("canonicalization limit overrides reject unknown limit names", () => {
   assert.equal(canonicalize({ a: 1 }, undefined), '{"a":1}');
   assert.equal(canonicalize({ a: 1 }, {}), '{"a":1}');
 });
+
+test("strict JSON limit overrides reject unknown limit names", () => {
+  // A misspelled DoS limit used to be accepted and silently ignored, so a
+  // caller asking for a tighter parser budget quietly got the defaults instead.
+  for (const typo of [{ maxNode: 1 }, { maxstringbytes: 1 }, { maxBytes: 1, MaxDepth: 2 }]) {
+    assert.throws(
+      () => parseStrictJson("{}", typo),
+      (error) => error instanceof TypeError && error.message.startsWith("Unknown strict JSON limit:"),
+      JSON.stringify(Object.keys(typo)),
+    );
+  }
+
+  // Inherited Object.prototype members are not real limits either.
+  for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    assert.throws(
+      () => parseStrictJson("{}", { [key]: 1 }),
+      (error) => error instanceof TypeError && error.message.includes("Unknown strict JSON limit"),
+      key,
+    );
+  }
+
+  // The six real limits still override, and still validate their values.
+  assert.deepEqual({ ...parseStrictJson("{}") }, {});
+  assert.throws(() => parseStrictJson("{}", { maxBytes: 0 }), TypeError);
+  assert.throws(() => parseStrictJson("{}", { maxNodes: 0 }), TypeError);
+  assert.equal(parseStrictJson("null", { maxNodes: 1 }), null);
+  assert.equal(parseStrictJson("{}", undefined) instanceof Object, false);
+  assert.deepEqual({ ...parseStrictJson("{}", undefined) }, {});
+});
