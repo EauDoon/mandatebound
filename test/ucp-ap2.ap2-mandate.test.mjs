@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { verifyAp2Mandate } from "../dist/ucp-ap2.js";
+import { verifyAp2Mandate, verifyAp2MandateChain } from "../dist/ucp-ap2.js";
 import {
   createAp2Token,
   createEcPair,
@@ -321,4 +321,29 @@ test("AP2 unknown constraints fail and stale issuer keys separate validity from 
   assert.equal(stale.upstreamValid, true, JSON.stringify(stale.issues));
   assert.equal(stale.evidenceEligible, false);
   assert.equal(stale.issues.some((issue) => issue.code === "INTEROP_KEY_SNAPSHOT_STALE"), true);
+});
+
+test("AP2 mandate chain rejections keep the underlying parse reason", () => {
+  const fixture = makeClosedAp2Fixture();
+
+  // A rejected chain must stay fail-closed with the same stable issue code...
+  const emptyIssuer = verifyAp2MandateChain({ ...fixture.options, expectedIssuer: "" });
+  assert.equal(emptyIssuer.upstreamValid, false);
+  assert.equal(emptyIssuer.value, null);
+  const chainIssue = emptyIssuer.issues.find((issue) => issue.code === "AP2_MANDATE_CHAIN_INVALID");
+  assert.notEqual(chainIssue, undefined);
+
+  // ...while still reporting the specific structural reason, so an integrator
+  // can tell a bad issuer pin apart from a malformed SD-JWT chain.
+  assert.equal(chainIssue.message, "Expected non-empty string at expectedIssuer");
+  assert.equal(chainIssue.path, "token");
+  assert.equal(chainIssue.impact, "upstream_validity");
+
+  const emptyAudience = verifyAp2MandateChain({
+    ...fixture.options,
+    token: "not-an-sd-jwt-chain",
+  });
+  assert.equal(emptyAudience.upstreamValid, false);
+  const parseIssue = emptyAudience.issues.find((issue) => issue.code === "AP2_MANDATE_CHAIN_INVALID");
+  assert.equal(parseIssue.message, "AP2 Mandate chain must end with an SD-JWT separator");
 });

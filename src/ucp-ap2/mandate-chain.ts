@@ -538,11 +538,13 @@ export function verifyAp2MandateChain(
       ...(checkoutHash === undefined ? {} : { checkoutHash }),
     });
     return finish(result, issues);
-  } catch {
+  } catch (error) {
     issues.push(upstreamIssue(
       "AP2_MANDATE_CHAIN_INVALID",
       "token",
-      "AP2 v0.2.0 Mandate chain failed strict bounded verification",
+      error instanceof Error
+        ? error.message
+        : "AP2 v0.2.0 Mandate chain failed strict bounded verification",
     ));
     return finish<VerifiedAp2MandateChain>(null, issues);
   }
