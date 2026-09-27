@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { compareCasePackStatus } from "../dist/casepack-tools.js";
 import { getConformanceStatement } from "../dist/conformance.js";
+import { RELEASE_VERSION } from "../dist/version.js";
 
 test("conformance statement names the exact evidence-import profile and its limits", () => {
   const statement = getConformanceStatement();
@@ -69,4 +70,22 @@ test("CasePack assurance status ordering is stable", () => {
   assert.ok(compareCasePackStatus("satisfied", "missing") < 0);
   assert.ok(compareCasePackStatus("conflicting", "unknown") > 0);
   assert.throws(() => compareCasePackStatus("other", "unknown"), TypeError);
+});
+
+test("release version cannot drift from the manifest, the changelog, or the published statement", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const published = JSON.parse(readFileSync(
+    new URL("../conformance/v1.2/capabilities.json", import.meta.url),
+    "utf8",
+  ));
+
+  assert.equal(manifest.version, RELEASE_VERSION);
+  assert.equal(published.release, RELEASE_VERSION);
+  assert.equal(getConformanceStatement().release, RELEASE_VERSION);
+
+  // The newest numbered CHANGELOG section is the release these pins describe.
+  const released = [...changelog.matchAll(/^## (\d+\.\d+\.\d+)$/gmu)].map((match) => match[1]);
+  assert.ok(released.length > 0, "CHANGELOG.md has no released version section");
+  assert.equal(released[0], RELEASE_VERSION);
 });

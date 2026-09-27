@@ -1,3 +1,5 @@
+import { RELEASE_VERSION } from "./version.js";
+
 export type CapabilityStatus = "supported" | "deferred" | "unsupported";
 
 export interface CapabilityDeclaration {
@@ -8,7 +10,7 @@ export interface CapabilityDeclaration {
 }
 
 export interface ConformanceStatement {
-  readonly release: "1.2.0";
+  readonly release: typeof RELEASE_VERSION;
   readonly legalEffect: "not-determined";
   readonly evidenceProfile: {
     readonly id: "ucp-2026-04-08-rest+ap2-mandates-0.2.0";
@@ -103,7 +105,7 @@ const CAPABILITIES: readonly CapabilityDeclaration[] = Object.freeze([
 ]);
 
 const STATEMENT: ConformanceStatement = Object.freeze({
-  release: "1.2.0",
+  release: RELEASE_VERSION,
   legalEffect: "not-determined",
   evidenceProfile: Object.freeze({
     id: UCP_AP2_EVIDENCE_PROFILE.id,
