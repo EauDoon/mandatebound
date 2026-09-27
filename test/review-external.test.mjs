@@ -179,6 +179,37 @@ test("review records uncertainty instead of failing when upstream is invalid", (
   assert.equal(result.legalEffect, "not-determined");
 });
 
+test("review rejects trusted key ids that are empty, malformed, or repeated", () => {
+  // trustedKeyIds is copied into the review body and covered by reviewDigest,
+  // so an empty or doubled key identity must be refused at the input boundary
+  // rather than attested to in a record a third party verifies.
+  const bundle = railBundle();
+  const withKeyIds = (trustedKeyIds) => reviewRequest(bundle, {
+    upstream: {
+      verifier: "consequence-rail:bundle-verify",
+      valid: true,
+      actionId: bundle.action.action_id,
+      outcome: bundle.settlement_receipt?.outcome ?? "",
+      trustedKeyIds,
+    },
+  });
+  for (const trustedKeyIds of [
+    [""],
+    ["demo-connector-key", "demo-connector-key"],
+    ["has space"],
+    ["../escape"],
+    [42],
+    "demo-connector-key",
+  ]) {
+    assert.throws(() => reviewExternalEvidence(withKeyIds(trustedKeyIds)), ReviewInputError, JSON.stringify(trustedKeyIds));
+  }
+
+  // An empty list stays legal: the caller is asserting no trusted keys at all.
+  const none = reviewExternalEvidence(withKeyIds([]));
+  assert.equal(none.verdict, "recorded");
+  assert.deepEqual(none.upstream.trustedKeyIds, []);
+});
+
 test("review rejects malformed input without emitting a record", () => {
   const bundle = railBundle();
   const valid = reviewRequest(bundle);

@@ -155,8 +155,19 @@ function parseInput(value: unknown): { parsed: ExternalReviewInput; bytes: Uint8
   if (typeof upstreamRecord["valid"] !== "boolean") {
     throw new ReviewInputError("upstream.valid must be a boolean.");
   }
-  if (!Array.isArray(upstreamRecord["trustedKeyIds"]) || upstreamRecord["trustedKeyIds"].some((key) => typeof key !== "string")) {
-    throw new ReviewInputError("upstream.trustedKeyIds must be an array of strings.");
+  const trustedKeyIds = upstreamRecord["trustedKeyIds"];
+  if (!Array.isArray(trustedKeyIds)) {
+    throw new ReviewInputError("upstream.trustedKeyIds must be an array of ASCII identifiers.");
+  }
+  // These land in the review body and are covered by reviewDigest, so the
+  // record must not attest to an empty, malformed, or doubled key identity.
+  const seenKeyIds = new Set<string>();
+  for (const key of trustedKeyIds) {
+    requireIdentifier(key, "upstream.trustedKeyIds");
+    if (seenKeyIds.has(key as string)) {
+      throw new ReviewInputError("upstream.trustedKeyIds must not repeat a key identifier.");
+    }
+    seenKeyIds.add(key as string);
   }
   const bytes = decodeEvidenceBytes(evidenceRecord["bytesBase64"]);
   return {
@@ -177,7 +188,7 @@ function parseInput(value: unknown): { parsed: ExternalReviewInput; bytes: Uint8
         valid: upstreamRecord["valid"] as boolean,
         actionId: requireString(upstreamRecord["actionId"], "upstream.actionId"),
         outcome: requireString(upstreamRecord["outcome"], "upstream.outcome"),
-        trustedKeyIds: [...(upstreamRecord["trustedKeyIds"] as string[])],
+        trustedKeyIds: [...(trustedKeyIds as string[])],
       },
     },
     bytes,
