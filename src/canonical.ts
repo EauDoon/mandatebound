@@ -17,6 +17,8 @@ const DEFAULT_LIMITS: CanonicalLimits = Object.freeze({
 
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const hasOwn = (value: object, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
 
 export class CanonicalizationError extends Error {
   public readonly code: ValidationErrorCode = "ALB_CANONICAL_UNSUPPORTED";
@@ -122,6 +124,13 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
 }
 
 function resolveLimits(overrides?: Partial<CanonicalLimits>): CanonicalLimits {
+  if (overrides !== undefined) {
+    for (const name of Object.keys(overrides)) {
+      if (!hasOwn(DEFAULT_LIMITS, name)) {
+        throw new TypeError(`Unknown canonicalization limit: ${name}`);
+      }
+    }
+  }
   const limits = { ...DEFAULT_LIMITS, ...overrides };
   for (const [name, value] of Object.entries(limits)) {
     if (!Number.isSafeInteger(value) || value < 1) {
