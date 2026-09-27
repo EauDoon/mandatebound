@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign, verify } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
@@ -1170,4 +1170,72 @@ test("v1.1 schemas compile and validate the canonical CasePack", () => {
   const validate = ajv.getSchema("https://github.com/Oonyl/mandatebound/schemas/v1.1/case-pack.schema.json");
   assert.ok(validate);
   assert.equal(validate(fixture().pack), true, JSON.stringify(validate.errors));
+});
+
+test("source checkpoint proofs reject bad bindings and keys, and stay domain separated", () => {
+  const unsigned = {
+    format: "MandateBoundSourceCheckpoint/v1",
+    checkpointId: "checkpoint.proof-guard",
+    sourceId: "source.proof-guard",
+    epoch: "2026-07-22T00:00:00.000Z",
+    issuedAt: "2026-07-22T12:00:00.000Z",
+    windowStart: "2026-07-22T12:00:00.000Z",
+    windowEnd: "2026-07-22T12:00:00.000Z",
+    firstSequence: 0,
+    lastSequence: 0,
+    eventCount: 1,
+    merkleRoot: sha256Digest({ checkpointId: "checkpoint.proof-guard", sequence: 0 }),
+    declaredGaps: [],
+  };
+  const checkpoint = sealSourceCheckpoint(unsigned);
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const keyId = "external.proof-guard-key";
+
+  // The binding itself must be well formed before any signing happens.
+  for (const badKeyId of ["", "has spaces", "not-an-identifier!", 7, undefined]) {
+    assert.throws(
+      () => createSourceCheckpointProof(checkpoint, privateKey, badKeyId),
+      (error) => error instanceof TypeError && error.message === "Invalid source checkpoint proof binding",
+      String(badKeyId),
+    );
+  }
+  assert.throws(
+    () => createSourceCheckpointProof({ ...checkpoint, checkpointDigest: "sha256:not-a-digest" }, privateKey, keyId),
+    (error) => error instanceof TypeError && error.message === "Invalid source checkpoint proof binding",
+  );
+
+  // Only a private Ed25519 key may sign a checkpoint proof.
+  const p256 = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const ed25519Public = generateKeyPairSync("ed25519").publicKey;
+  for (const wrongKey of [publicKey, ed25519Public, p256.privateKey]) {
+    assert.throws(
+      () => createSourceCheckpointProof(checkpoint, wrongKey, keyId),
+      (error) => error instanceof TypeError && error.message === "An Ed25519 private key is required",
+    );
+  }
+
+  // KeyObject, PEM string and PEM Buffer inputs all produce the same proof.
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" });
+  const fromObject = createSourceCheckpointProof(checkpoint, privateKey, keyId);
+  const fromString = createSourceCheckpointProof(checkpoint, pem, keyId);
+  const fromBuffer = createSourceCheckpointProof(checkpoint, Buffer.from(pem, "utf8"), keyId);
+  assert.deepEqual(fromString, fromObject);
+  assert.deepEqual(fromBuffer, fromObject);
+  assert.equal(fromObject.suite, "Ed25519");
+  assert.equal(fromObject.keyId, keyId);
+  assert.equal(fromObject.signedDigest, checkpoint.checkpointDigest);
+
+  // The signature commits to the checkpoint domain separator, so a signature
+  // produced over the bare digest by the same key must not verify.
+  const verifyWith = (signature) => {
+    const input = Buffer.concat([
+      Buffer.from("MANDATEBOUND-SOURCE-CHECKPOINT-V1\0", "ascii"),
+      Buffer.from(checkpoint.checkpointDigest.slice("sha256:".length), "hex"),
+    ]);
+    return verify(null, input, publicKey, Buffer.from(signature, "base64url"));
+  };
+  const bareDigest = Buffer.from(checkpoint.checkpointDigest.slice("sha256:".length), "hex");
+  const crossProtocol = sign(null, bareDigest, privateKey).toString("base64url");
+  assert.equal(verifyWith(fromObject.signature), true);
+  assert.equal(verifyWith(crossProtocol), false, "a bare-digest signature must not verify as a checkpoint proof");
 });
