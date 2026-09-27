@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import fc from "fast-check";
+// Importing the helper also pins the global fast-check seed for this file.
+import "./fast-check-seed.mjs";
 import {
   PolicyConfigurationError,
   evaluateRulebook,
