@@ -34,6 +34,13 @@ export class StrictJsonError extends Error {
 }
 
 function resolveLimits(overrides: Partial<StrictJsonLimits> | undefined): StrictJsonLimits {
+  if (overrides !== undefined) {
+    for (const name of Object.keys(overrides)) {
+      if (!Object.prototype.hasOwnProperty.call(DEFAULT_STRICT_JSON_LIMITS, name)) {
+        throw new TypeError(`Unknown strict JSON limit: ${name}`);
+      }
+    }
+  }
   const limits = { ...DEFAULT_STRICT_JSON_LIMITS, ...overrides };
   for (const [name, value] of Object.entries(limits)) {
     if (!Number.isSafeInteger(value) || value < 1) {
