@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fc from "fast-check";
+// Importing the helper also pins the global fast-check seed for this file.
+import { FAST_CHECK_SEED } from "./fast-check-seed.mjs";
 import { createEvidenceBundle, verifyEvidenceBundle } from "../dist/bundle.js";
 import { evaluateCase } from "../dist/engine.js";
 import { buildScenario } from "../dist/simulator.js";
@@ -75,4 +77,23 @@ test("fast-check: arbitrary root changes make bundles unverifiable", () => {
     const valid = verifyEvidenceBundle(candidate).valid;
     assert.equal(valid, candidate.rootDigest === bundle.rootDigest);
   }), { numRuns: 30 });
+});
+
+test("fast-check runs on a pinned seed so results are reproducible", () => {
+  // Guards the `./fast-check-seed.mjs` import above. Without it fast-check
+  // picks a random seed per run, so a property failure seen in CI cannot be
+  // replayed and the coverage gate measures a different set of paths each
+  // time.
+  const configured = fc.readConfigureGlobal().seed;
+  assert.equal(typeof configured, "number");
+  assert.equal(Number.isSafeInteger(configured), true);
+  assert.equal(configured, FAST_CHECK_SEED);
+
+  // Two draws from the same configured seed must agree.
+  const draw = () => {
+    const seen = [];
+    fc.assert(fc.property(fc.integer(), (value) => { seen.push(value); }), { numRuns: 8 });
+    return seen.join(",");
+  };
+  assert.equal(draw(), draw());
 });
