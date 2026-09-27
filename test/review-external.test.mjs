@@ -318,3 +318,113 @@ test("review refuses ambiguous or over-nested external receipt bytes", () => {
   }));
   assert.equal(nestedResult.verdict, "unsupported");
 });
+
+test("every review input guard rejects with its own specific reason", () => {
+  const valid = reviewRequest(railBundle());
+  assert.equal(reviewExternalEvidence(valid).verdict, "recorded");
+
+  // Each case asserts the exact message, so a guard that starts rejecting for
+  // the wrong reason is caught rather than passing on the error type alone.
+  const rejects = (input, expectedMessage) => {
+    assert.throws(
+      () => reviewExternalEvidence(input),
+      (error) => {
+        assert.equal(error instanceof ReviewInputError, true, expectedMessage);
+        assert.equal(error.code, "REVIEW_INPUT_INVALID");
+        assert.equal(error.message, expectedMessage);
+        return true;
+      },
+    );
+  };
+
+  rejects(null, "Review input must be an object.");
+  rejects("input", "Review input must be an object.");
+  rejects([], "Review input must be an object.");
+  rejects({ ...valid, extra: true }, "Review input must contain exactly: source, evidence, anchors, upstream.");
+  rejects(
+    { source: valid.source, evidence: valid.evidence, anchors: valid.anchors },
+    "Review input must contain exactly: source, evidence, anchors, upstream.",
+  );
+
+  rejects({ ...valid, source: "consequence-rail" }, "source must be an object.");
+  rejects({ ...valid, source: { sourceId: "consequence-rail" } }, "source must contain exactly: sourceId, eventClass.");
+  rejects(
+    { ...valid, source: { ...valid.source, extra: 1 } },
+    "source must contain exactly: sourceId, eventClass.",
+  );
+  rejects({ ...valid, source: { ...valid.source, sourceId: "has spaces" } }, "source.sourceId must be an ASCII identifier.");
+  rejects(
+    { ...valid, source: { ...valid.source, eventClass: "" } },
+    "source.eventClass must be an ASCII identifier.",
+  );
+
+  rejects({ ...valid, evidence: null }, "evidence must be an object.");
+  rejects(
+    { ...valid, evidence: { mediaType: "application/json" } },
+    "evidence must contain exactly: mediaType, bytesBase64, digest, byteLength.",
+  );
+  rejects(
+    { ...valid, evidence: { ...valid.evidence, mediaType: "" } },
+    "evidence.mediaType must be a non-empty string.",
+  );
+  rejects(
+    { ...valid, evidence: { ...valid.evidence, mediaType: "not a media type" } },
+    "evidence.mediaType is invalid.",
+  );
+  rejects(
+    { ...valid, evidence: { ...valid.evidence, byteLength: 1.5 } },
+    "evidence.byteLength must be an integer.",
+  );
+  rejects(
+    { ...valid, evidence: { ...valid.evidence, digest: "not-a-digest" } },
+    "evidence.digest must be a sha256 digest.",
+  );
+
+  rejects({ ...valid, anchors: "anchored" }, "anchors must be an object.");
+  rejects({ ...valid, anchors: {} }, "anchors must contain exactly: expectedDigest.");
+  rejects(
+    { ...valid, anchors: { ...valid.anchors, expectedDigest: "sha256:short" } },
+    "anchors.expectedDigest must be a sha256 digest.",
+  );
+
+  rejects({ ...valid, upstream: [] }, "upstream must be an object.");
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, extra: true } },
+    "upstream must contain exactly: verifier, valid, actionId, outcome, trustedKeyIds.",
+  );
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, valid: "yes" } },
+    "upstream.valid must be a boolean.",
+  );
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, verifier: "not an identifier" } },
+    "upstream.verifier must be an ASCII identifier.",
+  );
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, actionId: "" } },
+    "upstream.actionId must be a non-empty string.",
+  );
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, outcome: "" } },
+    "upstream.outcome must be a non-empty string.",
+  );
+  rejects(
+    { ...valid, upstream: { ...valid.upstream, trustedKeyIds: "demo-connector-key" } },
+    "upstream.trustedKeyIds must be an array of ASCII identifiers.",
+  );
+
+  // Evidence bytes must be canonical, padded, standard base64.
+  for (const bytesBase64 of [
+    "",
+    "!!!not-base64!!!",
+    "QQ",           // unpadded
+    "QR==",         // non-canonical padding bits
+  ]) {
+    rejects(
+      { ...valid, evidence: { ...valid.evidence, bytesBase64 } },
+      "evidence.bytesBase64 is invalid.",
+    );
+  }
+  // Decodes to zero bytes, which is refused rather than hashed.
+  rejects({ ...valid, evidence: { ...valid.evidence, bytesBase64: "" } }, "evidence.bytesBase64 is invalid.");
+});
