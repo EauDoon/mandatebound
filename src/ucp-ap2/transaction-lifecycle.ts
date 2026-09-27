@@ -24,6 +24,17 @@ export const TRANSACTION_LIFECYCLE_KINDS = Object.freeze([
 
 export type TransactionLifecycleKind = (typeof TRANSACTION_LIFECYCLE_KINDS)[number];
 
+/**
+ * UTF-16 code-unit ordering, matching the canonical JSON ordering the rest of
+ * the evidence modules use. `localeCompare` must not be used for ordering
+ * identifiers or timestamps: with no explicit locale it resolves against the
+ * runtime's default collation, so the same inputs can sort differently on
+ * different hosts and break byte-identical replay.
+ */
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export function correlateTransactionLifecycle(
   input: readonly TransactionLifecycleEvidence[],
 ): readonly TransactionLifecycleCorrelation[] {
@@ -45,9 +56,9 @@ export function correlateTransactionLifecycle(
 
   const correlations: TransactionLifecycleCorrelation[] = [];
   for (const [transactionId, group] of [...groups.entries()].sort(([left], [right]) =>
-    left.localeCompare(right))) {
+    compareCodeUnits(left, right))) {
     const sorted = [...group].sort((left, right) =>
-      left.occurredAt.localeCompare(right.occurredAt) || left.eventId.localeCompare(right.eventId));
+      compareCodeUnits(left.occurredAt, right.occurredAt) || compareCodeUnits(left.eventId, right.eventId));
     const byId = new Map<string, TransactionLifecycleEvidence[]>();
     for (const event of sorted) {
       const entries = byId.get(event.eventId) ?? [];
