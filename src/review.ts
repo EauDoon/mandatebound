@@ -6,6 +6,7 @@ import {
   sha256Digest,
 } from "./canonical.js";
 import type { Sha256Digest } from "./domain.js";
+import { parseStrictJson } from "./strict-json.js";
 
 export const EXTERNAL_REVIEW_FORMAT = "MandateBoundExternalEvidenceReview/v1";
 export const EXTERNAL_REVIEW_SOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -198,7 +199,10 @@ function extractReceipt(bytes: Uint8Array): ExtractedReceipt | null {
   }
   let bundle: unknown;
   try {
-    bundle = JSON.parse(text);
+    // Strict JSON, not JSON.parse: an ambiguous external receipt must not be
+    // able to hide a second "action" or "settlement_receipt" key behind a
+    // first one, and untrusted bytes stay inside this module's size budget.
+    bundle = parseStrictJson(text, { maxBytes: EXTERNAL_REVIEW_MAX_EVIDENCE_BYTES });
   } catch {
     return null;
   }
