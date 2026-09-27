@@ -26,6 +26,7 @@ import {
   isTimestamp,
   MAX_PROTOCOL_EVIDENCE,
   MAX_RAW_EVIDENCE_BYTES,
+  MAX_RAW_EVIDENCE_REFERENCES,
   MAX_TOTAL_RAW_EVIDENCE_BYTES,
   timestampMillis,
 } from "./primitives.js";
@@ -76,7 +77,7 @@ function rawEvidenceMap(
   const result = new Map<string, Uint8Array>();
   if (values === undefined) return result;
   let totalBytes = 0;
-  if (values.length > MAX_PROTOCOL_EVIDENCE + 256) {
+  if (values.length > MAX_RAW_EVIDENCE_REFERENCES) {
     addIssue(issues, "$anchors.rawEvidence", "MBCP_LIMIT_EXCEEDED", "Supplied raw evidence count is invalid");
     return result;
   }

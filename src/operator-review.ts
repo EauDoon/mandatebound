@@ -2,23 +2,24 @@ import type { CasePackVerificationAnchors, MandateBoundCasePack } from "./casepa
 import { canonicalBytes, isSha256Digest, sha256Bytes, sha256Digest } from "./canonical.js";
 import { OperatorInputError, type CaseAssessmentInput } from "./operator.js";
 import { createCaseReport } from "./report.js";
+import { MAX_RAW_EVIDENCE_BYTES, MAX_RAW_EVIDENCE_REFERENCES, MAX_TOTAL_RAW_EVIDENCE_BYTES } from "./casepack/primitives.js";
 import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 
 function rawSnapshots(anchors: CasePackVerificationAnchors) {
   const values = anchors.rawEvidence ?? [];
-  if (!Array.isArray(values) || values.length > 1_024) throw new OperatorInputError("Raw evidence count is invalid.");
+  if (!Array.isArray(values) || values.length > MAX_RAW_EVIDENCE_REFERENCES) throw new OperatorInputError("Raw evidence count is invalid.");
   const ids = new Set<string>();
   let bytes = 0;
   return values.map((item) => {
     if (item === null || typeof item !== "object" || typeof item.referenceId !== "string"
       || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(item.referenceId) || ids.has(item.referenceId)
-      || !(item.bytes instanceof Uint8Array) || item.bytes.byteLength > 16_777_216
+      || !(item.bytes instanceof Uint8Array) || item.bytes.byteLength > MAX_RAW_EVIDENCE_BYTES
       || Object.keys(item).some((key) => !["referenceId", "bytes"].includes(key))) {
       throw new OperatorInputError("Raw evidence metadata is invalid.");
     }
     ids.add(item.referenceId);
     bytes += item.bytes.byteLength;
-    if (bytes > 67_108_864) throw new OperatorInputError("Raw evidence total exceeds the limit.");
+    if (bytes > MAX_TOTAL_RAW_EVIDENCE_BYTES) throw new OperatorInputError("Raw evidence total exceeds the limit.");
     return { referenceId: item.referenceId, byteLength: item.bytes.byteLength, digest: sha256Bytes(item.bytes) };
   }).sort((left, right) => left.referenceId < right.referenceId ? -1 : left.referenceId > right.referenceId ? 1 : 0);
 }

@@ -23,6 +23,7 @@ const CASEPACK_CANONICAL_LIMITS = Object.freeze({
   maxBytes: 16_777_216,
 });
 export const MAX_PROTOCOL_EVIDENCE = 1_024;
+export const MAX_RAW_EVIDENCE_REFERENCES = 1_024;
 export const MAX_CHECKPOINTS = 1_024;
 export const MAX_RAW_EVIDENCE_BYTES = 16_777_216;
 export const MAX_TOTAL_RAW_EVIDENCE_BYTES = 67_108_864;

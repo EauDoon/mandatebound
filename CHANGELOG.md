@@ -42,6 +42,7 @@ All notable changes are documented here.
 - `compareCasePackStatus` now orders `missing` and `unsupported` the same way the CasePack verifier aggregates worst-status, so an exported comparison cannot contradict a report.
 - External evidence review now rejects empty, malformed, or repeated upstream trusted key identifiers instead of attesting to them under `reviewDigest`.
 - Reference API limit overrides now reject unknown limit names, so a misspelled request bound fails loudly instead of silently falling back to the default budget.
+- Supplied raw-evidence reference count is now one shared 1,024 cap. The CasePack verifier previously accepted 1,280 references that the operator views and the CLI refused, so a case the verifier called clean threw downstream.
 - AP2 imports now require delegated expiry, bound key-snapshot sizes, non-future source checkpoints, capture-window consistency, issuance-valid checkpoint keys, exact required line-item quantities, and consistent lifecycle duplicates.
 - Direct policy-fact evaluation, appeal replay input, trust-snapshot cutoffs, and CLI simulation arguments now fail closed on malformed, future-issued, or ambiguous input.
 - License and package checks now resolve the repository from their script location and include nested installed dependencies.
