@@ -9,4 +9,8 @@ indent_size = 2
 trim_trailing_whitespace = true
 
 [*.md]
-trim_trailing_whitespace = false
+# scripts/lint.mjs reports trailing whitespace on every tracked text file,
+# markdown included, so keep this true. With it false an editorconfig-aware
+# editor leaves the whitespace in place and CI then rejects the commit that
+# the editor declined to clean up.
+trim_trailing_whitespace = true
