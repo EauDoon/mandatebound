@@ -131,3 +131,109 @@ test("policy tooling rejects open shapes, invalid cases, and malformed rulebooks
   assert.equal(malformed.valid, false);
   assert.equal(malformed.changed, false);
 });
+
+test("policy test cases enforce the closed case, fact and expectation shapes", () => {
+  const base = { ...pack(), cases: [{ id: "ok", facts: principalFacts, expected: { outcome: "principal" } }] };
+  assert.equal(testPolicyPack(base).valid, true, "the reference case must be accepted");
+
+  // A non-object input is rejected before anything is inspected.
+  const notAnObject = testPolicyPack(null);
+  assert.equal(notAnObject.valid, false);
+  assert.equal(notAnObject.issues[0].message, "Policy test input must contain policy, rulebook, and cases");
+
+  // The case list itself must be a bounded, non-empty array.
+  for (const cases of [[], "cases", null, Array.from({ length: 257 }, () => base.cases[0])]) {
+    const report = testPolicyPack({ ...pack(), cases });
+    assert.equal(report.valid, false);
+    assert.equal(
+      report.issues.some((issue) => issue.message === "Policy tests must contain 1 to 256 cases"),
+      true,
+      JSON.stringify(Array.isArray(cases) ? `length ${cases.length}` : String(cases)),
+    );
+  }
+
+  // Exactly 256 cases is still inside the bound.
+  const atCap = Array.from({ length: 256 }, (unused, index) => ({
+    id: `case-${String(index)}`,
+    facts: principalFacts,
+    expected: { outcome: "principal" },
+  }));
+  assert.equal(testPolicyPack({ ...pack(), cases: atCap }).valid, true, "256 cases must be accepted");
+
+  const shapeIssues = (candidate) => {
+    const report = testPolicyPack({ ...pack(), cases: [candidate] });
+    assert.equal(report.valid, false, JSON.stringify(candidate));
+    return report.issues.map((issue) => `${issue.path} ${issue.message}`);
+  };
+
+  assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts }).some((line) => line.includes("invalid closed shape")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: "principal" }, extra: 1 })
+      .some((line) => line.includes("invalid closed shape")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({ id: "has spaces", facts: principalFacts, expected: { outcome: "principal" } })
+      .some((line) => line.includes("invalid closed shape")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: "settled" } })
+      .some((line) => line.includes("expectation is invalid")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: "principal", extra: 1 } })
+      .some((line) => line.includes("expectation is invalid")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: "principal", reasonCode: 7 } })
+      .some((line) => line.includes("expectation is invalid")),
+    true,
+  );
+
+  // Facts must be a complete, closed vocabulary of allowed values.
+  assert.equal(
+    shapeIssues({ id: "c", facts: "none", expected: { outcome: "principal" } })
+      .some((line) => line.includes("Policy facts must be an object")),
+    true,
+  );
+  const incomplete = { ...principalFacts };
+  delete incomplete.model_provenance;
+  assert.equal(
+    shapeIssues({ id: "c", facts: incomplete, expected: { outcome: "principal" } })
+      .some((line) => line.includes("complete closed vocabulary")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({
+      id: "c",
+      facts: { ...principalFacts, input_state: "unknown-state" },
+      expected: { outcome: "principal" },
+    }).some((line) => line.includes("Policy fact value is not allowed")),
+    true,
+  );
+  assert.equal(
+    shapeIssues({
+      id: "c",
+      facts: { ...principalFacts, input_state: 7 },
+      expected: { outcome: "principal" },
+    }).some((line) => line.includes("Policy fact value is not allowed")),
+    true,
+  );
+
+  // A valid reasonCode is accepted and carried through to the result.
+  const withReason = testPolicyPack({
+    ...pack(),
+    cases: [{
+      id: "c",
+      facts: principalFacts,
+      expected: { outcome: "principal", reasonCode: "inside_mandate_without_vendor_causation" },
+    }],
+  });
+  assert.equal(withReason.valid, true, JSON.stringify(withReason.issues));
+});
