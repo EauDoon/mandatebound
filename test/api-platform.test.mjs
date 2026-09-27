@@ -892,3 +892,99 @@ test("API logger and Problem Details include JSON parse offset", async () => {
     await api.close();
   }
 });
+
+test("the served OpenAPI document and the router agree in both directions", async () => {
+  const api = createApiServer({ engine: engine() });
+  const address = await api.listen();
+  const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+  // {id} is the only path parameter the document declares.
+  const CONCRETE = (template) => template.replaceAll("{id}", "missing-identifier");
+
+  try {
+    // The document the server publishes must be the document in the repository.
+    const served = await json(await fetch(`${address.url}/openapi.json`));
+    const onDisk = JSON.parse(
+      (await import("node:fs")).readFileSync(
+        new URL("../openapi/openapi.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(served, onDisk, "the published contract must be the committed contract");
+
+    // Documented method per path, derived only from the document.
+    const documented = new Map(
+      Object.entries(onDisk.paths).map(([template, operations]) => [
+        template,
+        new Set(HTTP_METHODS.filter((method) => operations[method.toLowerCase()] !== undefined)),
+      ]),
+    );
+    assert.equal(documented.size, 10);
+
+    for (const [template, methods] of documented) {
+      const concrete = CONCRETE(template);
+
+      // Direction 1: every documented operation is actually served. A missing
+      // implementation answers ALB_ROUTE_NOT_FOUND and a method drift answers
+      // ALB_METHOD_NOT_ALLOWED. Note the status alone cannot tell these apart:
+      // a GET for an absent resource legitimately answers 404 with its own
+      // code, so the problem code is what is asserted here.
+      for (const method of methods) {
+        const response = await fetch(`${address.url}${concrete}`, {
+          method,
+          headers: { "content-type": "application/json" },
+          body: method === "GET" || method === "DELETE" ? undefined : "{}",
+        });
+        if (response.status >= 400) {
+          const problem = await json(response);
+          assert.notEqual(
+            problem.code,
+            "ALB_ROUTE_NOT_FOUND",
+            `${method} ${template} is documented but not routed`,
+          );
+          assert.notEqual(
+            problem.code,
+            "ALB_METHOD_NOT_ALLOWED",
+            `${method} ${template} is documented but rejected as a method`,
+          );
+        }
+      }
+
+      // Direction 2: the router serves nothing this path does not document.
+      // The router's own `allow` header is its method table, so comparing it to
+      // the document pins both sides without parsing the source.
+      for (const method of HTTP_METHODS.filter((candidate) => !methods.has(candidate))) {
+        const response = await fetch(`${address.url}${concrete}`, {
+          method,
+          headers: { "content-type": "application/json" },
+          body: method === "GET" || method === "DELETE" ? undefined : "{}",
+        });
+        assert.equal(response.status, 405, `${method} ${template} should be rejected with an allow header`);
+        const allow = (response.headers.get("allow") ?? "")
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .sort();
+        assert.deepEqual(allow, [...methods].sort(), `allow header disagrees with the document for ${template}`);
+      }
+    }
+
+    // Undocumented and near-miss paths must not be routable at all.
+    for (const path of [
+      "/",
+      "/v1",
+      "/v1/unknown",
+      "/v1/decisions",
+      "/v1/decisions/one/extra",
+      "/v1/appeals/one/events/extra",
+      "/healthz/extra",
+      "/openapi",
+    ]) {
+      const response = await fetch(`${address.url}${path}`);
+      assert.equal(response.status, 404, `${path} must not be routable`);
+      const problem = await json(response);
+      assert.equal(problem.code, "ALB_ROUTE_NOT_FOUND");
+    }
+  } finally {
+    await api.close();
+  }
+});
