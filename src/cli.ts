@@ -20,6 +20,7 @@ import {
   type CasePackVerificationAnchors,
   type MandateBoundCasePack,
 } from "./casepack.js";
+import { MAX_RAW_EVIDENCE_REFERENCES } from "./casepack/primitives.js";
 import {
   diffMandateBoundCasePacks,
   unpackMandateBoundCasePack,
@@ -464,7 +465,7 @@ function decodeCasePackAnchors(value: unknown): CasePackVerificationAnchors {
   }
   let rawEvidence: { readonly referenceId: string; readonly bytes: Uint8Array }[] | undefined;
   if (record["rawEvidence"] !== undefined) {
-    if (!Array.isArray(record["rawEvidence"]) || record["rawEvidence"].length > 1_024) {
+    if (!Array.isArray(record["rawEvidence"]) || record["rawEvidence"].length > MAX_RAW_EVIDENCE_REFERENCES) {
       throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "CasePack raw evidence is invalid.");
     }
     rawEvidence = record["rawEvidence"].map((item) => {

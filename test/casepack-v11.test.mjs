@@ -25,6 +25,8 @@ import {
   unpackMandateBoundCasePack,
 } from "../dist/casepack-tools.js";
 import { canonicalBytes, sha256Bytes, sha256Digest } from "../dist/canonical.js";
+import { OperatorInputError } from "../dist/operator.js";
+import { inventoryCaseEvidence } from "../dist/operator-review.js";
 import { CLI_EXIT, runCli } from "../dist/cli.js";
 import { exportPublicJwk } from "../dist/crypto.js";
 import {
@@ -621,6 +623,39 @@ test("omitted required source is reported as bounded coverage missing", () => {
   assert.equal(report.coverageStatus, "missing");
   assert.equal(report.requirements.find((item) => item.requirementId === "requirement.beta")?.status, "missing");
   assert.equal(report.globalCompleteness, "not-established");
+});
+
+test("CasePack raw evidence reference cap is one shared limit", () => {
+  const { pack, anchors } = fixture();
+  // The documented cap. Kept as a literal so a change to the shared constant
+  // has to be made deliberately here too.
+  const cap = 1_024;
+  const many = (count) => [
+    ...anchors.rawEvidence,
+    ...Array.from({ length: count }, (_unused, index) => ({
+      referenceId: `raw.extra_${String(index).padStart(5, "0")}`,
+      bytes: Buffer.from("extra", "utf8"),
+    })),
+  ];
+
+  const atCap = verifyMandateBoundCasePack(pack, { ...anchors, rawEvidence: many(cap - 2) });
+  assert.equal(atCap.issues.some((issue) => issue.code === "MBCP_LIMIT_EXCEEDED"), false);
+
+  // The verifier used to allow 1,280 here while every other consumer of the
+  // same anchors array refused anything above 1,024, so an input the verifier
+  // called clean threw further down the same call chain.
+  const overCap = verifyMandateBoundCasePack(pack, { ...anchors, rawEvidence: many(cap - 1) });
+  assert.equal(
+    overCap.issues.some((issue) => issue.code === "MBCP_LIMIT_EXCEEDED" && issue.path === "$anchors.rawEvidence"),
+    true,
+  );
+  assert.throws(
+    () => inventoryCaseEvidence({ casePack: pack, anchors: { ...anchors, rawEvidence: many(cap - 1) } }),
+    OperatorInputError,
+  );
+  assert.doesNotThrow(
+    () => inventoryCaseEvidence({ casePack: pack, anchors: { ...anchors, rawEvidence: many(cap - 2) } }),
+  );
 });
 
 test("equivocating source checkpoints are conflicting, not complete", () => {
