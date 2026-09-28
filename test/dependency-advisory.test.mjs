@@ -47,6 +47,10 @@ test("compareVersions orders releases and ranks prereleases below releases", () 
   assert.equal(compareVersions("4.0.0", "3.99.99"), 1);
   assert.equal(compareVersions("3.1.6-rc.1", "3.1.6"), -1);
   assert.equal(compareVersions("3.1.6", "3.1.6-rc.1"), 1);
+  assert.equal(compareVersions("1.0.0-rc.2", "1.0.0-rc.10"), -1);
+  assert.equal(compareVersions("1.0.0-rc.10", "1.0.0-rc.2"), 1);
+  assert.equal(compareVersions("1.0.0-alpha", "1.0.0-alpha.1"), -1);
+  assert.equal(compareVersions("1.0.0-alpha.1", "1.0.0-alpha.beta"), -1);
   assert.equal(compareVersions("nonsense", "3.1.6"), null);
   assert.equal(compareVersions("3.1.6", "nonsense"), null);
 });
@@ -61,6 +65,14 @@ test("isVulnerable treats unparseable versions as vulnerable", () => {
   assert.equal(isVulnerable("2.9.9", rule), false);
   assert.equal(isVulnerable("4.0.0", rule), false);
   assert.equal(isVulnerable("not-a-version", rule), true);
+  const prerelease = {
+    minimumVulnerable: "1.2.3-rc.2",
+    maximumVulnerable: "1.2.3-rc.10",
+    fixedIn: "1.2.3",
+  };
+  assert.equal(isVulnerable("1.2.3-rc.9", prerelease), true);
+  assert.equal(isVulnerable("1.2.3-rc.10", prerelease), true);
+  assert.equal(isVulnerable("1.2.3-rc.11", prerelease), false);
 });
 
 test("dependency check fails closed on a vulnerable installed version", () => {

@@ -34,6 +34,32 @@ export function parseVersion(value) {
   return { major, minor, patch, prerelease: match[4] ?? null };
 }
 
+function comparePrerelease(left, right) {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  const a = left.split(".");
+  const b = right.split(".");
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftId = a[index];
+    const rightId = b[index];
+    if (leftId === undefined) return -1;
+    if (rightId === undefined) return 1;
+    const leftNumeric = /^[0-9]+$/u.test(leftId);
+    const rightNumeric = /^[0-9]+$/u.test(rightId);
+    if (leftNumeric && rightNumeric) {
+      const leftValue = BigInt(leftId);
+      const rightValue = BigInt(rightId);
+      if (leftValue !== rightValue) return leftValue < rightValue ? -1 : 1;
+      continue;
+    }
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    if (leftId !== rightId) return leftId < rightId ? -1 : 1;
+  }
+  return 0;
+}
+
 export function compareVersions(left, right) {
   const a = parseVersion(left);
   const b = parseVersion(right);
@@ -41,10 +67,7 @@ export function compareVersions(left, right) {
   for (const field of ["major", "minor", "patch"]) {
     if (a[field] !== b[field]) return a[field] < b[field] ? -1 : 1;
   }
-  if (a.prerelease === b.prerelease) return 0;
-  if (a.prerelease === null) return 1;
-  if (b.prerelease === null) return -1;
-  return a.prerelease < b.prerelease ? -1 : 1;
+  return comparePrerelease(a.prerelease, b.prerelease);
 }
 
 export function isVulnerable(version, rule) {
