@@ -186,6 +186,11 @@ test("policy test cases enforce the closed case, fact and expectation shapes", (
     true,
   );
   assert.equal(
+    shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: ["principal"] } })
+      .some((line) => line.includes("expectation is invalid")),
+    true,
+  );
+  assert.equal(
     shapeIssues({ id: "c", facts: principalFacts, expected: { outcome: "principal", extra: 1 } })
       .some((line) => line.includes("expectation is invalid")),
     true,
