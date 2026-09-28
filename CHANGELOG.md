@@ -52,6 +52,7 @@ All notable changes are documented here.
 - Additive AP2 mandate verification now rejects a negative `iat`, `nbf`, or `exp`. Those instants previously counted as already valid or not in the future, unlike the v0.2.0 chain verifier.
 - Merchant Checkout JWT verification now rejects a negative `iat`, `nbf`, or `exp` instead of treating a negative issuance or not-before time as already valid.
 - Jsonl store open and audit now reject unknown limit names. A misspelled record or file bound previously fell back to the default budget and looked successful.
+- The dependency advisory scan now follows a symlinked package directory. A vulnerable package installed only through a symlink was previously invisible, and the check reported a clear tree.
 
 ### Security
 

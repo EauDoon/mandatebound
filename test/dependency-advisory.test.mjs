@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -92,6 +92,24 @@ test("dependency check fails closed when the dependency tree is absent", () => {
     const result = runChecker(directory, null);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /node_modules is missing/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("dependency check follows a symlinked installed package", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-symlink-"));
+  try {
+    mkdirSync(join(directory, "scripts"));
+    const fixtureChecker = join(directory, "scripts", "check-dependencies.mjs");
+    copyFileSync(checker, fixtureChecker);
+    const realPackage = join(directory, "real-fast-uri");
+    writeManifest(realPackage, { name: "fast-uri", version: "3.1.5" });
+    mkdirSync(join(directory, "node_modules"));
+    symlinkSync(realPackage, join(directory, "node_modules", "fast-uri"), "dir");
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /fast-uri@3\.1\.5 is inside the vulnerable window/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
