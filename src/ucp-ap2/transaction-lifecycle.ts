@@ -58,7 +58,9 @@ export function correlateTransactionLifecycle(
   for (const [transactionId, group] of [...groups.entries()].sort(([left], [right]) =>
     compareCodeUnits(left, right))) {
     const sorted = [...group].sort((left, right) =>
-      compareCodeUnits(left.occurredAt, right.occurredAt) || compareCodeUnits(left.eventId, right.eventId));
+      parseTimestampMillis(left.occurredAt, "lifecycle.occurredAt")
+        - parseTimestampMillis(right.occurredAt, "lifecycle.occurredAt")
+      || compareCodeUnits(left.eventId, right.eventId));
     const byId = new Map<string, TransactionLifecycleEvidence[]>();
     for (const event of sorted) {
       const entries = byId.get(event.eventId) ?? [];

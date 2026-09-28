@@ -47,6 +47,7 @@ All notable changes are documented here.
 - Direct policy-fact evaluation, appeal replay input, trust-snapshot cutoffs, and CLI simulation arguments now fail closed on malformed, future-issued, or ambiguous input.
 - License and package checks now resolve the repository from their script location and include nested installed dependencies.
 - `npm run verify` now runs `scripts/check-dependencies.mjs`, which fails closed when an installed dependency falls inside a recorded advisory window, when a manifest cannot be parsed, or when the dependency tree is absent. An `overrides` floor keeps a clean install resolved above the fast-uri advisory window.
+- Transaction lifecycle correlation now orders events by the RFC 3339 instant. Offset timestamps no longer sort ahead of or behind an earlier or later instant because their strings compare that way.
 
 ### Security
 
