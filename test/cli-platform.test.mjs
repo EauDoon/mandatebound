@@ -537,6 +537,23 @@ test("malformed, duplicate-key, wrong-shape, directory, and oversized inputs fai
   assert.equal(JSON.parse(oversized.stdout).error.code, "ALB_CLI_INPUT_LIMIT");
 });
 
+test("casepack commands accept documents inside the CasePack canonical budget", async () => {
+  const padded = `${" ".repeat((4 * 1024 * 1024) + 1)}{}`;
+  const large = await invoke(["casepack", "verify", "-"], padded);
+  const largeError = JSON.parse(large.stdout).error;
+  assert.equal(large.code, CLI_EXIT.INVALID);
+  assert.equal(largeError.code, "ALB_CLI_INPUT");
+  assert.match(largeError.message, /CasePack command input is invalid/);
+
+  let nested = "0";
+  for (let depth = 0; depth < 40; depth += 1) nested = `{"child":${nested}}`;
+  const deep = await invoke(["casepack", "verify", "-"], nested);
+  const deepError = JSON.parse(deep.stdout).error;
+  assert.equal(deep.code, CLI_EXIT.INVALID);
+  assert.equal(deepError.code, "ALB_CLI_INPUT");
+  assert.match(deepError.message, /CasePack command input is invalid/);
+});
+
 test("CLI error mapping uses stable exit classes and never reflects exception secrets", async () => {
   const typeFailure = await invoke(["decide", "-"], "{}", {
     engine: engine({ evaluateCase: () => { throw new TypeError("PRIVATE_TYPE_DETAIL"); } }),
