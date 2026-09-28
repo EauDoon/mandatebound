@@ -215,6 +215,16 @@ test("validator reports every bounded root, rule, and condition shape branch", (
   }
 });
 
+test("rulebook issuedAt must be a UTC millisecond timestamp", () => {
+  for (const issuedAt of ["yesterday", "2026-07-23T00:00:00Z", "2026-02-31T00:00:00.000Z", 1, null]) {
+    const value = structuredClone(rulebook);
+    value.issuedAt = issuedAt;
+    const result = validateRulebook(value);
+    assert.equal(result.valid, false, JSON.stringify(issuedAt));
+    assert.equal(result.issues.some((issue) => issue.path === "$.issuedAt"), true, JSON.stringify(issuedAt));
+  }
+});
+
 test("a valid rulebook with no match returns the fail-closed default trace", () => {
   const noMatch = {
     ...rulebook,
