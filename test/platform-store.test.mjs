@@ -500,6 +500,18 @@ test("JsonlStore enforces one writer and verifies persisted history", async () =
   }
 });
 
+test("JsonlStore rejects an unknown limit name instead of ignoring it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-store-unknown-limit-"));
+  try {
+    await assert.rejects(
+      JsonlStore.open(join(directory, "store.jsonl"), { maxRecrodBytes: 32 }),
+      (error) => error instanceof TypeError && /Unknown store limit: maxRecrodBytes/.test(error.message),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("JsonlStore enforces configured limits before appending", async () => {
   const directory = await mkdtemp(join(tmpdir(), "alb-store-append-limit-"));
   try {

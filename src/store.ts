@@ -487,6 +487,14 @@ export interface JsonlStoreOptions {
   readonly maxRecordBytes?: number;
 }
 
+export function assertKnownJsonlStoreLimits(options: JsonlStoreOptions): void {
+  for (const name of Object.keys(options)) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_JSONL_STORE_LIMITS, name)) {
+      throw new TypeError(`Unknown store limit: ${name}`);
+    }
+  }
+}
+
 export class JsonlStore extends MemoryStore {
   private readonly dataHandle: FileHandle;
   private readonly lockHandle: FileHandle;
@@ -526,6 +534,7 @@ export class JsonlStore extends MemoryStore {
   }
 
   public static async open(filePath: string, options: JsonlStoreOptions = {}): Promise<JsonlStore> {
+    assertKnownJsonlStoreLimits(options);
     const maxFileBytes = options.maxFileBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxFileBytes;
     const maxRecords = options.maxRecords ?? DEFAULT_JSONL_STORE_LIMITS.maxRecords;
     const requestedRecordBytes = options.maxRecordBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxRecordBytes;

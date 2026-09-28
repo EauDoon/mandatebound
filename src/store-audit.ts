@@ -2,11 +2,12 @@ import { open } from "node:fs/promises";
 import { constants } from "node:fs";
 import { isSha256Digest } from "./canonical.js";
 import { parseStrictJson } from "./strict-json.js";
-import { DEFAULT_JSONL_STORE_LIMITS, StoreError, verifyStoreRecords,
+import { assertKnownJsonlStoreLimits, DEFAULT_JSONL_STORE_LIMITS, StoreError, verifyStoreRecords,
   type JsonlStoreOptions, type StoreCheckpoint } from "./store.js";
 
 /** Reads an existing snapshot without creating files, taking writer locks, or repairing bytes. */
 export async function auditJsonlStore(path: string, checkpoint?: StoreCheckpoint, options: JsonlStoreOptions = {}) {
+  assertKnownJsonlStoreLimits(options);
   const maxFileBytes = options.maxFileBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxFileBytes;
   const maxRecords = options.maxRecords ?? DEFAULT_JSONL_STORE_LIMITS.maxRecords;
   const maxRecordBytes = options.maxRecordBytes ?? DEFAULT_JSONL_STORE_LIMITS.maxRecordBytes;

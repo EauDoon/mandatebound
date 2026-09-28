@@ -51,6 +51,7 @@ All notable changes are documented here.
 - CSV exports now prefix a formula trigger that sits behind a Unicode format character, such as a zero-width space, word joiner, or Mongolian vowel separator, so quoting alone cannot hide it from a spreadsheet.
 - Additive AP2 mandate verification now rejects a negative `iat`, `nbf`, or `exp`. Those instants previously counted as already valid or not in the future, unlike the v0.2.0 chain verifier.
 - Merchant Checkout JWT verification now rejects a negative `iat`, `nbf`, or `exp` instead of treating a negative issuance or not-before time as already valid.
+- Jsonl store open and audit now reject unknown limit names. A misspelled record or file bound previously fell back to the default budget and looked successful.
 
 ### Security
 
