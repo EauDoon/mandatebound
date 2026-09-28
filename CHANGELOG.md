@@ -54,6 +54,7 @@ All notable changes are documented here.
 - Jsonl store open and audit now reject unknown limit names. A misspelled record or file bound previously fell back to the default budget and looked successful.
 - The dependency advisory scan now follows a symlinked package directory. A vulnerable package installed only through a symlink was previously invisible, and the check reported a clear tree.
 - The license scan now follows a symlinked package directory. An unapproved license installed only through a symlink was previously invisible, and the check reported that every package was approved.
+- `explainDecision` now requires a schema-valid decision. A record that changes `legalEffect` away from `not-determined` was previously narrated as if that effect were the protocol result.
 
 ### Security
 

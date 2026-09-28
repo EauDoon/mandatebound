@@ -30,6 +30,7 @@ import type {
   SignedArtifact,
   ValidationIssue,
 } from "./domain.js";
+import { validateArtifact } from "./validation.js";
 import {
   evaluateRulebook,
   validateRulebook,
@@ -1468,7 +1469,12 @@ export function evaluateBundle(
 }
 
 export function explainDecision(decision: LiabilityDecision): string {
-  const extended = decision as Partial<EngineLiabilityDecision>;
+  const validation = validateArtifact<LiabilityDecision>("liability_decision", decision);
+  if (!validation.ok || validation.value.legalEffect !== "not-determined") {
+    throw new TypeError("Decision explanation requires a schema-valid decision");
+  }
+  const extended = validation.value as Partial<EngineLiabilityDecision>;
+  decision = validation.value;
   const disposition = extended.disposition ?? (decision.outcome === "unresolved" ? "indeterminate" : "allocated");
   const reason = decision.reasonCodes[0] ?? "unresolved_default";
   const allocation = extended.allocation === undefined

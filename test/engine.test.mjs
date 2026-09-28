@@ -93,3 +93,14 @@ test("explanation is bounded and explicitly non-legal", () => {
   assert.match(explanation, /not-determined/);
   assert.ok(explanation.length < 512);
 });
+
+test("explanation refuses a decision that claims a legal effect", () => {
+  const decision = evaluateCase(buildScenario("principal").input);
+  assert.throws(
+    () => explainDecision({ ...decision, legalEffect: "binding" }),
+    (error) => error instanceof TypeError && /schema-valid/.test(error.message),
+  );
+  const explained = explainDecision(decision);
+  assert.match(explained, /not-determined/);
+  assert.equal(explained.includes("binding"), false);
+});
