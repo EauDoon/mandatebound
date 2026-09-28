@@ -176,6 +176,17 @@ test("a link into a sibling directory that extends the root name is an escape", 
   }
 });
 
+test("a malformed percent-encoding in a markdown link is reported", () => {
+  const result = withTree((root) => {
+    write(root, "README.md", "See [bad](file%zz.md).\n");
+  });
+  assert.equal(
+    result.errors.some((error) => error.includes("broken or escaping relative link")),
+    true,
+    result.errors.join("\n"),
+  );
+});
+
 test("the linter ignores generated and vendored directories", () => {
   const result = withTree((root) => {
     for (const skipped of [".git", "coverage", "dist", "node_modules"]) {
