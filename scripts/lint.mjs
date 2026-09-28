@@ -33,16 +33,37 @@ const unixUserHomePathPattern = /\/(?:home|Users)\/[^/\s]+/u;
 export function lintRepository(root) {
   const errors = [];
   const files = [];
+  const seenDirectories = new Set();
 
   function walk(directory) {
+    let realDirectory;
+    try {
+      realDirectory = realpathSync(directory);
+    } catch {
+      return;
+    }
+    if (seenDirectories.has(realDirectory)) return;
+    seenDirectories.add(realDirectory);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        if (!skippedDirectories.has(entry.name)) {
-          walk(join(directory, entry.name));
+      if (skippedDirectories.has(entry.name)) continue;
+      const fullPath = join(directory, entry.name);
+      // Dirent.isDirectory() is false for a symlink. A linked directory would
+      // otherwise hide every text file behind it from the rules below.
+      if (entry.isSymbolicLink()) {
+        let followed;
+        try {
+          followed = statSync(fullPath);
+        } catch {
+          continue;
         }
+        if (followed.isDirectory()) {
+          walk(fullPath);
+          continue;
+        }
+      } else if (entry.isDirectory()) {
+        walk(fullPath);
         continue;
       }
-      const fullPath = join(directory, entry.name);
       if (textExtensions.has(extname(entry.name)) || textNames.has(entry.name)) {
         files.push(fullPath);
       }

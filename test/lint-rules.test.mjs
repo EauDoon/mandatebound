@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
@@ -185,6 +185,25 @@ test("a malformed percent-encoding in a markdown link is reported", () => {
     true,
     result.errors.join("\n"),
   );
+});
+
+test("a directory symlink does not hide text-file violations", () => {
+  const root = mkdtempSync(join(tmpdir(), "mandatebound-lint-"));
+  const hidden = mkdtempSync(join(tmpdir(), "mandatebound-lint-hidden-"));
+  try {
+    writeFileSync(join(hidden, "bad.md"), "trailing  \n");
+    symlinkSync(hidden, join(root, "linked"), "dir");
+    symlinkSync(root, join(root, "self"), "dir");
+    const result = lintRepository(root);
+    assert.equal(
+      result.errors.some((error) => error.includes("trailing whitespace")),
+      true,
+      result.errors.join("\n"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(hidden, { recursive: true, force: true });
+  }
 });
 
 test("the linter ignores generated and vendored directories", () => {
