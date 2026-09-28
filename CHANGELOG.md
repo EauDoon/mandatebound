@@ -55,6 +55,7 @@ All notable changes are documented here.
 - The dependency advisory scan now follows a symlinked package directory. A vulnerable package installed only through a symlink was previously invisible, and the check reported a clear tree.
 - The license scan now follows a symlinked package directory. An unapproved license installed only through a symlink was previously invisible, and the check reported that every package was approved.
 - `explainDecision` now requires a schema-valid decision. A record that changes `legalEffect` away from `not-determined` was previously narrated as if that effect were the protocol result.
+- `validateRulebook` now requires `issuedAt` to be a real UTC millisecond timestamp. A non-timestamp previously passed the DSL and could be compared as text during evaluation.
 
 ### Security
 

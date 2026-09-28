@@ -50,6 +50,7 @@ export const POLICY_FACT_NAMES = Object.freeze(
   Object.keys(POLICY_FACT_VALUES).sort() as PolicyFactName[],
 );
 
+const RFC3339_MILLISECONDS = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
 const ALLOWED_CONDITION_OPERATORS = new Set(["eq", "in", "all", "any", "not"]);
 const ALLOWED_OUTCOMES = new Set<LiabilityOutcome>([
   "principal",
@@ -131,6 +132,12 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 
 function isSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function isProtocolTimestamp(value: unknown): boolean {
+  if (typeof value !== "string" || !RFC3339_MILLISECONDS.test(value)) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.valueOf()) && date.toISOString() === value;
 }
 
 function isBoundedIdentifier(value: unknown): value is string {
@@ -297,6 +304,9 @@ export function validateRulebook(rulebook: unknown): RulebookValidation {
   }
   if (!isSafeInteger(rulebook.revision) || rulebook.revision < 1) {
     pushIssue(issues, "$.revision", "unsafe_integer", "Revision must be a positive safe integer");
+  }
+  if (!isProtocolTimestamp(rulebook.issuedAt)) {
+    pushIssue(issues, "$.issuedAt", "invalid_shape", "issuedAt must be a UTC millisecond timestamp");
   }
   if (rulebook.defaultOutcome !== "unresolved") {
     pushIssue(issues, "$.defaultOutcome", "invalid_outcome", "Default outcome must fail closed");
