@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,7 +66,8 @@ export function lintRepository(root) {
         continue;
       }
       const resolved = resolve(dirname(file), target);
-      if (!resolved.startsWith(root) || !existsSync(resolved)) {
+      const rootPrefix = root.endsWith(sep) ? root : `${root}${sep}`;
+      if ((resolved !== root && !resolved.startsWith(rootPrefix)) || !existsSync(resolved)) {
         report(file, `broken or escaping relative link: ${target}`);
       }
     }
