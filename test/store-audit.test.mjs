@@ -21,6 +21,13 @@ test("audit rejects a FIFO without waiting for a writer", { skip: process.platfo
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test("audit rejects an unknown limit name instead of using the default budget", async () => {
+  await assert.rejects(
+    auditJsonlStore("/tmp/mandatebound-unknown-store-limit.jsonl", undefined, { maxRecrodBytes: 32 }),
+    (error) => error instanceof TypeError && /Unknown store limit: maxRecrodBytes/.test(error.message),
+  );
+});
+
 test("audit reads persisted decisions without locks or mutations and detects truncation", async () => {
   const dir = await mkdtemp(join(tmpdir(), "mandatebound-audit-"));
   try {
