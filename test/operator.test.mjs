@@ -90,9 +90,9 @@ test("CSV covers requirements and neutralizes spreadsheet formulas", () => {
   const csv = renderCaseCoverageCsv(report);
   assert.equal(csv.split("\r\n").length, 4);
   assert.match(csv, /not-determined/);
-  for (const requirementId of ["=1+1", "+cmd", "-2", "@SUM(1)", " \t=1", "\ttext", "\rtext", "\ntext"]) {
+  for (const requirementId of ["=1+1", "+cmd", "-2", "@SUM(1)", " \t=1", "\ttext", "\rtext", "\ntext", "\u200B=1+1", "\u2060+cmd", "\u200C-2", "\u180E@SUM(1)"]) {
     const hostile = renderCaseCoverageCsv({ ...report, coverage: [{ requirementId, status: "missing", matchedEnvelopes: 0 }] });
-    assert.ok(hostile.includes(`"'${requirementId}"`));
+    assert.ok(hostile.includes(`"'${requirementId}"`), JSON.stringify(requirementId));
   }
   const escaped = renderCaseCoverageCsv({ ...report, casePackId: 'a,"b' });
   assert.ok(escaped.includes('"a,""b"'));

@@ -224,10 +224,18 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
   return `${lines.join("\n")}\n`;
 }
 
+function needsFormulaNeutralization(text: string): boolean {
+  // A leading tab, CR, or LF is itself a spreadsheet trigger.
+  if (/^[\t\r\n]/u.test(text)) return true;
+  // Spreadsheets skip whitespace, controls, and Unicode format characters
+  // (zero-width space, word joiner, BOM) before =, +, -, or @.
+  const stripped = text.replace(/^[\s\p{Cf}\u0000-\u001F\u007F]+/u, "");
+  return /^[=+@-]/.test(stripped);
+}
+
 export function csvCell(value: string | number): string {
   const text = String(value);
-  // Quoting alone does not prevent spreadsheet formulas, including whitespace-prefixed ones.
-  const safe = /^[\s\u0000-\u001f]*[=+@-]/u.test(text) || /^[\t\r\n]/u.test(text) ? `'${text}` : text;
+  const safe = needsFormulaNeutralization(text) ? `'${text}` : text;
   return `"${safe.replaceAll('"', '""')}"`;
 }
 
