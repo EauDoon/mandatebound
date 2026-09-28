@@ -1,4 +1,4 @@
-import { open, readFile, stat, unlink, type FileHandle } from "node:fs/promises";
+import { lstat, open, readFile, unlink, type FileHandle } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { TextDecoder } from "node:util";
 import type { AppealEvent, LiabilityDecision, Sha256Digest } from "./domain.js";
@@ -546,10 +546,24 @@ export class JsonlStore extends MemoryStore {
     let lockHandle: FileHandle | undefined;
     let dataHandle: FileHandle | undefined;
     try {
+      try {
+        const existing = await lstat(filePath);
+        if (existing.isSymbolicLink() || !existing.isFile()) {
+          throw new StoreError("ALB_STORE_OPEN", "Store path must be a regular file.");
+        }
+      } catch (error) {
+        if (error instanceof StoreError) throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new StoreError("ALB_STORE_OPEN", "Store could not be opened.", { cause: error });
+        }
+      }
       lockHandle = await open(lockPath, "wx", 0o600);
       dataHandle = await open(filePath, "a+", 0o600);
-      const metadata = await stat(filePath);
-      if (!metadata.isFile() || metadata.size > maxFileBytes) {
+      const metadata = await lstat(filePath);
+      if (metadata.isSymbolicLink() || !metadata.isFile()) {
+        throw new StoreError("ALB_STORE_OPEN", "Store path must be a regular file.");
+      }
+      if (metadata.size > maxFileBytes) {
         throw new StoreError("ALB_STORE_LIMIT", "Store file exceeds configured limits.");
       }
       const bytes = metadata.size === 0 ? undefined : await readFile(filePath);

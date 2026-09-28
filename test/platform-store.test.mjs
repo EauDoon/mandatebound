@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -495,6 +495,23 @@ test("JsonlStore enforces one writer and verifies persisted history", async () =
     assert.equal((await reopened.getDecision(stored.artifactId)).artifactId, stored.artifactId);
     await reopened.close();
     await reopened.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("JsonlStore rejects a symlink instead of appending through it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-store-link-"));
+  try {
+    const target = join(directory, "target.jsonl");
+    const link = join(directory, "link.jsonl");
+    await writeFile(target, "");
+    await symlink(target, link);
+    await assert.rejects(
+      JsonlStore.open(link),
+      (error) => error instanceof StoreError && error.code === "ALB_STORE_OPEN",
+    );
+    assert.equal(await readFile(target, "utf8"), "");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
