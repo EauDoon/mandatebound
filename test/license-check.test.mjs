@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -38,6 +38,24 @@ test("license check inspects nested installed dependencies", () => {
     });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /nested@1\.0\.0 has unapproved license GPL-3\.0/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("license check follows a symlinked installed package", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-symlink-"));
+  try {
+    mkdirSync(join(directory, "scripts"));
+    const fixtureChecker = join(directory, "scripts", "check-licenses.mjs");
+    copyFileSync(checker, fixtureChecker);
+    const realPackage = join(directory, "real-gpl");
+    writeManifest(realPackage, { name: "copyleft", version: "1.0.0", license: "GPL-3.0" });
+    mkdirSync(join(directory, "node_modules"));
+    symlinkSync(realPackage, join(directory, "node_modules", "copyleft"), "dir");
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /copyleft@1\.0\.0 has unapproved license GPL-3\.0/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

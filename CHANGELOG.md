@@ -53,6 +53,7 @@ All notable changes are documented here.
 - Merchant Checkout JWT verification now rejects a negative `iat`, `nbf`, or `exp` instead of treating a negative issuance or not-before time as already valid.
 - Jsonl store open and audit now reject unknown limit names. A misspelled record or file bound previously fell back to the default budget and looked successful.
 - The dependency advisory scan now follows a symlinked package directory. A vulnerable package installed only through a symlink was previously invisible, and the check reported a clear tree.
+- The license scan now follows a symlinked package directory. An unapproved license installed only through a symlink was previously invisible, and the check reported that every package was approved.
 
 ### Security
 
