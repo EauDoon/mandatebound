@@ -54,6 +54,14 @@ test("strict JSON handles escapes and rejects malformed grammar without body ref
   assert.throws(() => parseStrictJson(42), TypeError);
 });
 
+test("canonical JSON escapes U+2028 and U+2029 as RFC 8785 requires", () => {
+  const line = String.fromCharCode(0x2028);
+  const paragraph = String.fromCharCode(0x2029);
+  assert.equal(canonicalize(line), "\"\\u2028\"");
+  assert.equal(canonicalize(paragraph), "\"\\u2029\"");
+  assert.equal(canonicalize({ [line]: paragraph }), "{\"\\u2028\":\"\\u2029\"}");
+});
+
 test("canonical JSON uses deterministic RFC 8785 key ordering", () => {
   assert.equal(canonicalize({ z: 1, a: "x", nested: { b: 2, a: 1 } }), '{"a":"x","nested":{"a":1,"b":2},"z":1}');
   assert.equal(canonicalize({ n: -0 }), '{"n":0}');
