@@ -212,11 +212,19 @@ export function checkKeySnapshot(
     issues.push(upstreamIssue("INTEROP_KEY_ID_INVALID", `${path}.kid`, "Pinned key ID is empty"));
   }
   try {
-    const at = parseEpoch(asOf, "asOf");
-    const captured = Math.floor(parseTimestampMillis(snapshot.capturedAt, `${path}.capturedAt`) / 1_000);
-    const validUntil = Math.floor(
-      parseTimestampMillis(snapshot.validUntil, `${path}.validUntil`) / 1_000,
-    );
+    // Numeric asOf is epoch seconds. String asOf keeps its fractional instant.
+    // Flooring every timestamp to a second hid a capture or expiry inside that second.
+    const at = typeof asOf === "number"
+      ? (() => {
+        const seconds = parseEpoch(asOf, "asOf");
+        if (seconds > Math.floor(Number.MAX_SAFE_INTEGER / 1_000)) {
+          throw new UcpAp2ParseError("Invalid epoch seconds at asOf");
+        }
+        return seconds * 1_000;
+      })()
+      : parseTimestampMillis(asOf, "asOf");
+    const captured = parseTimestampMillis(snapshot.capturedAt, `${path}.capturedAt`);
+    const validUntil = parseTimestampMillis(snapshot.validUntil, `${path}.validUntil`);
     if (captured > validUntil) {
       issues.push(upstreamIssue(
         "INTEROP_KEY_SNAPSHOT_WINDOW_INVALID",
@@ -239,9 +247,7 @@ export function checkKeySnapshot(
       ));
     }
     if (snapshot.validFrom !== undefined) {
-      const validFrom = Math.floor(
-        parseTimestampMillis(snapshot.validFrom, `${path}.validFrom`) / 1_000,
-      );
+      const validFrom = parseTimestampMillis(snapshot.validFrom, `${path}.validFrom`);
       if (at < validFrom) {
         issues.push(eligibilityIssue(
           "INTEROP_KEY_NOT_YET_VALID",
@@ -251,9 +257,7 @@ export function checkKeySnapshot(
       }
     }
     if (snapshot.invalidFrom !== undefined) {
-      const invalidFrom = Math.floor(
-        parseTimestampMillis(snapshot.invalidFrom, `${path}.invalidFrom`) / 1_000,
-      );
+      const invalidFrom = parseTimestampMillis(snapshot.invalidFrom, `${path}.invalidFrom`);
       if (at >= invalidFrom) {
         issues.push(eligibilityIssue(
           "INTEROP_KEY_INVALIDATED",
