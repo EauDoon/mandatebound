@@ -134,6 +134,9 @@ export function verifyExpiryClaims(
   } else {
     try {
       const exp = requireSafeInteger(claims.exp, `${path}.exp`);
+      if (exp < 0) {
+        throw new UcpAp2ParseError("Mandate expiration must not be negative");
+      }
       if (asOf >= exp) {
         issues.push(upstreamIssue("AP2_TOKEN_EXPIRED", `${path}.exp`, "Mandate is expired"));
       }
@@ -147,7 +150,11 @@ export function verifyExpiryClaims(
   }
   if (claims.nbf !== undefined) {
     try {
-      if (asOf < requireSafeInteger(claims.nbf, `${path}.nbf`)) {
+      const notBefore = requireSafeInteger(claims.nbf, `${path}.nbf`);
+      if (notBefore < 0) {
+        throw new UcpAp2ParseError("Mandate nbf must not be negative");
+      }
+      if (asOf < notBefore) {
         issues.push(upstreamIssue("AP2_TOKEN_NOT_YET_VALID", `${path}.nbf`, "Mandate is not yet valid"));
       }
     } catch (error) {
@@ -160,7 +167,11 @@ export function verifyExpiryClaims(
   }
   if (claims.iat !== undefined) {
     try {
-      if (requireSafeInteger(claims.iat, `${path}.iat`) > asOf + 60) {
+      const issuedAt = requireSafeInteger(claims.iat, `${path}.iat`);
+      if (issuedAt < 0) {
+        throw new UcpAp2ParseError("Mandate issuance time must not be negative");
+      }
+      if (issuedAt > asOf + 60) {
         issues.push(upstreamIssue(
           "AP2_IAT_IN_FUTURE",
           `${path}.iat`,

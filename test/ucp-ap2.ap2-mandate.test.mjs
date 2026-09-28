@@ -54,6 +54,8 @@ test("AP2 verifier handles expiry, temporal, issuer, checkout, and key-binding b
     [{ nbf: "later" }, "AP2_NBF_INVALID"],
     [{ iat: 1_900_000_000 }, "AP2_IAT_IN_FUTURE"],
     [{ iat: "earlier" }, "AP2_IAT_INVALID"],
+    [{ iat: -1 }, "AP2_IAT_INVALID"],
+    [{ nbf: -1 }, "AP2_NBF_INVALID"],
   ];
   for (const [overrides, code] of temporalFailures) {
     const report = verifyClaims(overrides);
