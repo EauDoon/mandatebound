@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,21 +25,39 @@ function readPackage(directory) {
   }
 }
 
-function scanNodeModules(directory) {
+function isInstalledDirectory(candidate) {
+  try {
+    return statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function scanNodeModules(directory, seen = new Set()) {
   if (!existsSync(directory)) return;
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === ".bin") continue;
-    const candidate = join(directory, entry.name);
+  let realDirectory;
+  try {
+    realDirectory = realpathSync(directory);
+  } catch {
+    return;
+  }
+  if (seen.has(realDirectory)) return;
+  seen.add(realDirectory);
+  for (const entry of readdirSync(realDirectory, { withFileTypes: true })) {
+    if (entry.name === ".bin") continue;
+    const candidate = join(realDirectory, entry.name);
+    // A symlinked package is not a Dirent directory. stat follows the link.
+    if (!isInstalledDirectory(candidate)) continue;
     if (entry.name.startsWith("@")) {
       for (const scoped of readdirSync(candidate, { withFileTypes: true })) {
-        if (!scoped.isDirectory()) continue;
         const packageDirectory = join(candidate, scoped.name);
+        if (!isInstalledDirectory(packageDirectory)) continue;
         readPackage(packageDirectory);
-        scanNodeModules(join(packageDirectory, "node_modules"));
+        scanNodeModules(join(packageDirectory, "node_modules"), seen);
       }
     } else {
       readPackage(candidate);
-      scanNodeModules(join(candidate, "node_modules"));
+      scanNodeModules(join(candidate, "node_modules"), seen);
     }
   }
 }
