@@ -61,7 +61,13 @@ export function lintRepository(root) {
         continue;
       }
       const withoutTitle = rawTarget.split(/\s+["']/u, 1)[0] ?? rawTarget;
-      const target = decodeURIComponent(withoutTitle.replace(/^<|>$/g, "").split("#", 1)[0] ?? "");
+      let target;
+      try {
+        target = decodeURIComponent(withoutTitle.replace(/^<|>$/g, "").split("#", 1)[0] ?? "");
+      } catch {
+        report(file, `broken or escaping relative link: ${rawTarget}`);
+        continue;
+      }
       if (!target) {
         continue;
       }
