@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 import { lintRepository } from "../scripts/lint.mjs";
 
@@ -155,6 +155,25 @@ test("markdown links are checked for existence and for escaping the root", () =>
     write(root, "present.md", "# Present\n");
   });
   assert.deepEqual(external.errors, [], external.errors.join("\n"));
+});
+
+test("a link into a sibling directory that extends the root name is an escape", () => {
+  const root = mkdtempSync(join(tmpdir(), "mandatebound-lint-"));
+  const sibling = `${root}-outside`;
+  try {
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, "secret.md"), "# Secret\n");
+    write(root, "README.md", `See [secret](../${basename(sibling)}/secret.md).\n`);
+    const result = lintRepository(root);
+    assert.equal(
+      result.errors.some((error) => error.includes("broken or escaping relative link")),
+      true,
+      result.errors.join("\n"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(sibling, { recursive: true, force: true });
+  }
 });
 
 test("the linter ignores generated and vendored directories", () => {
