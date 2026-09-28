@@ -43,7 +43,23 @@ test("license check inspects nested installed dependencies", () => {
   }
 });
 
-test("license check follows a symlinked installed package", () => {
+// Windows only permits symlink creation for elevated or Developer Mode
+// processes. Where the platform refuses, skip rather than report a false
+// failure; the Linux CI runners still exercise these paths.
+function linkOrSkip(t, target, path, type) {
+  try {
+    symlinkSync(target, path, type);
+  } catch (error) {
+    if (["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
+      t.skip("symlinks are unavailable on this platform");
+      return false;
+    }
+    throw error;
+  }
+  return true;
+}
+
+test("license check follows a symlinked installed package", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-symlink-"));
   try {
     mkdirSync(join(directory, "scripts"));
@@ -52,7 +68,7 @@ test("license check follows a symlinked installed package", () => {
     const realPackage = join(directory, "real-gpl");
     writeManifest(realPackage, { name: "copyleft", version: "1.0.0", license: "GPL-3.0" });
     mkdirSync(join(directory, "node_modules"));
-    symlinkSync(realPackage, join(directory, "node_modules", "copyleft"), "dir");
+    if (!linkOrSkip(t, realPackage, join(directory, "node_modules", "copyleft"), "dir")) return;
     const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, /copyleft@1\.0\.0 has unapproved license GPL-3\.0/);
