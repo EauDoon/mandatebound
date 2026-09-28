@@ -143,6 +143,11 @@ const VALUE_OPTIONS = new Set([
 const FLAG_OPTIONS = new Set(["--help", "--version"]);
 const MAX_CLI_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_AP2_CLI_INPUT_BYTES = 17 * 1024 * 1024;
+const MAX_CASEPACK_CLI_INPUT_BYTES = 17 * 1024 * 1024;
+const CASEPACK_CLI_JSON_LIMITS = Object.freeze({
+  maxDepth: 48,
+  maxNodes: 250_000,
+});
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
@@ -238,6 +243,7 @@ async function readInput(
   pathValue: string | undefined,
   stdin: Readable,
   maxBytes = MAX_CLI_INPUT_BYTES,
+  jsonLimits: { readonly maxDepth?: number; readonly maxNodes?: number } = {},
 ): Promise<unknown> {
   if (pathValue === undefined && isInteractiveStdin(stdin)) {
     throw new CliError(
@@ -270,7 +276,7 @@ async function readInput(
     );
   }
   try {
-    return parseStrictJson(text, { maxBytes, maxStringBytes: maxBytes });
+    return parseStrictJson(text, { maxBytes, maxStringBytes: maxBytes, ...jsonLimits });
   } catch (error) {
     if (error instanceof StrictJsonError) {
       throw new CliError(error.code, CLI_EXIT.INVALID, error.message, {
@@ -280,6 +286,10 @@ async function readInput(
     }
     throw error;
   }
+}
+
+function readCasePackInput(pathValue: string | undefined, stdin: Readable): Promise<unknown> {
+  return readInput(pathValue, stdin, MAX_CASEPACK_CLI_INPUT_BYTES, CASEPACK_CLI_JSON_LIMITS);
 }
 
 function decodeNamedCases(value: unknown) {
@@ -720,7 +730,7 @@ export async function runCli(
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const invocation = requireSubcommandInput(args, ["build", "verify", "unpack", "diff"]);
-        const input = await readInput(invocation.path, stdin);
+        const input = await readCasePackInput(invocation.path, stdin);
         if (invocation.action === "build") {
           writeJson(stdout, { ok: true, result: buildCasePack(input) });
           return CLI_EXIT.SUCCESS;
@@ -775,7 +785,7 @@ export async function runCli(
       case "case-report": {
         assertAllowedOptions(args, ["input"]);
         const format = assertOutputFormat(args, ["json", "html", "markdown", "csv"]);
-        const input = await readInput(requireSingleInput(args), stdin);
+        const input = await readCasePackInput(requireSingleInput(args), stdin);
         const decoded = decodeCasePackInvocation(input);
         const report = createCaseReport(decoded.casePack, decoded.anchors);
         if (format === "html") stdout.write(renderCaseReportHtml(report));
@@ -886,7 +896,7 @@ export async function runCli(
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
-        const input = asObject(await readInput(invocation.path, stdin));
+        const input = asObject(await readCasePackInput(invocation.path, stdin));
         if (invocation.action === "receipt-verify") {
           const expected = args.options["expected-receipt-digest"];
           if (typeof expected !== "string" || !isSha256Digest(expected)) {
