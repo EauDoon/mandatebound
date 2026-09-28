@@ -219,21 +219,44 @@ function isIpv4Loopback(host: string): boolean {
     && Number(octets[0]) === 127;
 }
 
+function isZeroHextet(value: string): boolean {
+  return /^0{1,4}$/i.test(value);
+}
+
 function mappedIpv4(host: string): string | undefined {
+  // RFC 4291 IPv4-mapped form is ::ffff:0:0/96. A later ffff hextet in a
+  // public prefix is a different address and must not inherit loopback.
   const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(host);
-  if (dotted !== null) return dotted[1];
+  if (dotted !== null) {
+    const octets = dotted[1]?.split(".") ?? [];
+    if (octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)) {
+      return octets.map((octet) => String(Number(octet))).join(".");
+    }
+    return undefined;
+  }
   const groups = host.includes("::")
     ? (() => {
       const [left, right] = host.split("::");
       const leftGroups = left === "" ? [] : (left ?? "").split(":");
       const rightGroups = right === "" ? [] : (right ?? "").split(":");
+      if (leftGroups.length + rightGroups.length > 7) return [];
       return [...leftGroups, ...Array.from({ length: 8 - leftGroups.length - rightGroups.length }, () => "0"), ...rightGroups];
     })()
     : host.split(":");
   if (groups.length !== 8 || groups[5]?.toLowerCase() !== "ffff") return undefined;
+  if (groups.slice(0, 5).some((group) => !isZeroHextet(group ?? ""))) return undefined;
   const high = Number.parseInt(groups[6] ?? "", 16);
   const low = Number.parseInt(groups[7] ?? "", 16);
-  if (!Number.isInteger(high) || !Number.isInteger(low) || high < 0 || low < 0) return undefined;
+  if (
+    !Number.isInteger(high) ||
+    !Number.isInteger(low) ||
+    high < 0 ||
+    low < 0 ||
+    high > 0xffff ||
+    low > 0xffff
+  ) {
+    return undefined;
+  }
   return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
 }
 

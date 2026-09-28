@@ -267,6 +267,11 @@ test("loopback recognition covers IPv4, IPv6, and mapped IPv6 without admitting 
   assert.equal(isLoopbackAddress("0.0.0.0"), false);
   assert.equal(isLoopbackAddress("::"), false);
   assert.equal(isLoopbackAddress("::ffff:192.0.2.1"), false);
+  // IPv4-mapped addresses are only ::ffff:0:0/96. A public prefix with ffff
+  // in the sixth hextet and a 127/8 suffix is not loopback.
+  assert.equal(isLoopbackAddress("2001:db8::ffff:7f00:1"), false);
+  assert.equal(isLoopbackAddress("2001:db8:1:2:3:ffff:7f00:1"), false);
+  assert.equal(isLoopbackAddress("0:0:0:0:0:ffff:7f00:1"), true);
 });
 
 test("API applies Host and Origin boundaries before routing", async () => {
