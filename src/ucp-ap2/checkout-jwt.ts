@@ -166,23 +166,20 @@ export function verifyAp2CheckoutJwt(
     ));
   }
   try {
-    if (
-      parsed.claims.iat !== undefined &&
-      requireSafeInteger(parsed.claims.iat, "checkoutJwt.claims.iat") > asOf + 60
-    ) {
-      throw new UcpAp2ParseError("Checkout JWT issuance time is in the future");
+    if (parsed.claims.iat !== undefined) {
+      const issuedAt = requireSafeInteger(parsed.claims.iat, "checkoutJwt.claims.iat");
+      if (issuedAt < 0) throw new UcpAp2ParseError("Checkout JWT issuance time must not be negative");
+      if (issuedAt > asOf + 60) throw new UcpAp2ParseError("Checkout JWT issuance time is in the future");
     }
-    if (
-      parsed.claims.nbf !== undefined &&
-      asOf < requireSafeInteger(parsed.claims.nbf, "checkoutJwt.claims.nbf")
-    ) {
-      throw new UcpAp2ParseError("Checkout JWT is not yet valid");
+    if (parsed.claims.nbf !== undefined) {
+      const notBefore = requireSafeInteger(parsed.claims.nbf, "checkoutJwt.claims.nbf");
+      if (notBefore < 0) throw new UcpAp2ParseError("Checkout JWT nbf must not be negative");
+      if (asOf < notBefore) throw new UcpAp2ParseError("Checkout JWT is not yet valid");
     }
-    if (
-      parsed.claims.exp !== undefined &&
-      asOf >= requireSafeInteger(parsed.claims.exp, "checkoutJwt.claims.exp")
-    ) {
-      throw new UcpAp2ParseError("Checkout JWT is expired");
+    if (parsed.claims.exp !== undefined) {
+      const expires = requireSafeInteger(parsed.claims.exp, "checkoutJwt.claims.exp");
+      if (expires < 0) throw new UcpAp2ParseError("Checkout JWT expiration must not be negative");
+      if (asOf >= expires) throw new UcpAp2ParseError("Checkout JWT is expired");
     }
   } catch (error) {
     issues.push(upstreamIssue(

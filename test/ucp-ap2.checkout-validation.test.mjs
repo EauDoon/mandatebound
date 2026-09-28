@@ -184,6 +184,20 @@ test("links must be a bounded list of absolute URIs", () => {
   );
 });
 
+test("negative checkout time claims are rejected", () => {
+  for (const overrides of [{ iat: -1 }, { nbf: -1 }, { exp: -1 }]) {
+    const report = verifyAp2CheckoutJwt({
+      ...options,
+      token: createJwt(claims(overrides), merchant),
+    });
+    assert.equal(report.upstreamValid, false, JSON.stringify(overrides));
+    assert.equal(report.value, null);
+    const issue = report.issues.find((entry) => entry.code === "AP2_CHECKOUT_JWT_TIME_INVALID");
+    assert.notEqual(issue, undefined, JSON.stringify(report.issues));
+    assert.match(issue.message, /must not be negative/);
+  }
+});
+
 test("an incomplete merchant object is rejected", () => {
   assert.equal(schemaRejection(claims({ merchant: "store" })), "Expected JSON object at checkoutJwt.claims.merchant");
   assert.equal(
