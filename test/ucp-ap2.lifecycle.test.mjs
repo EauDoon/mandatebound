@@ -195,3 +195,27 @@ test("lifecycle ordering is locale independent UTF-16 code-unit order", () => {
   const twice = JSON.stringify(correlateTransactionLifecycle(events));
   assert.equal(once, twice);
 });
+
+test("lifecycle events are ordered by instant, not by RFC 3339 text", () => {
+  const digest = sha256Bytes(Buffer.from("offset-order"));
+  const event = (eventId, occurredAt) => ({
+    eventId,
+    kind: "order",
+    transactionId: "txn-offset",
+    occurredAt,
+    sourceDigest: digest,
+    upstreamValid: true,
+    evidenceEligible: true,
+  });
+  // +14:00 on the next calendar day is earlier than noon Z, but the strings sort the other way.
+  const [correlation] = correlateTransactionLifecycle([
+    event("later", "2020-01-01T12:00:00Z"),
+    event("earlier", "2020-01-02T00:00:00+14:00"),
+    event("same-instant-z", "2020-01-01T11:00:00Z"),
+    event("same-instant-offset", "2020-01-01T12:00:00+01:00"),
+  ]);
+  assert.deepEqual(
+    correlation.events.map((entry) => entry.eventId),
+    ["earlier", "same-instant-offset", "same-instant-z", "later"],
+  );
+});
