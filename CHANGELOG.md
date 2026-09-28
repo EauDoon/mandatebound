@@ -50,6 +50,7 @@ All notable changes are documented here.
 - Transaction lifecycle correlation now orders events by the RFC 3339 instant. Offset timestamps no longer sort ahead of or behind an earlier or later instant because their strings compare that way.
 - CSV exports now prefix a formula trigger that sits behind a Unicode format character, such as a zero-width space, word joiner, or Mongolian vowel separator, so quoting alone cannot hide it from a spreadsheet.
 - Additive AP2 mandate verification now rejects a negative `iat`, `nbf`, or `exp`. Those instants previously counted as already valid or not in the future, unlike the v0.2.0 chain verifier.
+- Merchant Checkout JWT verification now rejects a negative `iat`, `nbf`, or `exp` instead of treating a negative issuance or not-before time as already valid.
 
 ### Security
 
