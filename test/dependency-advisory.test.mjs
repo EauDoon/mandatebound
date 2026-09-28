@@ -109,7 +109,23 @@ test("dependency check fails closed when the dependency tree is absent", () => {
   }
 });
 
-test("dependency check follows a symlinked installed package", () => {
+// Windows only permits symlink creation for elevated or Developer Mode
+// processes. Where the platform refuses, skip rather than report a false
+// failure; the Linux CI runners still exercise these paths.
+function linkOrSkip(t, target, path, type) {
+  try {
+    symlinkSync(target, path, type);
+  } catch (error) {
+    if (["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
+      t.skip("symlinks are unavailable on this platform");
+      return false;
+    }
+    throw error;
+  }
+  return true;
+}
+
+test("dependency check follows a symlinked installed package", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-symlink-"));
   try {
     mkdirSync(join(directory, "scripts"));
@@ -118,7 +134,7 @@ test("dependency check follows a symlinked installed package", () => {
     const realPackage = join(directory, "real-fast-uri");
     writeManifest(realPackage, { name: "fast-uri", version: "3.1.5" });
     mkdirSync(join(directory, "node_modules"));
-    symlinkSync(realPackage, join(directory, "node_modules", "fast-uri"), "dir");
+    if (!linkOrSkip(t, realPackage, join(directory, "node_modules", "fast-uri"), "dir")) return;
     const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, /fast-uri@3\.1\.5 is inside the vulnerable window/);
