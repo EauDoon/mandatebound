@@ -253,3 +253,36 @@ test("merchant authorization enforces JOSE headers, curve binding, trust windows
     );
   }
 });
+
+test("key snapshot windows use the timestamp instant, not the whole second", () => {
+  const merchant = createEcPair("merchant-subsecond");
+  const checkout = {
+    id: "chk-subsecond",
+    status: "ready_for_complete",
+    currency: "USD",
+    totals: [{ type: "total", amount: 10_00 }],
+    ap2: { merchant_authorization: "placeholder" },
+  };
+  const detached = merchantAuthorization(checkout, merchant);
+  checkout.ap2.merchant_authorization = detached;
+  const base = {
+    expectedKeySourceDigest: sourceDigest,
+    keySnapshot: keySnapshot(merchant),
+    asOf: evaluationTime,
+  };
+
+  const stale = verifyDetachedMerchantAuthorization(checkout, detached, {
+    ...base,
+    asOf: "2026-07-23T00:00:00.500Z",
+    keySnapshot: keySnapshot(merchant, { validUntil: "2026-07-23T00:00:00.000Z" }),
+  });
+  assert.equal(stale.evidenceEligible, false, JSON.stringify(stale.issues));
+  assert.equal(issueCodes(stale).has("INTEROP_KEY_SNAPSHOT_STALE"), true);
+
+  const future = verifyDetachedMerchantAuthorization(checkout, detached, {
+    ...base,
+    keySnapshot: keySnapshot(merchant, { capturedAt: "2026-07-23T00:00:00.500Z" }),
+  });
+  assert.equal(future.evidenceEligible, false, JSON.stringify(future.issues));
+  assert.equal(issueCodes(future).has("INTEROP_KEY_SNAPSHOT_FROM_FUTURE"), true);
+});
