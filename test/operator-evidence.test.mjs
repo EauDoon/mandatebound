@@ -339,3 +339,21 @@ test("SDK timing views never coerce nonstring JSON instants and CLI rejects them
     assert.equal(JSON.stringify(changed), original);
   }
 });
+
+test("assessment receipts digest CasePacks inside the format canonical budget", () => {
+  const value = input();
+  let nested = { end: true };
+  for (let depth = 0; depth < 40; depth += 1) nested = { child: nested };
+  const bulky = {
+    ...value,
+    casePack: {
+      ...value.casePack,
+      padding: "x".repeat(5 * 1024 * 1024),
+      nested,
+    },
+  };
+  const receipt = sdk.createAssessmentReceipt(bulky);
+  assert.equal(receipt.format, "MandateBoundAssessmentReceipt/v1");
+  assert.equal(receipt.valid, false);
+  assert.match(receipt.receiptDigest, /^sha256:[a-f0-9]{64}$/);
+});

@@ -2,7 +2,12 @@ import type { CasePackVerificationAnchors, MandateBoundCasePack } from "./casepa
 import { canonicalBytes, isSha256Digest, sha256Bytes, sha256Digest } from "./canonical.js";
 import { OperatorInputError, type CaseAssessmentInput } from "./operator.js";
 import { createCaseReport } from "./report.js";
-import { MAX_RAW_EVIDENCE_BYTES, MAX_RAW_EVIDENCE_REFERENCES, MAX_TOTAL_RAW_EVIDENCE_BYTES } from "./casepack/primitives.js";
+import {
+  CASEPACK_CANONICAL_LIMITS,
+  MAX_RAW_EVIDENCE_BYTES,
+  MAX_RAW_EVIDENCE_REFERENCES,
+  MAX_TOTAL_RAW_EVIDENCE_BYTES,
+} from "./casepack/primitives.js";
 import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 
 function rawSnapshots(anchors: CasePackVerificationAnchors) {
@@ -147,7 +152,7 @@ export function createAssessmentReceipt(input: CaseAssessmentInput) {
   const material = {
     format: "MandateBoundAssessmentReceipt/v1" as const,
     releaseVersion: RELEASE_VERSION, engineVersion: ENGINE_VERSION, protocolVersion: PROTOCOL_VERSION,
-    caseInputDigest: sha256Bytes(canonicalBytes(input.casePack, { maxBytes: 4 * 1024 * 1024 })),
+    caseInputDigest: sha256Bytes(canonicalBytes(input.casePack, CASEPACK_CANONICAL_LIMITS)),
     anchorDigest: sha256Digest(anchorContext(input.anchors)), reportDigest: sha256Digest(report),
     valid: report.valid, legalEffect: "not-determined" as const,
     sourceTruth: "unknown" as const, globalCompleteness: "not-established" as const,

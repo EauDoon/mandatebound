@@ -17,7 +17,7 @@ export const SEMVER_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 export const MEDIA_TYPE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]+$/;
 export const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const JSON_POINTER_PATTERN = /^(?:|\/(?:[^~/]|~0|~1)*)$/;
-const CASEPACK_CANONICAL_LIMITS = Object.freeze({
+export const CASEPACK_CANONICAL_LIMITS = Object.freeze({
   maxDepth: 48,
   maxNodes: 250_000,
   maxBytes: 16_777_216,
