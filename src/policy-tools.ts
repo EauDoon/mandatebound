@@ -259,9 +259,8 @@ function validatePolicyTestCases(input: unknown): {
     if (
       !isRecord(expected)
       || !hasExactKeys(expected, ["outcome"], ["reasonCode"])
-      || !["principal", "operator", "model_vendor", "unresolved"].includes(
-        String(expected["outcome"]),
-      )
+      || typeof expected["outcome"] !== "string"
+      || !["principal", "operator", "model_vendor", "unresolved"].includes(expected["outcome"])
       || (
         expected["reasonCode"] !== undefined
         && (typeof expected["reasonCode"] !== "string" || !IDENTIFIER.test(expected["reasonCode"]))
