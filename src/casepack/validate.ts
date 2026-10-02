@@ -1,8 +1,5 @@
 import { Buffer } from "node:buffer";
-import {
-  createPublicKey,
-  type JsonWebKeyInput,
-} from "node:crypto";
+import { jwkThumbprint } from "../crypto.js";
 import {
   isSha256Digest,
 } from "../canonical.js";
@@ -388,8 +385,7 @@ function validatePublicJwk(value: unknown, path: string, issues: ValidationIssue
     return false;
   }
   try {
-    const key = createPublicKey({ key: value as unknown as JsonWebKeyInput["key"], format: "jwk" });
-    if (key.asymmetricKeyType !== "ed25519") throw new TypeError("Unexpected key type");
+    jwkThumbprint(value as unknown as Ed25519PublicJwk);
   } catch {
     addIssue(issues, path, "MBCP_SCHEMA_INVALID", "External public key is malformed");
     return false;
