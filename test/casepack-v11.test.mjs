@@ -790,6 +790,37 @@ test("caller-pinned external trust verifies a signed source checkpoint without e
   assert.equal(report.coverageStatus, "satisfied");
   assert.equal(report.nativeBundle.trustChecked, false);
 
+  // Identity-point public keys permit R=identity, S=0 without a private key.
+  // Pinning such a snapshot must not turn this forgery into source evidence.
+  const identity = Buffer.alloc(32);
+  identity[0] = 1;
+  const identitySnapshot = sealExternalTrustSnapshot({
+    ...externalTrustSnapshot,
+    keys: [{
+      ...externalTrustSnapshot.keys[0],
+      publicJwk: { kty: "OKP", crv: "Ed25519", x: identity.toString("base64url") },
+    }],
+    snapshotDigest: undefined,
+  });
+  const forgedCheckpoint = {
+    ...checkpoint,
+    proofs: [{
+      ...checkpoint.proofs[0],
+      signature: Buffer.concat([identity, Buffer.alloc(32)]).toString("base64url"),
+    }],
+  };
+  const identityReport = verifyMandateBoundCasePack(
+    resealPack({
+      ...candidate,
+      externalTrustSnapshot: identitySnapshot,
+      sourceCheckpoints: [forgedCheckpoint],
+    }),
+    { ...anchors, externalTrustSnapshotDigest: identitySnapshot.snapshotDigest },
+  );
+  assert.equal(identityReport.valid, false);
+  assert.ok(identityReport.issues.some((issue) =>
+    issue.code === "MBCP_SCHEMA_INVALID" && issue.path.endsWith(".publicJwk")));
+
   const lateKeySnapshot = sealExternalTrustSnapshot({
     ...externalTrustSnapshot,
     keys: [{
