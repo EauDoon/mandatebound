@@ -187,13 +187,21 @@ test("a malformed percent-encoding in a markdown link is reported", () => {
   );
 });
 
-test("a directory symlink does not hide text-file violations", () => {
+test("a directory symlink does not hide text-file violations", (t) => {
   const root = mkdtempSync(join(tmpdir(), "mandatebound-lint-"));
   const hidden = mkdtempSync(join(tmpdir(), "mandatebound-lint-hidden-"));
   try {
     writeFileSync(join(hidden, "bad.md"), "trailing  \n");
-    symlinkSync(hidden, join(root, "linked"), "dir");
-    symlinkSync(root, join(root, "self"), "dir");
+    try {
+      symlinkSync(hidden, join(root, "linked"), "dir");
+      symlinkSync(root, join(root, "self"), "dir");
+    } catch (error) {
+      if (process.platform === "win32" && ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
+        t.skip(`Windows directory symlinks are unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
     const result = lintRepository(root);
     assert.equal(
       result.errors.some((error) => error.includes("trailing whitespace")),

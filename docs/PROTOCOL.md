@@ -12,6 +12,37 @@
 - Identifiers: bounded ASCII strings with artifact-specific prefixes
 - Network resolution during evaluation: none
 
+### Separator correction and historical compatibility
+
+The canonical profile remains RFC 8785, including its requirement to preserve
+U+2028 and U+2029 as UTF-8 bytes in string values and property names. Protocol,
+schema and engine identifiers stay unchanged: this corrects an implementation
+regression, not the normative profile. The verifier accepts only those canonical
+bytes. It never retries the escaped form under the same `RFC8785` proof header.
+
+Commit `c60c75c66cef6c7b59cf5b1b51df5c4dd489b8bd` introduced the regression.
+Artifacts produced by that commit and its descendants before this correction
+can contain digests and signatures over escaped separator bytes. Release
+`1.2.0` and engine `1.0.0` labels alone cannot distinguish those builds. Preserve
+the exact producer commit and original artifact bytes for historical replay;
+an engine label alone is insufficient provenance for affected artifacts.
+
+Artifacts without either separator in canonicalized content retain identical
+bytes. Affected legacy proofs fail with `ALB_PROOF_INVALID`, and legacy signed
+payload digests fail with `ALB_DIGEST_MISMATCH`; bundles, CasePacks and JSONL
+history chains can likewise fail their integrity checks. A failure does not
+establish which producer created an artifact. Do not rewrite historical stores,
+replace their pins, or re-sign another issuer's evidence to make a check pass.
+
+For affected history, retain the original artifacts and independently recorded
+pins. Historical replay requires the exact producer revision in an isolated
+environment and is evidence of that revision's behavior, not RFC 8785
+conformance. If provenance is unknown, quarantine the affected artifacts for
+review. To use them with the corrected verifier, authorized issuers must create
+new signatures and dependent artifacts with new digests and caller-reviewed
+pins, preserving the originals. No automatic migration or legacy profile is
+provided.
+
 ## Native signed artifact
 
 A signed artifact contains:

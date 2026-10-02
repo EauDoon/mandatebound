@@ -9,6 +9,13 @@ export const advisoryRules = [
   {
     name: "fast-uri",
     minimumVulnerable: "3.0.0",
+    maximumVulnerable: "3.1.7",
+    fixedIn: "3.1.8",
+    advisories: ["GHSA-hrr3-gc8f-f4qj"],
+  },
+  {
+    name: "fast-uri",
+    minimumVulnerable: "3.0.0",
     maximumVulnerable: "3.1.5",
     fixedIn: "3.1.6",
     advisories: [

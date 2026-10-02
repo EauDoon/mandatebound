@@ -500,13 +500,21 @@ test("JsonlStore enforces one writer and verifies persisted history", async () =
   }
 });
 
-test("JsonlStore rejects a symlink instead of appending through it", async () => {
+test("JsonlStore rejects a symlink instead of appending through it", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "mandatebound-store-link-"));
   try {
     const target = join(directory, "target.jsonl");
     const link = join(directory, "link.jsonl");
     await writeFile(target, "");
-    await symlink(target, link);
+    try {
+      await symlink(target, link);
+    } catch (error) {
+      if (process.platform === "win32" && ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
+        t.skip(`Windows file symlinks are unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
     await assert.rejects(
       JsonlStore.open(link),
       (error) => error instanceof StoreError && error.code === "ALB_STORE_OPEN",

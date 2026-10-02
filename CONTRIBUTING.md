@@ -32,7 +32,7 @@ Do not include real transaction evidence, identities, keys, prompts, logs, scree
 - Normative schemas live under a versioned directory.
 - Unknown artifact properties remain rejected.
 - A semantic change to policy facts, rule precedence, proof input, canonical form, bundle root, or decision bytes requires an explicit protocol version decision.
-- Existing decisions and bundles must remain verifiable under their recorded engine version.
+- Existing decisions and bundles must remain verifiable under their recorded engine version, except where a documented implementation regression reused that identifier. The [RFC8785 separator correction](docs/PROTOCOL.md#separator-correction-and-historical-compatibility) requires the exact producer revision for affected historical replay and rejects the regressed form in the corrected verifier.
 - New evidence can support an appeal, but cannot mutate an earlier decision.
 
 ## Tests

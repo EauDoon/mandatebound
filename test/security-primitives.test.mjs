@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import test from "node:test";
-import { sha256Digest } from "../dist/canonical.js";
+import { contentId, sha256Digest } from "../dist/canonical.js";
 import {
   createDetachedProof,
   createSignedArtifact,
@@ -20,6 +20,42 @@ import {
 import { createSchemaRegistry, schemaDigestForArtifactType, SCHEMA_IDS } from "../dist/validation.js";
 
 const signedAt = "2026-01-01T00:00:00.000Z";
+
+test("RFC8785 proofs and content IDs bind literal separator bytes and reject legacy escapes", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const publicJwk = exportPublicJwk(publicKey);
+  const payload = { "\u2029": "\u2028", "\u2028": "\u2029" };
+  const bytes = Buffer.from("7b22e280a8223a22e280a9222c22e280a9223a22e280a8227d", "hex");
+  const legacyBytes = Buffer.from('{"\\u2028":"\\u2029","\\u2029":"\\u2028"}', "ascii");
+  const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  const legacyDigest = `sha256:${createHash("sha256").update(legacyBytes).digest("hex")}`;
+  const artifact = createSignedArtifact(payload, privateKey, {
+    artifactType: "runtime_event", schemaId: SCHEMA_IDS.runtime_event,
+    schemaDigest: schemaDigestForArtifactType("runtime_event"), purpose: "runtime_observation", signedAt,
+  });
+  const proof = artifact.proofs[0];
+  assert.equal(decodeProofHeader(proof).value.canonicalization, "RFC8785");
+  assert.equal(contentId(payload), digest);
+  assert.equal(artifact.payloadDigest, digest);
+  assert.equal(verifySignedArtifactDigest(artifact).ok, true);
+  const legacyArtifact = verifySignedArtifactDigest({ ...artifact, payloadDigest: legacyDigest });
+  assert.equal(legacyArtifact.ok, false);
+  assert.equal(legacyArtifact.issues[0].code, "ALB_DIGEST_MISMATCH");
+
+  // Construct the signature input directly from the protocol domain and literal bytes.
+  const input = (body) => Buffer.concat([
+    Buffer.from("AGENT-LIABILITY-PROOF-V1\0", "ascii"),
+    Buffer.from(`${proof.protected}.${body.toString("base64url")}`, "ascii"),
+  ]);
+  assert.equal(proof.signature, sign(null, input(bytes), privateKey).toString("base64url"));
+  assert.equal(verify(null, input(bytes), publicKey, Buffer.from(proof.signature, "base64url")), true);
+  assert.equal(verifyDetachedProof(payload, proof, publicJwk).ok, true);
+  const legacyProof = { ...proof, signature: sign(null, input(legacyBytes), privateKey).toString("base64url") };
+  assert.equal(verify(null, input(legacyBytes), publicKey, Buffer.from(legacyProof.signature, "base64url")), true);
+  const rejected = verifyDetachedProof(payload, legacyProof, publicJwk);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.issues[0].code, "ALB_PROOF_INVALID");
+});
 
 test("proofs bind Ed25519 key, artifact type, schema, purpose, and payload", () => {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");

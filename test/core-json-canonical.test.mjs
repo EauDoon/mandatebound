@@ -54,12 +54,16 @@ test("strict JSON handles escapes and rejects malformed grammar without body ref
   assert.throws(() => parseStrictJson(42), TypeError);
 });
 
-test("canonical JSON escapes U+2028 and U+2029 as RFC 8785 requires", () => {
-  const line = String.fromCharCode(0x2028);
-  const paragraph = String.fromCharCode(0x2029);
-  assert.equal(canonicalize(line), "\"\\u2028\"");
-  assert.equal(canonicalize(paragraph), "\"\\u2029\"");
-  assert.equal(canonicalize({ [line]: paragraph }), "{\"\\u2028\":\"\\u2029\"}");
+test("RFC 8785 preserves separator UTF-8 bytes in values and sorted keys", () => {
+  // Literal byte oracles from RFC 8785 section 3.2.2.2, independent of the serializer.
+  for (const [value, hex] of [
+    ["\u2028", "22e280a822"],
+    ["\u2029", "22e280a922"],
+    [{ "\u2029": "\u2028", "\u2028": "\u2029" }, "7b22e280a8223a22e280a9222c22e280a9223a22e280a8227d"],
+    [{ a: "ascii" }, "7b2261223a226173636969227d"],
+  ]) {
+    assert.deepEqual(canonicalBytes(value), Buffer.from(hex, "hex"));
+  }
 });
 
 test("canonical JSON uses deterministic RFC 8785 key ordering", () => {

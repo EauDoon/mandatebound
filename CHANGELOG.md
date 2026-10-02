@@ -2,6 +2,18 @@
 
 All notable changes are documented here.
 
+## Canonical and Windows corrective candidate
+
+- Restore RFC 8785 UTF-8 serialization of U+2028 and U+2029 in values and keys.
+  Independent byte and signature checks reject the regressed escaped form.
+  Existing affected artifacts require the explicit historical-replay and
+  reissuance handling in [Protocol compatibility](docs/PROTOCOL.md#separator-correction-and-historical-compatibility).
+- Add a Windows Node 22.12.0 CLI, persistent-store and installed-package gate,
+  including command shims in a path with spaces and explicit symlink skips.
+- Raise the `fast-uri` override and lock to 3.1.8 or later for
+  [GHSA-hrr3-gc8f-f4qj](https://github.com/fastify/fast-uri/security/advisories/GHSA-hrr3-gc8f-f4qj),
+  and add the published affected window to the existing dependency checker.
+
 ## Installed-consumer corrective candidate
 
 - Fix npm-installed `mandatebound` and `alb` commands silently exiting through bin
