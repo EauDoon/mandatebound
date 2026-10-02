@@ -90,9 +90,21 @@ test("dependency check fails closed on a vulnerable installed version", () => {
 test("dependency check accepts the fixed version and reports the scanned tree", () => {
   const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-safe-"));
   try {
-    const result = runChecker(directory, { name: "fast-uri", version: "3.1.7" });
+    const result = runChecker(directory, { name: "fast-uri", version: "3.1.8" });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /dependency check: 1 installed packages clear of recorded advisories/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("dependency check rejects the host normalization advisory's last affected release", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-host-"));
+  try {
+    const result = runChecker(directory, { name: "fast-uri", version: "3.1.7" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /GHSA-hrr3-gc8f-f4qj/);
+    assert.match(result.stderr, /upgrade to 3\.1\.8/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

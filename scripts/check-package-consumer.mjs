@@ -5,7 +5,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 
 /** Exercise the shipped bytes from a new npm project outside the source tree. */
 export function checkInstalledPackage({ archive, temporaryRoot, manifest, npmCommand, npmPrefix }) {
-  const consumer = join(temporaryRoot, "consumer");
+  const consumer = join(temporaryRoot, "consumer with spaces");
   mkdirSync(consumer);
   writeFileSync(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module" }));
   const env = { ...process.env, NODE_PATH: "", NODE_OPTIONS: "",
@@ -63,6 +63,12 @@ syncBuiltinESMExports();
       const direct = spawnSync(bin, ["version"], { cwd: consumer, env, encoding: "utf8", timeout: 30_000 });
       assert.equal(direct.status, 0, `${name} must be executable using its npm-installed shebang`);
       assert.equal(direct.stdout, output);
+    } else {
+      const shim = spawnSync(process.env.ComSpec ?? "cmd.exe",
+        ["/d", "/s", "/c", `node_modules\\.bin\\${name}.cmd version`],
+        { cwd: consumer, env, encoding: "utf8", timeout: 30_000 });
+      assert.equal(shim.status, 0, `${name} must run through its npm-installed Windows shim`);
+      assert.equal(shim.stdout, output);
     }
   }
 

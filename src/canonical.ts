@@ -29,11 +29,6 @@ export class CanonicalizationError extends Error {
   }
 }
 
-function canonicalJsonString(value: string): string {
-  // JSON.stringify leaves U+2028 and U+2029 raw. RFC 8785 requires escapes.
-  return JSON.stringify(value).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
-}
-
 function ensureUnicodeScalarString(value: string): void {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -67,7 +62,7 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
   if (value === false) return "false";
   if (typeof value === "string") {
     ensureUnicodeScalarString(value);
-    return canonicalJsonString(value);
+    return JSON.stringify(value);
   }
   if (typeof value === "number") {
     if (!Number.isSafeInteger(value)) {
@@ -121,7 +116,7 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
       if (descriptor === undefined || !descriptor.enumerable || descriptor.get !== undefined || descriptor.set !== undefined) {
         throw new CanonicalizationError("Accessor and non-enumerable properties are not canonicalizable");
       }
-      parts.push(`${canonicalJsonString(key)}:${serialize(record[key], depth + 1, limits, counter)}`);
+      parts.push(`${JSON.stringify(key)}:${serialize(record[key], depth + 1, limits, counter)}`);
     }
     return `{${parts.join(",")}}`;
   }
