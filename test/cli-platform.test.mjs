@@ -383,6 +383,12 @@ test("help and version are stable JSON and use the public brand", async () => {
   assert.equal(JSON.parse(version.stdout).result.version, "1.0.0");
   assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.2.0");
   assert.equal(JSON.parse(version.stdout).result.engineVersion, "1.0.0");
+  // Each version layer is named explicitly; `version` stays the protocol alias.
+  assert.equal(JSON.parse(version.stdout).result.protocolVersion, "1.0.0");
+  assert.equal(JSON.parse(version.stdout).result.ap2PackFormatRelease, "1.2.0");
+  for (const field of ["version", "protocolVersion", "releaseVersion", "engineVersion", "ap2PackFormatRelease"]) {
+    assert.equal(helpResult[field], JSON.parse(version.stdout).result[field], field);
+  }
 });
 
 test("v1.2 policy and conformance commands are deterministic and fail closed", async () => {

@@ -18,7 +18,7 @@ import {
   type VerifyAp2ReceiptOptions,
   type VerifyAp2CheckoutJwtOptions,
 } from "./ucp-ap2.js";
-import { LEGAL_EFFECT, RELEASE_VERSION } from "./version.js";
+import { AP2_DISPUTE_FORMAT_RELEASE, LEGAL_EFFECT } from "./version.js";
 
 export const AP2_DISPUTE_EVIDENCE_PROFILE = Object.freeze({
   id: "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793",
@@ -169,7 +169,7 @@ export interface Ap2DisputeSelectedArtifact {
 
 export interface Ap2DisputeEvidenceResolution {
   readonly schemaId: "MandateBoundAp2DisputeEvidenceResolution/v1";
-  readonly releaseVersion: typeof RELEASE_VERSION;
+  readonly releaseVersion: typeof AP2_DISPUTE_FORMAT_RELEASE;
   readonly profile: typeof AP2_DISPUTE_EVIDENCE_PROFILE;
   readonly transactionId: string;
   readonly asOf: string;
@@ -222,7 +222,7 @@ export interface PackAp2DisputeEvidenceInput extends AssembleAp2DisputeEvidenceI
 
 export interface Ap2DisputeEvidencePack {
   readonly schemaId: "MandateBoundAp2EvidencePack/v1";
-  readonly releaseVersion: typeof RELEASE_VERSION;
+  readonly releaseVersion: typeof AP2_DISPUTE_FORMAT_RELEASE;
   readonly profile: typeof AP2_DISPUTE_EVIDENCE_PROFILE;
   readonly transactionId: string;
   readonly asOf: string;
@@ -246,7 +246,7 @@ export type Ap2ReportedRevocationState = "not_revoked" | "revoked" | "unknown";
 
 export interface Ap2DisputeEvidencePackVerification {
   readonly schemaId: "MandateBoundAp2EvidencePackVerification/v1";
-  readonly releaseVersion: typeof RELEASE_VERSION;
+  readonly releaseVersion: typeof AP2_DISPUTE_FORMAT_RELEASE;
   readonly status: "verified" | "unresolved";
   readonly packDigest: Sha256Digest | null;
   readonly expectedPackDigest: Sha256Digest | null;
@@ -893,7 +893,7 @@ function assemble(
       : "unresolved";
   const material = Object.freeze({
     schemaId: "MandateBoundAp2DisputeEvidenceResolution/v1" as const,
-    releaseVersion: RELEASE_VERSION,
+    releaseVersion: AP2_DISPUTE_FORMAT_RELEASE,
     profile: AP2_DISPUTE_EVIDENCE_PROFILE,
     transactionId: input.transactionId,
     asOf: input.asOf,
@@ -1430,7 +1430,7 @@ export function packAp2DisputeEvidence(
   const revocations = materializeRevocations(input.revocations, ids, asOf);
   const material = packMaterial(Object.freeze({
     schemaId: "MandateBoundAp2EvidencePack/v1" as const,
-    releaseVersion: RELEASE_VERSION,
+    releaseVersion: AP2_DISPUTE_FORMAT_RELEASE,
     profile: AP2_DISPUTE_EVIDENCE_PROFILE,
     transactionId: input.transactionId,
     asOf: input.asOf,
@@ -1466,7 +1466,7 @@ function assertPackShape(value: unknown): asserts value is Ap2DisputeEvidencePac
       "packDigest",
     ]) ||
     value.schemaId !== "MandateBoundAp2EvidencePack/v1" ||
-    value.releaseVersion !== RELEASE_VERSION ||
+    value.releaseVersion !== AP2_DISPUTE_FORMAT_RELEASE ||
     !isRecord(value.profile) ||
     typeof value.transactionId !== "string" ||
     typeof value.asOf !== "string" ||
@@ -1529,7 +1529,7 @@ function invalidPackReport(
 ): Ap2DisputeEvidencePackVerification {
   const material = Object.freeze({
     schemaId: "MandateBoundAp2EvidencePackVerification/v1" as const,
-    releaseVersion: RELEASE_VERSION,
+    releaseVersion: AP2_DISPUTE_FORMAT_RELEASE,
     status: "unresolved" as const,
     packDigest: null,
     expectedPackDigest,
@@ -1748,7 +1748,7 @@ export function verifyAp2DisputeEvidencePack(
       : "unresolved" as const;
   const reportMaterial = Object.freeze({
     schemaId: "MandateBoundAp2EvidencePackVerification/v1" as const,
-    releaseVersion: RELEASE_VERSION,
+    releaseVersion: AP2_DISPUTE_FORMAT_RELEASE,
     status,
     packDigest: pack.packDigest,
     expectedPackDigest,
@@ -1857,5 +1857,5 @@ export function renderAp2EvidenceTimelineHtml(
   const issueRows = verification.issues.length === 0
     ? "<li>None</li>"
     : verification.issues.map((issue) => `<li><code>${escapeHtml(issue.code)}</code>: ${escapeHtml(issue.message)}</li>`).join("");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>MandateBound AP2 Evidence Timeline</title><style>body{font:15px/1.45 system-ui,sans-serif;margin:2rem;color:#17202a;background:#fff}h1{margin-bottom:.25rem}.meta{color:#52606d;margin-bottom:1.5rem}.notice{padding:.8rem 1rem;background:#fff7d6;border-left:4px solid #d6a800}table{border-collapse:collapse;width:100%;margin-top:1rem}th,td{border:1px solid #d9e2ec;padding:.55rem;text-align:left;vertical-align:top}th{background:#f5f7fa}code{overflow-wrap:anywhere}.verified{color:#176b35}.unresolved{color:#9b1c1c}@media print{body{margin:.5in}}</style></head><body><h1>AP2 Evidence Timeline</h1><p class="meta">MandateBound ${escapeHtml(pack.releaseVersion)} | transaction <code>${escapeHtml(pack.transactionId)}</code> | <strong class="${escapeHtml(verification.status)}">${escapeHtml(verification.status)}</strong></p><p class="notice">Non-binding technical evidence report. Revocation states are imported reports, not authenticated facts. Raw Mandates, Receipt JWTs, Checkout JWTs, and revocation snapshot bytes are intentionally omitted from this rendering.</p><h2>Timeline</h2><table><thead><tr><th>Time</th><th>Event</th><th>Label</th><th>State</th><th>Digest</th><th>Sources</th></tr></thead><tbody>${rows}</tbody></table><h2>Verification issues</h2><ul>${issueRows}</ul><p>Pack digest: <code>${escapeHtml(pack.packDigest)}</code><br>Report digest: <code>${escapeHtml(verification.reportDigest)}</code><br>Legal effect: ${escapeHtml(verification.legalEffect)}</p></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>MandateBound AP2 Evidence Timeline</title><style>body{font:15px/1.45 system-ui,sans-serif;margin:2rem;color:#17202a;background:#fff}h1{margin-bottom:.25rem}.meta{color:#52606d;margin-bottom:1.5rem}.notice{padding:.8rem 1rem;background:#fff7d6;border-left:4px solid #d6a800}table{border-collapse:collapse;width:100%;margin-top:1rem}th,td{border:1px solid #d9e2ec;padding:.55rem;text-align:left;vertical-align:top}th{background:#f5f7fa}code{overflow-wrap:anywhere}.verified{color:#176b35}.unresolved{color:#9b1c1c}@media print{body{margin:.5in}}</style></head><body><h1>AP2 Evidence Timeline</h1><p class="meta">Pack format ${escapeHtml(pack.releaseVersion)} | transaction <code>${escapeHtml(pack.transactionId)}</code> | <strong class="${escapeHtml(verification.status)}">${escapeHtml(verification.status)}</strong></p><p class="notice">Non-binding technical evidence report. Revocation states are imported reports, not authenticated facts. Raw Mandates, Receipt JWTs, Checkout JWTs, and revocation snapshot bytes are intentionally omitted from this rendering.</p><h2>Timeline</h2><table><thead><tr><th>Time</th><th>Event</th><th>Label</th><th>State</th><th>Digest</th><th>Sources</th></tr></thead><tbody>${rows}</tbody></table><h2>Verification issues</h2><ul>${issueRows}</ul><p>Pack digest: <code>${escapeHtml(pack.packDigest)}</code><br>Report digest: <code>${escapeHtml(verification.reportDigest)}</code><br>Legal effect: ${escapeHtml(verification.legalEffect)}</p></body></html>`;
 }

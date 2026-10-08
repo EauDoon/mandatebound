@@ -21,6 +21,7 @@ import {
   verifyAp2MandateChain,
   verifyAp2Receipt,
 } from "../dist/ucp-ap2.js";
+import { AP2_DISPUTE_FORMAT_RELEASE, RELEASE_VERSION } from "../dist/version.js";
 
 const asOf = "2026-07-23T00:00:00.000Z";
 const sourceDigest = sha256Bytes(Buffer.from("synthetic-ap2-dispute-key-source", "utf8"));
@@ -378,9 +379,103 @@ test("AP2 Evidence Pack runs pack, independent verify, and metadata-only render"
   const html = renderAp2EvidenceTimelineHtml(pack, verificationOptions);
   assert.match(html, /AP2 Evidence Timeline/);
   assert.match(html, /not authenticated facts/);
+  // The label names the frozen format, not a package release.
+  assert.match(html, /Pack format 1\.2\.0/);
   assert.equal(html.includes(fixture.checkoutJwt), false);
   assert.equal(html.includes(fixture.checkoutMandate), false);
   assert.equal(html.includes(pack.revocations[0].snapshotBase64), false);
+});
+
+// Frozen golden Pack written by the released 1.2.0 code: dist/ built from tag
+// v1.2.0 (commit b2ca2c590ad972c9123d7c544d91097b1ced4589) packed the output of
+// that tag's own makeFixture() and makePackInput() test helpers. One change was
+// made to the helper input: the Checkout Mandate carries iat and exp, which
+// main has required of delegated payloads since fc27d70, after 1.2.0. The data
+// is synthetic and holds public JWKs only. Never regenerate this file: it proves
+// that a Pack retained from 1.2.0 still verifies, unchanged, whatever the
+// package release becomes.
+const GOLDEN_PACK_URL = new URL("./fixtures/ap2-evidence-pack-1.2.0.json", import.meta.url);
+const GOLDEN_PACK_DIGEST = "sha256:92cc19732acb486ce65af9232d4e328cb2be3d6f2624a296b01f02f8d38a3714";
+
+function publishedSchemaValidators() {
+  const readSchema = (name) => JSON.parse(readFileSync(
+    new URL(`../schemas/v1.2/${name}`, import.meta.url),
+    "utf8",
+  ));
+  const ajv = new Ajv2020({ allErrors: true, strict: true });
+  addFormats(ajv);
+  ajv.addSchema(readSchema("ap2-dispute-evidence-resolution.schema.json"));
+  return {
+    resolution: ajv.getSchema(readSchema("ap2-dispute-evidence-resolution.schema.json").$id),
+    pack: ajv.compile(readSchema("ap2-evidence-pack.schema.json")),
+    verification: ajv.compile(readSchema("ap2-evidence-pack-verification.schema.json")),
+  };
+}
+
+test("a Pack written by the released 1.2.0 code still verifies byte for byte", () => {
+  const pack = JSON.parse(readFileSync(GOLDEN_PACK_URL, "utf8"));
+  assert.equal(pack.releaseVersion, "1.2.0");
+  assert.equal(pack.packDigest, GOLDEN_PACK_DIGEST);
+  const { packDigest: _packDigest, ...material } = pack;
+  assert.equal(sha256Digest(material), GOLDEN_PACK_DIGEST);
+
+  const options = { expectedPackDigest: GOLDEN_PACK_DIGEST };
+  const verification = verifyAp2DisputeEvidencePack(pack, options);
+  assert.equal(verification.status, "verified", JSON.stringify(verification.issues));
+  assert.equal(verification.packDigest, GOLDEN_PACK_DIGEST);
+  assert.equal(verification.digestValid, true);
+  assert.equal(verification.anchorMatched, true);
+  assert.equal(verification.releaseVersion, "1.2.0");
+  assert.equal(verification.resolution.releaseVersion, "1.2.0");
+
+  const validators = publishedSchemaValidators();
+  assert.equal(validators.pack(pack), true, JSON.stringify(validators.pack.errors));
+  assert.equal(
+    validators.verification(verification),
+    true,
+    JSON.stringify(validators.verification.errors),
+  );
+  assert.match(renderAp2EvidenceTimelineHtml(pack, options), /Pack format 1\.2\.0/);
+});
+
+test("the golden Pack holds only public key material", () => {
+  const privateMembers = new Set(["d", "p", "q", "dp", "dq", "qi", "k", "oth"]);
+  const found = [];
+  const scan = (value, path) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => scan(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, item] of Object.entries(value)) {
+        if (privateMembers.has(key)) found.push(`${path}.${key}`);
+        scan(item, `${path}.${key}`);
+      }
+    } else if (typeof value === "string" && /PRIVATE KEY/u.test(value)) {
+      found.push(path);
+    }
+  };
+  scan(JSON.parse(readFileSync(GOLDEN_PACK_URL, "utf8")), "pack");
+  assert.deepEqual(found, []);
+});
+
+test("AP2 artifacts carry the frozen format release, independent of the package release", () => {
+  assert.equal(AP2_DISPUTE_FORMAT_RELEASE, "1.2.0");
+  const fixture = makeFixture();
+  const resolution = assembleAp2DisputeEvidence(fixture.input);
+  const pack = packAp2DisputeEvidence(makePackInput(fixture));
+  const verification = verifyAp2DisputeEvidencePack(pack, { expectedPackDigest: pack.packDigest });
+  for (const artifact of [resolution, pack, verification]) {
+    assert.equal(artifact.releaseVersion, AP2_DISPUTE_FORMAT_RELEASE, artifact.schemaId);
+  }
+  const validators = publishedSchemaValidators();
+  assert.equal(validators.resolution(resolution), true, JSON.stringify(validators.resolution.errors));
+  assert.equal(validators.pack(pack), true, JSON.stringify(validators.pack.errors));
+  assert.equal(validators.verification(verification), true, JSON.stringify(validators.verification.errors));
+
+  // A Pack relabelled with any other release is not a 1.2.0-format Pack.
+  const relabelled = { ...pack, releaseVersion: RELEASE_VERSION === "1.2.0" ? "9.9.9" : RELEASE_VERSION };
+  const rejected = verifyAp2DisputeEvidencePack(relabelled, { expectedPackDigest: pack.packDigest });
+  assert.equal(rejected.status, "unresolved");
+  assert.equal(rejected.packDigest, null);
 });
 
 test("Pack verification and rendering require an out-of-band Pack digest", () => {

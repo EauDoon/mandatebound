@@ -60,7 +60,7 @@ import { SIMULATION_SCENARIOS, simulateScenario } from "./simulator.js";
 import { parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
-import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
+import { AP2_DISPUTE_FORMAT_RELEASE, ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 import { validateArtifact } from "./validation.js";
 
 export const CLI_EXIT = Object.freeze({
@@ -153,6 +153,15 @@ const SIMULATE_SCENARIOS: readonly string[] = Object.freeze(["all", ...SIMULATIO
 const SERVE_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EADDRNOTAVAIL", "EACCES"]);
 const STORE_LOCKED_MESSAGE =
   "Store already has a writer. If no MandateBound process is using it, remove the stale .lock file next to the store.";
+// `version` keeps its original meaning, the protocol version, for existing
+// callers; the explicit fields say which version layer each value is.
+const VERSION_FIELDS = Object.freeze({
+  version: PROTOCOL_VERSION,
+  protocolVersion: PROTOCOL_VERSION,
+  releaseVersion: RELEASE_VERSION,
+  engineVersion: ENGINE_VERSION,
+  ap2PackFormatRelease: AP2_DISPUTE_FORMAT_RELEASE,
+});
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
@@ -601,9 +610,7 @@ export async function runCli(
         ok: true,
         result: {
           name: "MandateBound",
-          version: PROTOCOL_VERSION,
-          releaseVersion: RELEASE_VERSION,
-          engineVersion: ENGINE_VERSION,
+          ...VERSION_FIELDS,
           usage: CLI_USAGE,
           commands: CLI_COMMANDS,
           input: CLI_INPUT_HELP,
@@ -617,9 +624,7 @@ export async function runCli(
         ok: true,
         result: {
           name: "MandateBound",
-          version: PROTOCOL_VERSION,
-          releaseVersion: RELEASE_VERSION,
-          engineVersion: ENGINE_VERSION,
+          ...VERSION_FIELDS,
         },
       });
       return CLI_EXIT.SUCCESS;

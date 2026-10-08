@@ -1,0 +1,236 @@
+{
+  "schemaId": "MandateBoundAp2EvidencePack/v1",
+  "releaseVersion": "1.2.0",
+  "profile": {
+    "id": "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793",
+    "ap2Version": "0.2.0",
+    "ap2ReleaseCommit": "b4587ac1d055888a73b4b21750973cffba961793",
+    "mandateProfileId": "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
+    "receiptReferenceProfile": "sha256-terminal-compact-jws",
+    "retrievalTransport": "caller-supplied",
+    "builtInNetworkAccess": false
+  },
+  "transactionId": "XUA4nIUCtFpYNv6zfqqSzLrv2m2DMKkinn1EPgYJw8o",
+  "asOf": "2026-07-23T00:00:00.000Z",
+  "createdAt": "2026-07-23T00:00:00.000Z",
+  "verificationPlan": {
+    "checkoutMandate": {
+      "issuerKeySnapshot": {
+        "kid": "trusted-surface-key",
+        "jwk": {
+          "kty": "EC",
+          "x": "7Kj3JXR2FqPZMHEkH5fFam6fmxtbfbpTb-XHCzaXhgw",
+          "y": "n9LmsJ0pO6yV7JcuQ0MJb-xMFA33450Z5p9F1v0LWic",
+          "crv": "P-256",
+          "kid": "trusted-surface-key",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ]
+        },
+        "sourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+        "capturedAt": "2026-04-29T00:00:00.000Z",
+        "validUntil": "2027-04-29T00:00:00.000Z"
+      },
+      "expectedIssuerKeySourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+      "expectedIssuer": "https://trusted-surface.example",
+      "expectedAudience": "https://merchant.example",
+      "expectedNonce": "checkout-nonce",
+      "allowedAlgorithms": [
+        "ES256"
+      ],
+      "requireKeyBinding": true,
+      "expectedAgentJwk": {
+        "kty": "EC",
+        "x": "lA5XNdoaUq_NY28ZnetbtVgUPYEnMPIzxsxg4WT2MPQ",
+        "y": "sS7KwuRDAaneUw-nfHyNMramHqq4DDeeT9SbNmKpn7E",
+        "crv": "P-256",
+        "kid": "shopping-agent-key",
+        "alg": "ES256",
+        "use": "sig",
+        "key_ops": [
+          "verify"
+        ]
+      },
+      "expectedCheckoutJwt": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrb3V0LWtleSIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNoZWNrb3V0LXN5bnRoZXRpYy0xIiwibWVyY2hhbnQiOnsiaWQiOiJtZXJjaGFudC0xIiwibmFtZSI6IlN5bnRoZXRpYyBTdG9yZSIsIndlYnNpdGUiOiJodHRwczovL21lcmNoYW50LmV4YW1wbGUifSwibGluZV9pdGVtcyI6W3siaWQiOiJsaW5lLWl0ZW0tMSIsIml0ZW0iOnsiaWQiOiJza3UtMSIsInRpdGxlIjoiU3ludGhldGljIGl0ZW0ifSwicXVhbnRpdHkiOjEsInRvdGFscyI6W3sidHlwZSI6InN1YnRvdGFsIiwiYW1vdW50IjoyNTAwfSx7InR5cGUiOiJ0b3RhbCIsImFtb3VudCI6MjUwMH1dfV0sInN0YXR1cyI6ImluY29tcGxldGUiLCJjdXJyZW5jeSI6IlVTRCIsInRvdGFscyI6W3sidHlwZSI6InN1YnRvdGFsIiwiYW1vdW50IjoyNTAwfSx7InR5cGUiOiJ0b3RhbCIsImFtb3VudCI6MjUwMH1dLCJsaW5rcyI6W119.snEUG4iRlzqTIh2801SQxb9E0AWQmZOo74tIV6rbxoZmnyC3EOi3_8Lxs69Z0LF_cF_wVbv5azwAGbHmk29hVQ"
+    },
+    "checkoutJwt": {
+      "merchantKeySnapshot": {
+        "kid": "checkout-key",
+        "jwk": {
+          "kty": "EC",
+          "x": "PzbKGvX43dCVLhbSDoopKcTCWkGCDA9b8K0RShGVbcs",
+          "y": "2gt9J3jPE3xc_solllKyJPwufWTIZeCazdYWG798TMg",
+          "crv": "P-256",
+          "kid": "checkout-key",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ]
+        },
+        "sourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+        "capturedAt": "2026-04-29T00:00:00.000Z",
+        "validUntil": "2027-04-29T00:00:00.000Z"
+      },
+      "expectedMerchantKeySourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+      "allowedAlgorithms": [
+        "ES256"
+      ]
+    },
+    "paymentMandate": {
+      "issuerKeySnapshot": {
+        "kid": "trusted-surface-key",
+        "jwk": {
+          "kty": "EC",
+          "x": "7Kj3JXR2FqPZMHEkH5fFam6fmxtbfbpTb-XHCzaXhgw",
+          "y": "n9LmsJ0pO6yV7JcuQ0MJb-xMFA33450Z5p9F1v0LWic",
+          "crv": "P-256",
+          "kid": "trusted-surface-key",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ]
+        },
+        "sourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+        "capturedAt": "2026-04-29T00:00:00.000Z",
+        "validUntil": "2027-04-29T00:00:00.000Z"
+      },
+      "expectedIssuerKeySourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+      "expectedIssuer": "https://trusted-surface.example",
+      "expectedAudience": "https://processor.example",
+      "expectedNonce": "payment-nonce",
+      "allowedAlgorithms": [
+        "ES256"
+      ],
+      "requireKeyBinding": true,
+      "expectedAgentJwk": {
+        "kty": "EC",
+        "x": "lA5XNdoaUq_NY28ZnetbtVgUPYEnMPIzxsxg4WT2MPQ",
+        "y": "sS7KwuRDAaneUw-nfHyNMramHqq4DDeeT9SbNmKpn7E",
+        "crv": "P-256",
+        "kid": "shopping-agent-key",
+        "alg": "ES256",
+        "use": "sig",
+        "key_ops": [
+          "verify"
+        ]
+      }
+    },
+    "checkoutReceipt": {
+      "issuerKeySnapshot": {
+        "kid": "merchant-receipt-key",
+        "jwk": {
+          "kty": "EC",
+          "x": "VcMWIyPNw3lV2PcUBaQR8Nn2kmebHnk0x2RA4iqJL48",
+          "y": "ajo2jth3cnknIQZ1MX5xDSZo4o-Us6MYzQhA0MJxCT8",
+          "crv": "P-256",
+          "kid": "merchant-receipt-key",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ]
+        },
+        "sourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+        "capturedAt": "2026-04-29T00:00:00.000Z",
+        "validUntil": "2027-04-29T00:00:00.000Z"
+      },
+      "expectedIssuerKeySourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+      "expectedIssuer": "https://merchant.example",
+      "allowedAlgorithms": [
+        "ES256"
+      ]
+    },
+    "paymentReceipt": {
+      "issuerKeySnapshot": {
+        "kid": "processor-receipt-key",
+        "jwk": {
+          "kty": "EC",
+          "x": "IH07QeXbvCu2lS2735Ugoz6V8uhQ7ThykjYYfF0P_j0",
+          "y": "MkPZ9ez2K3vmwYczCgdPtRr70KGn9UQGdSDFC3X_20c",
+          "crv": "P-256",
+          "kid": "processor-receipt-key",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ]
+        },
+        "sourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+        "capturedAt": "2026-04-29T00:00:00.000Z",
+        "validUntil": "2027-04-29T00:00:00.000Z"
+      },
+      "expectedIssuerKeySourceDigest": "sha256:99e1453a9e31678b1f154ec2570fb817f4346cc254f3676e0fda67265067c90f",
+      "expectedIssuer": "https://processor.example",
+      "allowedAlgorithms": [
+        "ES256"
+      ]
+    }
+  },
+  "sources": [
+    {
+      "sourceId": "merchant-primary",
+      "role": "merchant",
+      "retrievedAt": "2026-07-22T23:59:00.000Z",
+      "artifacts": [
+        {
+          "kind": "checkout_mandate",
+          "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6InRydXN0ZWQtc3VyZmFjZS1rZXkiLCJ0eXAiOiJkYytzZC1qd3QifQ.eyJfc2RfYWxnIjoic2hhLTI1NiIsImRlbGVnYXRlX3BheWxvYWQiOlt7InZjdCI6Im1hbmRhdGUuY2hlY2tvdXQub3Blbi4xIiwiaWF0IjoxNzcwMDAwMDAwLCJleHAiOjE4MDAwMDAwMDAsImNvbnN0cmFpbnRzIjpbeyJ0eXBlIjoiY2hlY2tvdXQuYWxsb3dlZF9tZXJjaGFudHMiLCJhbGxvd2VkIjpbeyJpZCI6Im1lcmNoYW50LTEiLCJuYW1lIjoiU3ludGhldGljIFN0b3JlIiwid2Vic2l0ZSI6Imh0dHBzOi8vbWVyY2hhbnQuZXhhbXBsZSJ9XX0seyJ0eXBlIjoiY2hlY2tvdXQubGluZV9pdGVtcyIsIml0ZW1zIjpbeyJpZCI6InJlcXVpcmVtZW50LTEiLCJhY2NlcHRhYmxlX2l0ZW1zIjpbeyJpZCI6InNrdS0xIiwidGl0bGUiOiJTeW50aGV0aWMgaXRlbSJ9XSwicXVhbnRpdHkiOjF9XX1dLCJjbmYiOnsiandrIjp7Imt0eSI6IkVDIiwieCI6ImxBNVhOZG9hVXFfTlkyOFpuZXRidFZnVVBZRW5NUEl6eHN4ZzRXVDJNUFEiLCJ5Ijoic1M3S3d1UkRBYW5lVXctbmZIeU5NcmFtSHFxNEREZWVUOVNiTm1LcG43RSIsImNydiI6IlAtMjU2Iiwia2lkIjoic2hvcHBpbmctYWdlbnQta2V5IiwiYWxnIjoiRVMyNTYiLCJ1c2UiOiJzaWciLCJrZXlfb3BzIjpbInZlcmlmeSJdfX19XX0.vwSUHe_kLbN8eXoK_1Qe8U_tDO2zwMj_4qKXVtr0Sr2rYzEua0qxfdQ5HgtianvmsPj-lxUiaslIzl8_peGK1Q~~eyJhbGciOiJFUzI1NiIsImtpZCI6InNob3BwaW5nLWFnZW50LWtleSIsInR5cCI6ImtiK3NkLWp3dCJ9.eyJfc2RfYWxnIjoic2hhLTI1NiIsImF1ZCI6Imh0dHBzOi8vbWVyY2hhbnQuZXhhbXBsZSIsIm5vbmNlIjoiY2hlY2tvdXQtbm9uY2UiLCJpYXQiOjE3NzAwMDAwMDAsInNkX2hhc2giOiJRSDU2bmZCdHBEQmpoYUR0ZWRpVW8tZEF3RnJDV1duU3JDTi01RTN6WkhNIiwiZGVsZWdhdGVfcGF5bG9hZCI6W3siaXNzIjoiaHR0cHM6Ly90cnVzdGVkLXN1cmZhY2UuZXhhbXBsZSIsInZjdCI6Im1hbmRhdGUuY2hlY2tvdXQuMSIsImlhdCI6MTc3MDAwMDAwMCwiZXhwIjoxODAwMDAwMDAwLCJjaGVja291dF9qd3QiOiJleUpoYkdjaU9pSkZVekkxTmlJc0ltdHBaQ0k2SW1Ob1pXTnJiM1YwTFd0bGVTSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBaQ0k2SW1Ob1pXTnJiM1YwTFhONWJuUm9aWFJwWXkweElpd2liV1Z5WTJoaGJuUWlPbnNpYVdRaU9pSnRaWEpqYUdGdWRDMHhJaXdpYm1GdFpTSTZJbE41Ym5Sb1pYUnBZeUJUZEc5eVpTSXNJbmRsWW5OcGRHVWlPaUpvZEhSd2N6b3ZMMjFsY21Ob1lXNTBMbVY0WVcxd2JHVWlmU3dpYkdsdVpWOXBkR1Z0Y3lJNlczc2lhV1FpT2lKc2FXNWxMV2wwWlcwdE1TSXNJbWwwWlcwaU9uc2lhV1FpT2lKemEzVXRNU0lzSW5ScGRHeGxJam9pVTNsdWRHaGxkR2xqSUdsMFpXMGlmU3dpY1hWaGJuUnBkSGtpT2pFc0luUnZkR0ZzY3lJNlczc2lkSGx3WlNJNkluTjFZblJ2ZEdGc0lpd2lZVzF2ZFc1MElqb3lOVEF3ZlN4N0luUjVjR1VpT2lKMGIzUmhiQ0lzSW1GdGIzVnVkQ0k2TWpVd01IMWRmVjBzSW5OMFlYUjFjeUk2SW1sdVkyOXRjR3hsZEdVaUxDSmpkWEp5Wlc1amVTSTZJbFZUUkNJc0luUnZkR0ZzY3lJNlczc2lkSGx3WlNJNkluTjFZblJ2ZEdGc0lpd2lZVzF2ZFc1MElqb3lOVEF3ZlN4N0luUjVjR1VpT2lKMGIzUmhiQ0lzSW1GdGIzVnVkQ0k2TWpVd01IMWRMQ0pzYVc1cmN5STZXMTE5LnNuRVVHNGlSbHpxVEloMjgwMVNReGI5RTBBV1FtWk9vNzR0SVY2cmJ4b1ptbnlDM0VPaTNfOEx4czY5WjBMRl9jRl93VmJ2NWF6d0FHYkhtazI5aFZRIiwiY2hlY2tvdXRfaGFzaCI6IlhVQTRuSVVDdEZwWU52NnpmcXFTekxydjJtMkRNS2tpbm4xRVBnWUp3OG8ifV19.4nZL5aFnoZt0POAbFjesxIwKN4ODbhNXVeCn3Exz1wq_WbYUCSrfDkqDpWt4y0GhcP2To69L7VMxp4a5FyCVAw~"
+        },
+        {
+          "kind": "checkout_receipt",
+          "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6Im1lcmNoYW50LXJlY2VpcHQta2V5IiwidHlwIjoiSldUIn0.eyJzdGF0dXMiOiJTdWNjZXNzIiwiaXNzIjoiaHR0cHM6Ly9tZXJjaGFudC5leGFtcGxlIiwiaWF0IjoxNzcwMDAwMTAwLCJyZWZlcmVuY2UiOiJjalRvWTRzY1RRQ3ZQT3gzdkFUOU14c0lidkFWSHpyb3BuRXRWOTllVTlZIiwib3JkZXJfaWQiOiJvcmRlci1zeW50aGV0aWMtMSJ9.lAEI038mAaCBtDQGek-IcMgKES5A_clWBWeE7-k3hhpdWTQJUwxqgrA8HUxXbaf0VldeU7JJhzvsSppf4IWJag"
+        }
+      ]
+    },
+    {
+      "sourceId": "processor-primary",
+      "role": "merchant_payment_processor",
+      "retrievedAt": "2026-07-22T23:59:30.000Z",
+      "artifacts": [
+        {
+          "kind": "payment_mandate",
+          "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6InRydXN0ZWQtc3VyZmFjZS1rZXkiLCJ0eXAiOiJkYytzZC1qd3QifQ.eyJfc2RfYWxnIjoic2hhLTI1NiIsImRlbGVnYXRlX3BheWxvYWQiOlt7InZjdCI6Im1hbmRhdGUucGF5bWVudC5vcGVuLjEiLCJpYXQiOjE3NzAwMDAwMDAsImV4cCI6MTgwMDAwMDAwMCwiY29uc3RyYWludHMiOlt7InR5cGUiOiJwYXltZW50LnJlZmVyZW5jZSIsImNvbmRpdGlvbmFsX3RyYW5zYWN0aW9uX2lkIjoiUUg1Nm5mQnRwREJqaGFEdGVkaVVvLWRBd0ZyQ1dXblNyQ04tNUUzelpITSJ9XSwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsIngiOiJsQTVYTmRvYVVxX05ZMjhabmV0YnRWZ1VQWUVuTVBJenhzeGc0V1QyTVBRIiwieSI6InNTN0t3dVJEQWFuZVV3LW5mSHlOTXJhbUhxcTRERGVlVDlTYk5tS3BuN0UiLCJjcnYiOiJQLTI1NiIsImtpZCI6InNob3BwaW5nLWFnZW50LWtleSIsImFsZyI6IkVTMjU2IiwidXNlIjoic2lnIiwia2V5X29wcyI6WyJ2ZXJpZnkiXX19fV19.BJVTBI0hT_Skn64TfM2usWslZ-CZFXZ9wZcU546i2fGtxqlteiesOlEzIs18hNnnWbNoYAn6EyPPqHqYSslOeA~~eyJhbGciOiJFUzI1NiIsImtpZCI6InNob3BwaW5nLWFnZW50LWtleSIsInR5cCI6ImtiK3NkLWp3dCJ9.eyJfc2RfYWxnIjoic2hhLTI1NiIsImF1ZCI6Imh0dHBzOi8vcHJvY2Vzc29yLmV4YW1wbGUiLCJub25jZSI6InBheW1lbnQtbm9uY2UiLCJpYXQiOjE3NzAwMDAwMDAsInNkX2hhc2giOiJVZEdURTNiZ0tqZTJnbXBtY0lveC05d2U0bGFRZkh4Mk9uVzBEaVR4S0pFIiwiZGVsZWdhdGVfcGF5bG9hZCI6W3siaXNzIjoiaHR0cHM6Ly90cnVzdGVkLXN1cmZhY2UuZXhhbXBsZSIsInZjdCI6Im1hbmRhdGUucGF5bWVudC4xIiwiaWF0IjoxNzcwMDAwMDAwLCJleHAiOjE4MDAwMDAwMDAsInRyYW5zYWN0aW9uX2lkIjoiWFVBNG5JVUN0RnBZTnY2emZxcVN6THJ2Mm0yRE1La2lubjFFUGdZSnc4byIsInBheWVlIjp7ImlkIjoibWVyY2hhbnQtMSIsIm5hbWUiOiJTeW50aGV0aWMgU3RvcmUifSwicGF5bWVudF9hbW91bnQiOnsiY3VycmVuY3kiOiJVU0QiLCJhbW91bnQiOjI1MDB9LCJwYXltZW50X2luc3RydW1lbnQiOnsiaWQiOiJpbnN0cnVtZW50LTEiLCJ0eXBlIjoiY2FyZCJ9fV19.RRkpykq2_6C2v6O5yqSbP8NT5VwdCYqvTjPah5Zv1F0oEXSIFhWpZXKG077dxTCxTnJErkmPVrhHJJnCvxB_4Q~"
+        },
+        {
+          "kind": "payment_receipt",
+          "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6InByb2Nlc3Nvci1yZWNlaXB0LWtleSIsInR5cCI6IkpXVCJ9.eyJzdGF0dXMiOiJTdWNjZXNzIiwiaXNzIjoiaHR0cHM6Ly9wcm9jZXNzb3IuZXhhbXBsZSIsImlhdCI6MTc3MDAwMDIwMCwicmVmZXJlbmNlIjoiWkFUWE1kdzNfRW4yUnVtM002RUE3X2dXcy1qZjlJTHJTdDNjRlA4eTRaYyIsInBheW1lbnRfaWQiOiJwYXltZW50LXN5bnRoZXRpYy0xIiwicHNwX2NvbmZpcm1hdGlvbl9pZCI6InBzcC1zeW50aGV0aWMtMSIsIm5ldHdvcmtfY29uZmlybWF0aW9uX2lkIjoibmV0d29yay1zeW50aGV0aWMtMSJ9.JWXI4aoVqIvrzbDmf2osziGLW0vIRxRV_BV4b7HL4-YPeNR2lEnxBQe8-Ch7W-F0mu4KgOrL-D9UC9-9kVPscA"
+        }
+      ]
+    }
+  ],
+  "checkoutVersions": [
+    {
+      "versionId": "checkout-version-1",
+      "sourceId": "merchant-primary",
+      "observedAt": "2026-07-22T23:58:30.000Z",
+      "checkoutJwt": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrb3V0LWtleSIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNoZWNrb3V0LXN5bnRoZXRpYy0xIiwibWVyY2hhbnQiOnsiaWQiOiJtZXJjaGFudC0xIiwibmFtZSI6IlN5bnRoZXRpYyBTdG9yZSIsIndlYnNpdGUiOiJodHRwczovL21lcmNoYW50LmV4YW1wbGUifSwibGluZV9pdGVtcyI6W3siaWQiOiJsaW5lLWl0ZW0tMSIsIml0ZW0iOnsiaWQiOiJza3UtMSIsInRpdGxlIjoiU3ludGhldGljIGl0ZW0ifSwicXVhbnRpdHkiOjEsInRvdGFscyI6W3sidHlwZSI6InN1YnRvdGFsIiwiYW1vdW50IjoyNTAwfSx7InR5cGUiOiJ0b3RhbCIsImFtb3VudCI6MjUwMH1dfV0sInN0YXR1cyI6ImluY29tcGxldGUiLCJjdXJyZW5jeSI6IlVTRCIsInRvdGFscyI6W3sidHlwZSI6InN1YnRvdGFsIiwiYW1vdW50IjoyNTAwfSx7InR5cGUiOiJ0b3RhbCIsImFtb3VudCI6MjUwMH1dLCJsaW5rcyI6W119.snEUG4iRlzqTIh2801SQxb9E0AWQmZOo74tIV6rbxoZmnyC3EOi3_8Lxs69Z0LF_cF_wVbv5azwAGbHmk29hVQ",
+      "checkoutJwtDigest": "sha256:5d40389c8502b45a5836feb37eaa92ccbaefda6d8330a9229e7d443e0609c3ca"
+    }
+  ],
+  "revocations": [
+    {
+      "recordId": "checkout-revocation-1",
+      "mandateKind": "checkout_mandate",
+      "sourceId": "merchant-primary",
+      "checkedAt": "2026-07-22T23:59:40.000Z",
+      "reportedStatus": "not_revoked",
+      "snapshotBase64": "eyJtYW5kYXRlIjoiY2hlY2tvdXQiLCJzdGF0dXMiOiJub3RfcmV2b2tlZCJ9",
+      "snapshotDigest": "sha256:cff1cb69355e18d71c4c21d8d6b172d7687f5972fa642dfca9a93664b2bc8107"
+    },
+    {
+      "recordId": "payment-revocation-1",
+      "mandateKind": "payment_mandate",
+      "sourceId": "processor-primary",
+      "checkedAt": "2026-07-22T23:59:45.000Z",
+      "reportedStatus": "not_revoked",
+      "snapshotBase64": "eyJtYW5kYXRlIjoicGF5bWVudCIsInN0YXR1cyI6Im5vdF9yZXZva2VkIn0=",
+      "snapshotDigest": "sha256:f6905f64651651704b07a70d5de10373b67d4e2e2fe75913861df2a042b79dbb"
+    }
+  ],
+  "legalEffect": "not-determined",
+  "packDigest": "sha256:92cc19732acb486ce65af9232d4e328cb2be3d6f2624a296b01f02f8d38a3714"
+}

@@ -37,6 +37,15 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Changed
 
+- AP2 dispute resolutions, Evidence Packs and Pack verification reports now
+  carry `AP2_DISPUTE_FORMAT_RELEASE` (frozen at `1.2.0`, exported from the
+  package root) as their `releaseVersion` instead of the package release, so a
+  package release no longer invalidates retained Packs or the `schemas/v1.2`
+  constants. Resolution, Pack and verification bytes are unchanged; the HTML
+  timeline now labels the value "Pack format" instead of "MandateBound". CLI
+  `--version` and `--help` add `protocolVersion` and `ap2PackFormatRelease`;
+  `version` remains the protocol alias. The version layers are recorded in
+  [ADR 0003](docs/adr/0003-version-layers.md).
 - **Breaking (CLI only):** `decide` and `preview` now apply the reference API's
   complete-case boundary before the engine runs or a store opens. An incomplete
   case exits 3 with `ALB_EXTERNAL_PINS_REQUIRED` or `ALB_EVALUATION_SHAPE`
