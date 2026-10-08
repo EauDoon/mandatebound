@@ -22,13 +22,68 @@
     "builtInNetworkAccess": false,
     "legalEffect": "not-determined"
   },
+  "capabilities": [
+    {
+      "id": "native_evidence_bundle_v1",
+      "status": "supported"
+    },
+    {
+      "id": "mandatebound_casepack_v1",
+      "status": "supported"
+    },
+    {
+      "id": "ucp_2026_04_08_rest_evidence_import",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_mandates_evidence_import",
+      "status": "supported"
+    },
+    {
+      "id": "transaction_lifecycle_correlation",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_dispute_evidence_resolution",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_evidence_pack",
+      "status": "supported"
+    },
+    {
+      "id": "external_evidence_review_v1",
+      "status": "supported"
+    },
+    {
+      "id": "ucp_mcp_transport",
+      "status": "deferred"
+    },
+    {
+      "id": "ucp_a2a_transport",
+      "status": "deferred"
+    },
+    {
+      "id": "external_trust_auto_promotion",
+      "status": "unsupported"
+    },
+    {
+      "id": "normative_liability_waterfall",
+      "status": "unsupported"
+    },
+    {
+      "id": "legal_adjudication",
+      "status": "unsupported"
+    }
+  ],
   "fixtureTests": [
     "test/v1-compatibility.test.mjs",
     "test/casepack-v11.test.mjs",
     "test/ucp-ap2.test.mjs",
     "test/ap2-dispute-v12.test.mjs",
     "test/policy-tools-v11.test.mjs",
-    "test/conformance-v12.test.mjs"
+    "test/conformance-v12.test.mjs",
+    "test/review-external.test.mjs"
   ],
   "legalEffect": "not-determined"
 }

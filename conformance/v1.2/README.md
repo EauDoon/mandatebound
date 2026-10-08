@@ -13,7 +13,10 @@ The v1.2 suite retains the v1.1 evidence-import and CasePack fixtures and adds:
 - imported reported-revocation coverage with revoked and unknown states failing closed;
 - duplicate-source deduplication without last-response-wins behavior;
 - fail-closed missing, stale, future-captured, oversized, malformed, mutated, mismatched, conflicting, forged, and retrieval-failure fixtures;
-- raw-token and provider-error non-reflection checks; and
+- raw-token and provider-error non-reflection checks;
+- digest-bound external evidence review with `recorded`, `conflicting`, and `unsupported` verdicts, where upstream validity stays a caller assertion and source signatures are never re-verified; and
 - frozen native v1 compatibility checks.
 
-Passing these fixtures supports only the named evidence-import, Mandate-chain, dispute-integrity, and Evidence Pack profiles. It does not establish general AP2 conformance, authenticated revocation state, complete transaction history, claim correctness, legal effect, or production readiness.
+`capabilities.json` publishes the release, both profiles, every declared capability with its status, and the exact fixture files that `npm run conformance` runs. A test keeps that declaration equal to the runtime statement and the npm script.
+
+Passing these fixtures supports only the named evidence-import, Mandate-chain, dispute-integrity, Evidence Pack, and external-review profiles. It does not establish general AP2 conformance, authenticated revocation state, complete transaction history, claim correctness, legal effect, or production readiness.

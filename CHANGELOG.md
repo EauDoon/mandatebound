@@ -84,6 +84,11 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `npm run conformance` and the published `fixtureTests` now include the
+  external evidence review fixtures behind the supported
+  `external_evidence_review_v1` capability. The published declaration also lists
+  every capability with its status, and a test fails when that list, the fixture
+  list or the npm script drift from the runtime statement.
 - The license check now fails closed when `node_modules` is missing or holds no
   package manifests, matching the dependency advisory check. It previously
   reported that 0 installed packages used approved licenses and exited 0.
