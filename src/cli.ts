@@ -163,6 +163,17 @@ const VERSION_FIELDS = Object.freeze({
   ap2PackFormatRelease: AP2_DISPUTE_FORMAT_RELEASE,
 });
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+// One list per subcommand family: the dispatcher validates against it and
+// --help prints it, so the two cannot drift apart.
+const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
+const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
+const AP2_DISPUTE_ACTIONS = Object.freeze(["resolve", "pack", "verify", "render"] as const);
+const OPERATOR_ACTIONS = Object.freeze([
+  "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
+  "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect",
+  "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks",
+  "findings", "batch-diff",
+] as const);
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
   { name: "decide", summary: "Evaluate a case and persist the policy result" },
@@ -173,14 +184,33 @@ const CLI_COMMANDS = Object.freeze([
   { name: "simulate", summary: "Run a named synthetic scenario" },
   { name: "review", summary: "Bind external source evidence to a review record" },
   { name: "serve", summary: "Listen on loopback with the reference API" },
-  { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack" },
-  { name: "policy", summary: "Validate, test, or diff a policy pack" },
+  { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack", actions: CASEPACK_ACTIONS },
+  { name: "policy", summary: "Validate, test, or diff a policy pack", actions: POLICY_ACTIONS },
   { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
-  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence" },
+  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence", actions: AP2_DISPUTE_ACTIONS },
   { name: "conformance", summary: "Print the bounded capability statement" },
-  { name: "operator", summary: "Inspect evidence, prioritize review, compare revisions, anchor receipts or audit snapshots" },
+  {
+    name: "operator",
+    summary: "Inspect evidence, prioritize review, compare revisions, anchor receipts or audit snapshots",
+    actions: OPERATOR_ACTIONS,
+  },
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
+const CLI_EXIT_MEANINGS: Readonly<Record<keyof typeof CLI_EXIT, string>> = Object.freeze({
+  SUCCESS: "Completed; an unresolved policy outcome is still a successful evaluation.",
+  USAGE: "Unknown command, action or option, or an invalid option value.",
+  INVALID: "Invalid input, evidence or artifact, or a noncomparable or failed verification.",
+  NOT_FOUND: "A requested stored resource does not exist.",
+  CONFLICT: "A regression, conflict, mismatch or unresolved verification that needs review.",
+  UNAVAILABLE: "Storage, a held store lock, or the requested loopback address or port is unavailable.",
+  INTERNAL: "Unexpected internal failure; the command could not be completed.",
+});
+const CLI_EXIT_HELP = Object.freeze(Object.fromEntries(
+  (Object.keys(CLI_EXIT) as (keyof typeof CLI_EXIT)[]).map((name) => [
+    name,
+    Object.freeze({ code: CLI_EXIT[name], meaning: CLI_EXIT_MEANINGS[name] }),
+  ]),
+));
 const CLI_USAGE =
   "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
 const CLI_INPUT_HELP =
@@ -614,6 +644,8 @@ export async function runCli(
           usage: CLI_USAGE,
           commands: CLI_COMMANDS,
           input: CLI_INPUT_HELP,
+          scenarios: SIMULATE_SCENARIOS,
+          exitCodes: CLI_EXIT_HELP,
         },
       });
       return CLI_EXIT.SUCCESS;
@@ -807,7 +839,7 @@ export async function runCli(
       case "casepack": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const invocation = requireSubcommandInput(args, ["build", "verify", "unpack", "diff"]);
+        const invocation = requireSubcommandInput(args, CASEPACK_ACTIONS);
         const input = await readCasePackInput(invocation.path, stdin);
         if (invocation.action === "build") {
           writeJson(stdout, { ok: true, result: buildCasePack(input) });
@@ -843,7 +875,7 @@ export async function runCli(
       case "policy": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const invocation = requireSubcommandInput(args, ["validate", "test", "diff"]);
+        const invocation = requireSubcommandInput(args, POLICY_ACTIONS);
         const input = await readInput(invocation.path, stdin);
         if (invocation.action === "validate") {
           const report = validatePolicyPack(input);
@@ -873,7 +905,7 @@ export async function runCli(
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }
       case "ap2-dispute": {
-        const invocation = requireSubcommandInput(args, ["resolve", "pack", "verify", "render"]);
+        const invocation = requireSubcommandInput(args, AP2_DISPUTE_ACTIONS);
         const needsPackAnchor = invocation.action === "verify" || invocation.action === "render";
         assertAllowedOptions(
           args,
@@ -970,7 +1002,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks", "findings", "batch-diff"]);
+        const invocation = requireSubcommandInput(args, OPERATOR_ACTIONS);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);

@@ -13,7 +13,7 @@ import { createDefaultPlatformEngine } from "../dist/api.js";
 import { appealEventDigest } from "../dist/appeals.js";
 import { CLI_EXIT, closeServerOnSignals, runCli, SIGNAL_EXIT } from "../dist/cli.js";
 import { sha256Digest } from "../dist/canonical.js";
-import { buildScenario } from "../dist/simulator.js";
+import { buildScenario, SIMULATION_SCENARIOS } from "../dist/simulator.js";
 import { JsonlStore, MemoryStore, StoreError } from "../dist/store.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
@@ -366,6 +366,49 @@ test("documented --input and --format options work, while ambiguous and unsuppor
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// Options an action needs to get past argument validation to input checks.
+const ACTION_OPTIONS = {
+  "ap2-dispute verify": ["--expected-pack-digest", DIGEST],
+  "ap2-dispute render": ["--expected-pack-digest", DIGEST],
+  "operator receipt-verify": ["--expected-receipt-digest", DIGEST],
+};
+
+test("help lists every dispatcher action, the simulate scenarios and the exit codes", async () => {
+  const help = JSON.parse((await invoke(["--help"], "")).stdout).result;
+
+  const withActions = help.commands.filter((command) => command.actions !== undefined);
+  assert.deepEqual(withActions.map((command) => command.name), ["casepack", "policy", "ap2-dispute", "operator"]);
+  for (const command of withActions) {
+    assert.equal(new Set(command.actions).size, command.actions.length, command.name);
+    for (const action of command.actions) {
+      const extra = ACTION_OPTIONS[`${command.name} ${action}`] ?? [];
+      const result = await invoke([command.name, action, "-", ...extra], "{}");
+      // Every listed action passes argument validation; "{}" then fails as input.
+      assert.notEqual(result.code, CLI_EXIT.USAGE, `${command.name} ${action}: ${result.stdout}`);
+    }
+    const unlisted = await invoke([command.name, "not-an-action", "-"], "{}");
+    assert.equal(unlisted.code, CLI_EXIT.USAGE, command.name);
+    assert.equal(
+      JSON.parse(unlisted.stdout).error.message,
+      `Command action is unsupported. Expected one of: ${command.actions.join(", ")}.`,
+    );
+  }
+  assert.equal(withActions.find((command) => command.name === "operator").actions.length, 23);
+
+  assert.deepEqual(help.scenarios, ["all", ...SIMULATION_SCENARIOS]);
+  for (const scenario of help.scenarios.filter((name) => name !== "all")) {
+    const result = await invoke(["simulate", scenario], "");
+    assert.equal(result.code, CLI_EXIT.SUCCESS, scenario);
+  }
+
+  assert.deepEqual(Object.keys(help.exitCodes), Object.keys(CLI_EXIT));
+  for (const [name, entry] of Object.entries(help.exitCodes)) {
+    assert.equal(entry.code, CLI_EXIT[name], name);
+    assert.equal(typeof entry.meaning, "string");
+    assert.ok(entry.meaning.length > 10, name);
   }
 });
 

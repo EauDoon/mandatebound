@@ -12,6 +12,11 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Added
 
+- CLI `--help` now lists each subcommand family's `actions` (`casepack`,
+  `policy`, `ap2-dispute` and the 23 `operator` actions), the `simulate`
+  `scenarios`, and `exitCodes` with a one-line meaning for each code. The
+  dispatcher validates against the same lists, so help cannot drift from it.
+  The change is additive JSON.
 - `isAppealCheckpoint` type guard for the exact `{sequence, headDigest}`
   appeal checkpoint shape, exported from the package root.
 - `scripts/version.mjs` makes `package.json` the single source of the release
