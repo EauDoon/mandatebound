@@ -1,47 +1,35 @@
 # Changelog
 
-All notable changes are documented here.
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and the package
+release follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
-## Canonical and Windows corrective candidate
+The package release is one version layer among several. The protocol, engine,
+schema-directory and AP2 Pack format versions move separately and are described
+in [Protocol v1](docs/PROTOCOL.md).
 
-- Restore RFC 8785 UTF-8 serialization of U+2028 and U+2029 in values and keys.
-  Independent byte and signature checks reject the regressed escaped form.
-  Existing affected artifacts require the explicit historical-replay and
-  reissuance handling in [Protocol compatibility](docs/PROTOCOL.md#separator-correction-and-historical-compatibility).
+## [Unreleased]
+
+### Added
+
 - Add a Windows Node 22.12.0 CLI, persistent-store and installed-package gate,
   including command shims in a path with spaces and explicit symlink skips.
-- Raise the `fast-uri` override and lock to 3.1.8 or later for
-  [GHSA-hrr3-gc8f-f4qj](https://github.com/fastify/fast-uri/security/advisories/GHSA-hrr3-gc8f-f4qj),
-  and add the published affected window to the existing dependency checker.
-
-## Installed-consumer corrective candidate
-
-- Fix npm-installed `mandatebound` and `alb` commands silently exiting through bin
-  symlinks. Resolve entrypoint paths while keeping SDK imports inert.
 - Exercise the actual packed tarball in a fresh production-only consumer during
   `package:check`: public exports, both binaries, signed source import, CasePack
   readiness, failure diagnostics, and byte-identical offline replay.
 - Ship a public-export integration example and handoff guide with separate caller
   anchors; missing or tampered source evidence withholds native policy evaluation.
-
-## Local operator release candidate
-
 - Add stateless native decision preview and metadata-only raw-evidence inventory.
 - Prioritize case review queues and export formula-neutralized CSV task rows.
 - Compare individual coverage requirements, envelope eligibility, finding counts
   and caller-supplied anchor context without upgrading assurance.
 - Create deterministic assessment receipts and recheck them against independently
   retained digests, preserving invalid results and exposing changed inputs.
-- Preserve 1.2.0 release pins, native engine/protocol bytes and historical AP2 packs.
-
-## Unreleased corrective candidate
-
-### Added
-
 - New `review` CLI command binds external source evidence to a deterministic review record, declared as the supported `external_evidence_review_v1` capability in the conformance statement. It digest-binds caller-supplied evidence bytes to anchors, extracts the source action identity and receipt outcome, cross-checks caller-asserted upstream verification, and reports `recorded`, `conflicting`, or `unsupported` verdicts with stable exit codes. Source truth stays unknown, legal effect stays not determined, and no rail signatures are re-verified here: upstream validity remains a caller assertion over separately supplied trust inputs.
 
 ### Changed
 
+- Preserve 1.2.0 release pins, native engine/protocol bytes and historical AP2 packs.
 - Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.
 - `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.
 - CLI `--help` now lists commands and the JSON input convention. Unknown commands, a missing bundle path on an interactive terminal, and empty evidence documents fail with actionable usage or input errors instead of a generic parse failure.
@@ -70,13 +58,33 @@ All notable changes are documented here.
 - `validateRulebook` now requires `issuedAt` to be a real UTC millisecond timestamp. A non-timestamp previously passed the DSL and could be compared as text during evaluation.
 - External key snapshots now compare capture, validity, and evaluation instants in milliseconds. Flooring those timestamps to a second treated a key captured or expired later in that second as still current.
 
+### Removed
+
+- **Breaking:** Removed the remote-binding escape hatch from the API and CLI:
+  the public `CreateApiServerOptions.allowRemote` option and the
+  `serve --allow-remote` flag that 1.2.0 shipped no longer exist. The reference
+  server now requires a loopback bind and rejects non-loopback peers, mismatched
+  Host headers, and foreign Origins before routing. Migration: keep a loopback
+  bind behind a reverse proxy you operate.
+
+### Fixed
+
+- Restore RFC 8785 UTF-8 serialization of U+2028 and U+2029 in values and keys.
+  Independent byte and signature checks reject the regressed escaped form.
+  Existing affected artifacts require the explicit historical-replay and
+  reissuance handling in [Protocol compatibility](docs/PROTOCOL.md#separator-correction-and-historical-compatibility).
+- Fix npm-installed `mandatebound` and `alb` commands silently exiting through bin
+  symlinks. Resolve entrypoint paths while keeping SDK imports inert.
+
 ### Security
 
+- Raise the `fast-uri` override and lock to 3.1.8 or later for
+  [GHSA-hrr3-gc8f-f4qj](https://github.com/fastify/fast-uri/security/advisories/GHSA-hrr3-gc8f-f4qj),
+  and add the published affected window to the existing dependency checker.
 - Upgraded the transitive `fast-uri` dependency out of the 3.0.0 to 3.1.5 URI parsing advisory window (GHSA-5jgf-p345-68v8, GHSA-7p8r-x3mc-p8w7, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp), which covers host confusion and server-side request forgery through URI normalization.
-- Removed the remote-binding escape hatch from the API and CLI. The reference server now requires a loopback bind and rejects non-loopback peers, mismatched Host headers, and foreign Origins before routing.
 - Detached proof verification now requires canonical protected-header bytes, report rendering escapes every table value, and appeal replay rejects repeated genesis events.
 
-## 1.2.0
+## [1.2.0] - 2026-07-26
 
 ### Added
 
@@ -110,7 +118,7 @@ All notable changes are documented here.
 - Positive Pack verification requires an expected Pack digest retained outside the Pack; timeline renderers do not trust supplied verification reports.
 - Complete upstream history and general AP2 conformance remain unestablished.
 
-## 1.1.0
+## [1.1.0] - 2026-07-23
 
 ### Added
 
@@ -143,7 +151,7 @@ All notable changes are documented here.
 - UCP over A2A and MCP remains deferred. Visa Trusted Agent Protocol and x402 adapters remain unsupported.
 - Automated dispute submission and a hosted production service remain unsupported.
 
-## 1.0.0
+## [1.0.0] - 2026-07-23
 
 - Added normative v1 evidence schemas.
 - Added strict parsing, canonicalization, content addressing, Ed25519 proof verification, and pinned trust snapshots.
@@ -152,3 +160,8 @@ All notable changes are documented here.
 - Added immutable decisions and append-only appeals.
 - Added CLI, localhost API, simulator, OpenAPI contract, and synthetic test suite.
 - Added security, privacy, interoperability, governance, and legal-boundary documentation.
+
+[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/EauDoon/mandatebound/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/EauDoon/mandatebound/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/EauDoon/mandatebound/tree/v1.0.0

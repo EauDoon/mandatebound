@@ -109,8 +109,18 @@ test("release version cannot drift from the manifest, the changelog, or the publ
   assert.equal(published.release, RELEASE_VERSION);
   assert.equal(getConformanceStatement().release, RELEASE_VERSION);
 
-  // The newest numbered CHANGELOG section is the release these pins describe.
-  const released = [...changelog.matchAll(/^## (\d+\.\d+\.\d+)$/gmu)].map((match) => match[1]);
+  // Keep a Changelog: an `## [Unreleased]` section sits on top, and the newest
+  // dated `## [X.Y.Z] - YYYY-MM-DD` section is the release these pins describe.
+  const releasedMatches = [
+    ...changelog.matchAll(/^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/gmu),
+  ];
+  const released = releasedMatches.map((match) => match[1]);
   assert.ok(released.length > 0, "CHANGELOG.md has no released version section");
   assert.equal(released[0], RELEASE_VERSION);
+  const unreleased = changelog.search(/^## \[Unreleased\]$/mu);
+  assert.ok(unreleased >= 0, "CHANGELOG.md has no [Unreleased] section");
+  assert.ok(
+    unreleased < (releasedMatches[0]?.index ?? -1),
+    "[Unreleased] must precede the newest released section",
+  );
 });
