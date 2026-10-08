@@ -8,6 +8,10 @@ These workflows turn verifier output into review tasks and portable reports. The
 input and engine as `decide`, but never opens or writes a store. It rejects
 `--store`. An unresolved result remains a successful evaluation with
 `legalEffect: "not-determined"`; preview neither approves nor executes a transaction.
+Like `decide`, preview applies the reference API's complete-case boundary first:
+an input without the case identifier, external pins and required artifacts exits
+3 with `ALB_EXTERNAL_PINS_REQUIRED` or `ALB_EVALUATION_SHAPE`, and the engine
+never runs.
 
 Use the same `{casePack, anchors}` JSON input accepted by `case-report`. Keep coverage policy and contract digests in an independently trusted case record. Encode optional `anchors.rawEvidence` entries as `{referenceId, bytesBase64}` using canonical standard base64.
 

@@ -36,6 +36,7 @@ import {
 } from "./ap2-dispute.js";
 import { isSha256Digest } from "./canonical.js";
 import { getConformanceStatement } from "./conformance.js";
+import { assertEvaluationInput, EvaluationInputError } from "./evaluation-input.js";
 import type {
   AppealEvent,
   EvidenceBundle,
@@ -332,6 +333,23 @@ async function storeFor(
   return { store: new MemoryStore(), owned: true };
 }
 
+/**
+ * Apply the API's complete-case boundary before the engine runs or a store is
+ * opened. The engine would otherwise turn any JSON into a fabricated
+ * `malformed-case` decision that decide persists and both commands print as a
+ * successful evaluation.
+ */
+function evaluationCase(value: unknown): EvaluationInput {
+  try {
+    return assertEvaluationInput(value);
+  } catch (error) {
+    if (error instanceof EvaluationInputError) {
+      throw new CliError(error.code, CLI_EXIT.INVALID, error.message, { cause: error });
+    }
+    throw error;
+  }
+}
+
 function mappedCliError(error: unknown): CliError {
   const location = locationFrom(error);
   if (error instanceof CliError) return error;
@@ -608,7 +626,7 @@ export async function runCli(
       case "preview": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
+        const input = evaluationCase(await readInput(requireSingleInput(args), stdin));
         const decision = await engine.evaluateCase(input);
         writeJson(stdout, { ok: true, result: decision });
         return CLI_EXIT.SUCCESS;
@@ -616,7 +634,7 @@ export async function runCli(
       case "decide": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input", "store"]);
-        const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
+        const input = evaluationCase(await readInput(requireSingleInput(args), stdin));
         const decision = await engine.evaluateCase(input);
         const resolved = await storeFor(args, io.store);
         if (resolved.owned) ownedStore = resolved.store;

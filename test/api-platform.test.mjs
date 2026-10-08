@@ -497,7 +497,28 @@ test("API rejects missing anchors, malformed JSON, duplicate keys, media types, 
       body: "{}",
     });
     assert.equal(missingPins.status, 422);
-    assert.equal((await json(missingPins)).code, "ALB_EXTERNAL_PINS_REQUIRED");
+    const missingPinsProblem = await json(missingPins);
+    assert.equal(missingPinsProblem.code, "ALB_EXTERNAL_PINS_REQUIRED");
+    // The CLI shares this gate; the API wording must stay byte-identical.
+    assert.equal(missingPinsProblem.detail, "A complete evaluation case with external pins is required.");
+
+    const unknownKey = await fetch(`${address.url}/v1/evaluations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"caseId":"c","unexpected":1}',
+    });
+    assert.equal(unknownKey.status, 422);
+    const unknownKeyProblem = await json(unknownKey);
+    assert.equal(unknownKeyProblem.code, "ALB_EVALUATION_SHAPE");
+    assert.equal(unknownKeyProblem.detail, "Evaluation input has an invalid shape.");
+
+    const arrayBody = await fetch(`${address.url}/v1/evaluations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "[1,2]",
+    });
+    assert.equal(arrayBody.status, 422);
+    assert.equal((await json(arrayBody)).code, "ALB_BODY_SHAPE");
 
     const malformed = await fetch(`${address.url}/v1/verify`, {
       method: "POST",
@@ -722,6 +743,16 @@ test("malformed nested evaluation input is a 422 and malformed bundles get a bou
     });
     assert.equal(nested.status, 422);
     assert.equal((await json(nested)).code, "ALB_EXTERNAL_PINS_REQUIRED");
+
+    const scalarArtifact = await fetch(`${address.url}/v1/evaluations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(evaluationRequest({ mandate: "not-an-artifact" })),
+    });
+    assert.equal(scalarArtifact.status, 422);
+    const scalarProblem = await json(scalarArtifact);
+    assert.equal(scalarProblem.code, "ALB_EVALUATION_SHAPE");
+    assert.equal(scalarProblem.detail, "Evaluation input has an invalid shape.");
 
     const malformedBundle = await fetch(`${address.url}/v1/verify`, {
       method: "POST",

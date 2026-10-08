@@ -35,6 +35,13 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Changed
 
+- **Breaking (CLI only):** `decide` and `preview` now apply the reference API's
+  complete-case boundary before the engine runs or a store opens. An incomplete
+  case exits 3 with `ALB_EXTERNAL_PINS_REQUIRED` or `ALB_EVALUATION_SHAPE`
+  instead of printing, and for `decide` persisting, a fabricated
+  `malformed-case` decision with exit 0. The API boundary and its messages are
+  unchanged. `examples/README.md` no longer tells users to `decide` a saved
+  bundle; a bundle belongs to `verify`.
 - Preserve 1.2.0 release pins, native engine/protocol bytes and historical AP2 packs.
 - Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.
 - `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.

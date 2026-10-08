@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { createDefaultPlatformEngine } from "../dist/api.js";
 import { CLI_EXIT, runCli } from "../dist/cli.js";
 import { sha256Digest } from "../dist/canonical.js";
 import { buildScenario } from "../dist/simulator.js";
@@ -12,6 +16,10 @@ import { MemoryStore, StoreError } from "../dist/store.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
+// decide and preview accept only a complete evaluation case, so tests that
+// exercise the stub engine, stub store, or store-error mapping send a real one.
+const CASE_INPUT = JSON.stringify(buildScenario("principal").input);
+const CLI_PATH = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 
 function decision(overrides = {}) {
   const { artifactId: _artifactId, ...fields } = overrides;
@@ -120,12 +128,78 @@ test("verify and decide use stable success/invalid exit codes with JSON stdout",
   assert.equal(JSON.parse(invalid.stdout).ok, false);
 
   const store = new MemoryStore();
-  const decided = await invoke(["decide", "-"], JSON.stringify({ pins: {} }), { store });
+  const decided = await invoke(["decide", "-"], CASE_INPUT, { store });
   assert.equal(decided.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(decided.stdout).result.outcome, "unresolved");
   const decidedArtifact = JSON.parse(decided.stdout).result;
   assert.equal((await store.getDecision(decidedArtifact.artifactId)).legalEffect, "not-determined");
   await store.close();
+});
+
+const INCOMPLETE_CASES = [
+  ["{}", "ALB_EXTERNAL_PINS_REQUIRED"],
+  ["[1,2]", "ALB_EVALUATION_SHAPE"],
+  ['{"pins":{}}', "ALB_EXTERNAL_PINS_REQUIRED"],
+  ['{"caseId":"c","unexpected":1}', "ALB_EVALUATION_SHAPE"],
+];
+
+test("decide and preview reject incomplete cases before the engine runs or a store opens", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-case-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    for (const [input, code] of INCOMPLETE_CASES) {
+      let evaluated = false;
+      const guarded = engine({ evaluateCase: () => { evaluated = true; return decision(); } });
+      for (const argv of [["decide", "--store", file, "-"], ["preview", "-"]]) {
+        const result = await invoke(argv, input, { engine: guarded });
+        assert.equal(result.code, CLI_EXIT.INVALID, `${argv[0]} ${input}`);
+        const error = JSON.parse(result.stdout).error;
+        assert.equal(error.code, code, `${argv[0]} ${input}`);
+        assert.equal(
+          error.message,
+          code === "ALB_EVALUATION_SHAPE"
+            ? "Evaluation input has an invalid shape."
+            : "A complete evaluation case with external pins is required.",
+        );
+        assert.equal(JSON.parse(result.stderr).code, code);
+      }
+      assert.equal(evaluated, false, input);
+      assert.equal(existsSync(file), false, "no store file may be created");
+      assert.equal(existsSync(`${file}.lock`), false, "no store lock may be taken");
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("decide and preview still evaluate complete scenario cases with the real engine", async () => {
+  for (const name of ["principal", "unresolved"]) {
+    const scenario = buildScenario(name);
+    const input = JSON.stringify(scenario.input);
+    const store = new MemoryStore();
+    for (const argv of [["preview", "-"], ["decide", "-"]]) {
+      const result = await invoke(argv, input, { engine: createDefaultPlatformEngine(), store });
+      assert.equal(result.code, CLI_EXIT.SUCCESS, `${argv[0]} ${name}: ${result.stdout}`);
+      const output = JSON.parse(result.stdout).result;
+      assert.equal(output.caseId, scenario.input.caseId);
+      assert.notEqual(output.caseId, "malformed-case");
+      assert.equal(output.outcome, scenario.expected);
+    }
+    await store.close();
+  }
+});
+
+test("the installed CLI rejects an empty case without engine diagnostics on stderr", () => {
+  for (const command of ["preview", "decide"]) {
+    const result = spawnSync(process.execPath, [CLI_PATH, command, "-"], { input: "{}", encoding: "utf8" });
+    assert.equal(result.status, CLI_EXIT.INVALID, result.stdout);
+    assert.equal(JSON.parse(result.stdout).error.code, "ALB_EXTERNAL_PINS_REQUIRED");
+    assert.doesNotMatch(result.stderr, /\[mandatebound\] evaluateCase/u);
+    // stderr carries exactly the CLI's own JSON diagnostic line.
+    const lines = result.stderr.trim().split(/\r?\n/u);
+    assert.equal(lines.length, 1, result.stderr);
+    assert.equal(JSON.parse(lines[0]).code, "ALB_EXTERNAL_PINS_REQUIRED");
+  }
 });
 
 test("explain is JSON and explicitly nonlegal", async () => {
@@ -555,14 +629,14 @@ test("casepack commands accept documents inside the CasePack canonical budget", 
 });
 
 test("CLI error mapping uses stable exit classes and never reflects exception secrets", async () => {
-  const typeFailure = await invoke(["decide", "-"], "{}", {
+  const typeFailure = await invoke(["decide", "-"], CASE_INPUT, {
     engine: engine({ evaluateCase: () => { throw new TypeError("PRIVATE_TYPE_DETAIL"); } }),
   });
   assert.equal(typeFailure.code, CLI_EXIT.INVALID);
   assert.equal(JSON.parse(typeFailure.stdout).error.code, "ALB_ARTIFACT_INVALID");
   assert.equal(typeFailure.stdout.includes("PRIVATE_TYPE_DETAIL"), false);
 
-  const internal = await invoke(["decide", "-"], "{}", {
+  const internal = await invoke(["decide", "-"], CASE_INPUT, {
     engine: engine({ evaluateCase: () => { throw new Error("PRIVATE_INTERNAL_DETAIL"); } }),
   });
   assert.equal(internal.code, CLI_EXIT.INTERNAL);
@@ -587,7 +661,7 @@ test("CLI error mapping uses stable exit classes and never reflects exception se
       verifyChain: async () => ({ valid: true, records: 0, completeness: "unproven", issues: [] }),
       close: async () => {},
     };
-    const result = await invoke(["decide", "-"], "{}", { store });
+    const result = await invoke(["decide", "-"], CASE_INPUT, { store });
     assert.equal(result.code, expected);
     assert.equal(result.stdout.includes("secret"), false);
   }
@@ -598,7 +672,7 @@ test("CLI store diagnostics name the failing JSONL line without reflecting recor
   const file = join(directory, "store.jsonl");
   try {
     await writeFile(file, "{not-json}\n", "utf8");
-    const result = await invoke(["decide", "--store", file, "-"], JSON.stringify({ pins: {} }));
+    const result = await invoke(["decide", "--store", file, "-"], CASE_INPUT);
     assert.equal(result.code, CLI_EXIT.INVALID);
     const error = JSON.parse(result.stdout).error;
     assert.equal(error.code, "ALB_STORE_CORRUPT");
