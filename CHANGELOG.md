@@ -12,6 +12,12 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Added
 
+- `scripts/version.mjs` makes `package.json` the single source of the release
+  version: `check` fails on drift in the lockfile, `src/version.ts`, the
+  conformance declaration, OpenAPI `info.version`, the CHANGELOG and the release
+  tag, and runs in `npm run verify:static`; `sync` is the npm `version`
+  lifecycle hook; `notes` prints a CHANGELOG section for the GitHub Release.
+  OpenAPI `info.version` now tracks the package release.
 - Add a Windows Node 22.12.0 CLI, persistent-store and installed-package gate,
   including command shims in a path with spaces and explicit symlink skips.
 - Exercise the actual packed tarball in a fresh production-only consumer during
