@@ -6,6 +6,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     versioning-strategy: increase-if-necessary
+    # @types/node tracks the oldest supported runtime (engines >=22.12.0), so
+    # a newer major would let code type-check against APIs that runtime lacks.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     # Roll the routine drift into one reviewable PR instead of one PR per
     # package per week. `*` would also swallow major bumps, so the group is
     # restricted to minor and patch: those are the semver-safe updates, while

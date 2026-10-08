@@ -46,6 +46,10 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Changed
 
+- CI runs the full test suite on Windows instead of four files, adds Node
+  26.11.1 to the static and coverage matrices, and the coverage gate now
+  includes the CLI module. The `@types/node` development dependency follows the
+  Node 22.12 support floor, and Dependabot no longer proposes its major updates.
 - AP2 dispute resolutions, Evidence Packs and Pack verification reports now
   carry `AP2_DISPUTE_FORMAT_RELEASE` (frozen at `1.2.0`, exported from the
   package root) as their `releaseVersion` instead of the package release, so a
