@@ -11,6 +11,7 @@ import { replayAppealEvents } from "./appeals.js";
 import {
   createApiServer,
   createDefaultPlatformEngine,
+  isLoopbackAddress,
   type ApiServer,
   type PlatformEngine,
 } from "./api.js";
@@ -56,7 +57,7 @@ import { auditJsonlStore } from "./store-audit.js";
 import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse, findBatchCollectionBottlenecks, summarizeBatchFindings, compareCaseBatches } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
-import { simulateScenario } from "./simulator.js";
+import { SIMULATION_SCENARIOS, simulateScenario } from "./simulator.js";
 import { parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
@@ -149,6 +150,8 @@ const CASEPACK_CLI_JSON_LIMITS = Object.freeze({
   maxDepth: 48,
   maxNodes: 250_000,
 });
+const SIMULATE_SCENARIOS: readonly string[] = Object.freeze(["all", ...SIMULATION_SCENARIOS]);
+const SERVE_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EADDRNOTAVAIL", "EACCES"]);
 const STORE_LOCKED_MESSAGE =
   "Store already has a writer. If no MandateBound process is using it, remove the stale .lock file next to the store.";
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -702,6 +705,13 @@ export async function runCli(
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate scenario must be provided once.");
         }
         const scenario = typeof optionScenario === "string" ? optionScenario : (args.positionals[0] ?? "all");
+        if (!SIMULATE_SCENARIOS.includes(scenario)) {
+          throw new CliError(
+            "ALB_SCENARIO_UNKNOWN",
+            CLI_EXIT.INVALID,
+            `Unknown scenario. Expected one of: ${SIMULATE_SCENARIOS.join(", ")}.`,
+          );
+        }
         const result = await simulateScenario(scenario);
         writeJson(stdout, { ok: true, result });
         return CLI_EXIT.SUCCESS;
@@ -730,14 +740,24 @@ export async function runCli(
         if (args.positionals.length !== 0) {
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Serve does not accept an input path.");
         }
+        // Validate the bind before opening, and so locking, a store.
+        const host = typeof args.options["host"] === "string" ? args.options["host"] : "127.0.0.1";
+        if (!isLoopbackAddress(host)) {
+          throw new CliError(
+            "ALB_CLI_USAGE",
+            CLI_EXIT.USAGE,
+            "Serve binds only to a loopback IP literal such as 127.0.0.1 or ::1.",
+          );
+        }
+        const port = parsePort(args.options["port"]);
         const resolvedStore = await storeFor(args, io.store);
         let server: ApiServer | undefined;
         try {
           server = createApiServer({
             store: resolvedStore.store,
             engine,
-            host: typeof args.options["host"] === "string" ? args.options["host"] : "127.0.0.1",
-            port: parsePort(args.options["port"]),
+            host,
+            port,
           });
           io.onServer?.(server);
           if (io.signal !== undefined) {
@@ -749,6 +769,17 @@ export async function runCli(
         } catch (error) {
           if (server !== undefined) await server.close().catch(() => undefined);
           else if (resolvedStore.owned) await resolvedStore.store.close().catch(() => undefined);
+          const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
+          if (typeof code === "string" && SERVE_UNAVAILABLE_CODES.has(code)) {
+            // A busy or unbindable port is an environment condition, not an
+            // internal error.
+            throw new CliError(
+              "ALB_SERVE_UNAVAILABLE",
+              CLI_EXIT.UNAVAILABLE,
+              "The requested loopback address or port is unavailable.",
+              { cause: error },
+            );
+          }
           throw error;
         }
       }

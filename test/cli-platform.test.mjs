@@ -645,7 +645,15 @@ test("CLI error mapping uses stable exit classes and never reflects exception se
 
   const coded = await invoke(["simulate", "not-a-scenario"], "");
   assert.equal(coded.code, CLI_EXIT.INVALID);
-  assert.equal(JSON.parse(coded.stdout).error.code, "ALB_SCENARIO_UNKNOWN");
+  const codedError = JSON.parse(coded.stdout).error;
+  assert.equal(codedError.code, "ALB_SCENARIO_UNKNOWN");
+  assert.equal(
+    codedError.message,
+    "Unknown scenario. Expected one of: all, principal, operator, model_vendor, unresolved, expiry, replay, tamper, conflict, appeal.",
+  );
+  const optionScenario = await invoke(["simulate", "--scenario", "Principal"], "");
+  assert.equal(optionScenario.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(optionScenario.stdout).error.code, "ALB_SCENARIO_UNKNOWN");
 
   const storeCases = [
     [new StoreError("ALB_STORE_DECISION_NOT_FOUND", "secret"), CLI_EXIT.NOT_FOUND],
@@ -781,7 +789,7 @@ test("serve reports its loopback address and returns a stable code", async () =>
   }
 });
 
-test("serve closes an owned store when listen fails", async () => {
+test("serve closes an owned store when listen fails and reports the port as unavailable", async () => {
   const blocker = createServer();
   await new Promise((resolve, reject) => {
     blocker.once("error", reject);
@@ -789,11 +797,46 @@ test("serve closes an owned store when listen fails", async () => {
   });
   const address = blocker.address();
   assert.equal(typeof address, "object");
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-busy-"));
+  const file = join(directory, "s.jsonl");
   try {
-    const result = await invoke(["serve", "--port", String(address.port)], "");
-    assert.equal(result.code, CLI_EXIT.INTERNAL);
+    const result = await invoke(["serve", "--store", file, "--port", String(address.port)], "");
+    assert.equal(result.code, CLI_EXIT.UNAVAILABLE);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_SERVE_UNAVAILABLE");
+    assert.equal(error.message, "The requested loopback address or port is unavailable.");
+    // The owned store was closed, so its writer lock is gone.
+    assert.equal(existsSync(`${file}.lock`), false);
+    const reopened = await JsonlStore.open(file);
+    await reopened.close();
   } finally {
     await new Promise((resolve) => blocker.close(resolve));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("serve rejects a non-loopback or non-literal host as usage before opening a store", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-host-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    for (const host of ["0.0.0.0", "localhost", "192.0.2.1", "::"]) {
+      let started = false;
+      const result = await invoke(["serve", "--store", file, "--host", host], "", {
+        onServer: () => { started = true; },
+      });
+      assert.equal(result.code, CLI_EXIT.USAGE, host);
+      const error = JSON.parse(result.stdout).error;
+      assert.equal(error.code, "ALB_CLI_USAGE", host);
+      assert.match(error.message, /loopback IP literal such as 127\.0\.0\.1 or ::1/u);
+      assert.equal(started, false, host);
+      assert.equal(existsSync(file), false, host);
+      assert.equal(existsSync(`${file}.lock`), false, host);
+    }
+    const badPort = await invoke(["serve", "--store", file, "--port", "70000"], "");
+    assert.equal(badPort.code, CLI_EXIT.USAGE);
+    assert.equal(existsSync(`${file}.lock`), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

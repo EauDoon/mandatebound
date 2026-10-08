@@ -82,6 +82,16 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `serve --host` is validated before the store is opened: anything but a
+  loopback IP literal such as `127.0.0.1` or `::1` exits 2 with a usage message
+  that names the accepted form, instead of exit 3 "Protocol artifact is invalid"
+  after the store was already locked. An invalid `--port` is also rejected
+  before the store opens.
+- A busy, unbindable or forbidden `serve` port now exits 6 with
+  `ALB_SERVE_UNAVAILABLE` instead of exit 70 (internal error).
+- An unknown `simulate` scenario still exits 3 with `ALB_SCENARIO_UNKNOWN`, but
+  the message now lists every valid scenario instead of "Artifact validation
+  failed."
 - `serve` now closes its server and store on SIGINT or SIGTERM, removing the
   JSONL writer lock and exiting 130 or 143. Ctrl+C previously left a stale
   `.lock` file that blocked every later writer.
