@@ -97,6 +97,10 @@ const required = new Set([
   ...entryPoints,
 ]);
 const rejected = [];
+// Content scan: a PEM private-key block must never ship, whatever the file is
+// called. Only the path is reported, never the matching content.
+const privateKeyPattern = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/u;
+const privateKeyFiles = [];
 
 for (const entry of packageReport.files) {
   const path = entry.path;
@@ -110,7 +114,21 @@ for (const entry of packageReport.files) {
   required.delete(path);
   if (/\.(?:env|key|log|map|p8|pem|tgz)$/iu.test(path) || path.includes("..")) {
     rejected.push(path);
+    continue;
   }
+  let content;
+  try {
+    content = readFileSync(join(repositoryRoot, path), "latin1");
+  } catch {
+    rejected.push(path);
+    continue;
+  }
+  if (privateKeyPattern.test(content)) privateKeyFiles.push(path);
+}
+
+if (privateKeyFiles.length > 0) {
+  process.stderr.write(`package check failed: private key material in packed files: ${privateKeyFiles.join(", ")}\n`);
+  process.exit(1);
 }
 
 if (rejected.length > 0 || required.size > 0) {

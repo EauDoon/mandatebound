@@ -124,6 +124,46 @@ test("license check follows a symlinked installed package", (t) => {
   }
 });
 
+test("package check rejects packed content holding a PEM private key and reports only the path", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-package-secret-"));
+  try {
+    mkdirSync(join(directory, "scripts"));
+    for (const name of ["check-package.mjs", "check-package-consumer.mjs"]) {
+      copyFileSync(fileURLToPath(new URL(`../scripts/${name}`, import.meta.url)), join(directory, "scripts", name));
+    }
+    writeFileSync(join(directory, "package.json"), JSON.stringify({
+      name: "secret-scan-fixture",
+      version: "1.0.0",
+      license: "Apache-2.0",
+      files: ["docs", "DISCLAIMER.md", "NOTICE", "README.md", "SECURITY.md", "LICENSE"],
+    }));
+    for (const name of ["DISCLAIMER.md", "NOTICE", "README.md", "SECURITY.md", "LICENSE"]) {
+      writeFileSync(join(directory, name), "synthetic\n");
+    }
+    mkdirSync(join(directory, "docs", "examples"), { recursive: true });
+    writeFileSync(join(directory, "docs", "ADOPTER_WORKFLOW.md"), "synthetic\n");
+    writeFileSync(join(directory, "docs", "examples", "adopter-workflow.mjs"), "export {};\n");
+    // Assembled at runtime so this source file never holds a key block itself.
+    const body = "SYNTHETICKEYBODYCANARY";
+    const label = ["PRIVATE", "KEY"].join(" ");
+    writeFileSync(
+      join(directory, "docs", "notes.md"),
+      `Notes\n\n-----BEGIN EC ${label}-----\n${body}\n-----END EC ${label}-----\n`,
+    );
+    const result = spawnSync(process.execPath, [join(directory, "scripts", "check-package.mjs")], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+      env: { ...process.env, npm_config_cache: join(directory, "npm-cache") },
+    });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /package check failed: private key material in packed files: docs\/notes\.md/u);
+    assert.equal(result.stderr.includes(body), false);
+    assert.equal(result.stdout.includes(body), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("package check resolves the repository independently of caller cwd", () => {
   const directory = mkdtempSync(join(tmpdir(), "mandatebound-package-check-"));
   try {

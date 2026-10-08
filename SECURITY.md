@@ -55,11 +55,11 @@ The repository contains no tracked private keys. Simulator and test keys are gen
 
 ## Dependency and release controls
 
-- Dependencies are exact-version locked.
-- Dependency lifecycle scripts are disabled in the documented install, packaging, and CI commands.
-- `npm run verify` must pass before release.
-- The packed package is checked against an explicit content allowlist.
-- The release workflow produces an SPDX SBOM and a GitHub artifact attestation for the package tarball.
-- Public release bytes receive a separate exact Git-tree privacy and secret scan.
+These controls run in CI and in `.github/workflows/release.yml`:
+
+- Dependencies are exact-version locked, and `npm ci --ignore-scripts` installs them without lifecycle scripts in every documented install, packaging, CI and release command.
+- `npm run verify` must pass on the tagged source before anything is packed. It runs the version agreement check, lint, the license and advisory gates (both fail closed without a dependency tree), type checking, the coverage-gated test suite and the package check.
+- The package check rejects any packed path outside an explicit allowlist, any key, environment, log, source-map or archive file, and any packed file whose content holds a PEM private-key block. It reports only the offending path.
+- Verification and packing run in a job with read-only repository access and no OIDC or attestation scopes. A separate job, which installs nothing and runs no repository code, re-checks the files against their SHA-256 checksums, attests the tarball's provenance and its SPDX SBOM, and uploads them to the GitHub Release.
 
 See [Threat model](docs/THREAT_MODEL.md) for attack classes and fail-closed invariants.

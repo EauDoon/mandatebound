@@ -158,6 +158,15 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Security
 
+- The release workflow verifies and packs in a read-only job and attests and
+  uploads in a separate job that installs nothing and runs no repository code,
+  so OIDC and attestation write scopes no longer reach npm, TypeScript or the
+  tests. It checks every version surface against the release tag, re-checks
+  the files against SHA-256 checksums before attesting them, and no longer
+  configures an npm registry for a publish that never happens. The package
+  check now rejects packed files that contain a PEM private-key block.
+  `SECURITY.md` lists the release controls that actually run, replacing a
+  claimed Git-tree secret scan that no automation performed.
 - Raise the `fast-uri` override and lock to 3.1.8 or later for
   [GHSA-hrr3-gc8f-f4qj](https://github.com/fastify/fast-uri/security/advisories/GHSA-hrr3-gc8f-f4qj),
   and add the published affected window to the existing dependency checker.
