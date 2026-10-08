@@ -10,6 +10,7 @@ import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createDefaultPlatformEngine } from "../dist/api.js";
+import { appealEventDigest } from "../dist/appeals.js";
 import { CLI_EXIT, closeServerOnSignals, runCli, SIGNAL_EXIT } from "../dist/cli.js";
 import { sha256Digest } from "../dist/canonical.js";
 import { buildScenario } from "../dist/simulator.js";
@@ -239,6 +240,87 @@ test("appeal and replay commands preserve append order", async () => {
   assert.equal(rejected.code, CLI_EXIT.INVALID);
   assert.equal(JSON.parse(rejected.stdout).error.code, "ALB_CLI_INPUT");
   await store.close();
+});
+
+function appealHistory() {
+  const filed = {
+    schemaVersion: "1.0.0",
+    artifactId: "event-cli-1",
+    appealId: "appeal-cli-1",
+    decisionId: decision().artifactId,
+    sequence: 1,
+    eventType: "filed",
+    actor: { id: "principal-synthetic", role: "principal" },
+    occurredAt: "2026-07-23T00:00:00.000Z",
+    reasonCodes: ["review_requested"],
+  };
+  const started = {
+    ...filed,
+    artifactId: "event-cli-2",
+    sequence: 2,
+    previousEventDigest: appealEventDigest(filed),
+    eventType: "review_started",
+    actor: { id: "reviewer-synthetic", role: "reviewer" },
+    reasonCodes: ["review_started"],
+  };
+  return [filed, started];
+}
+
+test("replay validates its envelope and checkpoint without reflecting bad values", async () => {
+  const events = appealHistory();
+  const head = { sequence: 2, headDigest: appealEventDigest(events[1]) };
+
+  const verified = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint: head }));
+  assert.equal(verified.code, CLI_EXIT.SUCCESS, verified.stdout);
+  assert.equal(JSON.parse(verified.stdout).result.completeness.state, "verified");
+
+  const wrong = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint: { sequence: 1, headDigest: DIGEST } }));
+  assert.equal(wrong.code, CLI_EXIT.CONFLICT);
+  assert.equal(JSON.parse(wrong.stdout).result.completeness.state, "mismatch");
+
+  const badCheckpoints = [
+    "CANARY_STRING_CHECKPOINT",
+    424242,
+    { sequence: "CANARY_SEQUENCE", headDigest: 5 },
+    ["CANARY_ARRAY_ITEM"],
+    { ...head, note: "CANARY_EXTRA_KEY" },
+    { sequence: 0, headDigest: head.headDigest },
+    { sequence: 2, headDigest: "sha256:CANARY" },
+    null,
+  ];
+  for (const checkpoint of badCheckpoints) {
+    const result = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint }));
+    assert.equal(result.code, CLI_EXIT.INVALID, JSON.stringify(checkpoint));
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_CLI_INPUT");
+    assert.equal(error.message, "Replay checkpoint is invalid.");
+    for (const text of [result.stdout, result.stderr]) {
+      assert.doesNotMatch(text, /CANARY|424242/u);
+    }
+  }
+
+  for (const envelope of [{ events, extra: 1 }, { checkpoint: head }, { events: {} }, "events", null]) {
+    const result = await invoke(["replay", "-"], JSON.stringify(envelope));
+    assert.equal(result.code, CLI_EXIT.INVALID, JSON.stringify(envelope));
+    assert.equal(JSON.parse(result.stdout).error.message, "Replay input is invalid.");
+  }
+});
+
+test("appeal rejects keys beside an {event, decision} envelope", async () => {
+  const [filed] = appealHistory();
+  const store = new MemoryStore();
+  try {
+    const misspelled = await invoke(["appeal", "-"], JSON.stringify({ event: filed, decsion: decision() }), { store });
+    assert.equal(misspelled.code, CLI_EXIT.INVALID);
+    assert.equal(JSON.parse(misspelled.stdout).error.message, "Appeal input is invalid.");
+    assert.equal(await store.getAppeal(filed.appealId), undefined, "nothing may be appended");
+
+    const seeded = await invoke(["appeal", "-"], JSON.stringify({ event: filed, decision: decision() }), { store });
+    assert.equal(seeded.code, CLI_EXIT.SUCCESS, seeded.stdout);
+    assert.equal(JSON.parse(seeded.stdout).result.status, "open");
+  } finally {
+    await store.close();
+  }
 });
 
 test("usage and input failures are privacy-safe", async () => {

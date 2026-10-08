@@ -12,6 +12,8 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Added
 
+- `isAppealCheckpoint` type guard for the exact `{sequence, headDigest}`
+  appeal checkpoint shape, exported from the package root.
 - `scripts/version.mjs` makes `package.json` the single source of the release
   version: `check` fails on drift in the lockfile, `src/version.ts`, the
   conformance declaration, OpenAPI `info.version`, the CHANGELOG and the release
@@ -82,6 +84,13 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- CLI `replay` accepts only a bare events array or exactly
+  `{events, checkpoint?}`, and rejects a checkpoint that is not
+  `{sequence, headDigest}` with exit 3 and a fixed message. A malformed
+  checkpoint was previously reported as a history mismatch (exit 5) and echoed
+  back verbatim. CLI `appeal` rejects any key beside `{event, decision?}`, so a
+  misspelled `decision` is no longer silently dropped. The library's
+  `replayAppealEvents` semantics are unchanged.
 - `serve --host` is validated before the store is opened: anything but a
   loopback IP literal such as `127.0.0.1` or `::1` exits 2 with a usage message
   that names the accepted form, instead of exit 3 "Protocol artifact is invalid"

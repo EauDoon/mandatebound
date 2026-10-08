@@ -6,8 +6,7 @@ import { lstat, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
 import type { Readable, Writable } from "node:stream";
-import type { AppealCheckpoint } from "./appeals.js";
-import { replayAppealEvents } from "./appeals.js";
+import { isAppealCheckpoint, replayAppealEvents } from "./appeals.js";
 import {
   createApiServer,
   createDefaultPlatformEngine,
@@ -666,8 +665,18 @@ export async function runCli(
         assertAllowedOptions(args, ["input", "store"]);
         const input = await readInput(requireSingleInput(args), stdin);
         const record = asObject(input);
-        const event = (record["event"] ?? input) as AppealEvent;
-        const seedDecision = record["event"] === undefined ? undefined : record["decision"] as LiabilityDecision | undefined;
+        let event = input as AppealEvent;
+        let seedDecision: LiabilityDecision | undefined;
+        // An `event` key selects the {event, decision?} envelope, and then
+        // nothing else may sit beside it: a misspelled `decision` was silently
+        // dropped. Any other document is the event itself.
+        if (Object.hasOwn(record, "event")) {
+          if (!hasExactKeys(record, ["event"], ["decision"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Appeal input is invalid.");
+          }
+          event = record["event"] as AppealEvent;
+          seedDecision = record["decision"] as LiabilityDecision | undefined;
+        }
         const resolved = await storeFor(args, io.store);
         if (resolved.owned) ownedStore = resolved.store;
         if (seedDecision !== undefined) await resolved.store.putDecision(seedDecision);
@@ -679,9 +688,17 @@ export async function runCli(
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const input = await readInput(requireSingleInput(args), stdin);
-        const record = Array.isArray(input) ? { events: input } : asObject(input);
+        // Either a bare events array or exactly {events, checkpoint?}.
+        const record: Record<string, unknown> = Array.isArray(input) ? { events: input }
+          : typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
         const events = record["events"];
-        if (!Array.isArray(events)) throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay input is invalid.");
+        if (!Array.isArray(events) || !hasExactKeys(record, ["events"], ["checkpoint"])) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay input is invalid.");
+        }
+        const checkpoint = record["checkpoint"];
+        if (checkpoint !== undefined && !isAppealCheckpoint(checkpoint)) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay checkpoint is invalid.");
+        }
         const validatedEvents = events.map((event) => {
           const validation = validateArtifact<AppealEvent>("appeal_event", event);
           if (!validation.ok) {
@@ -689,7 +706,6 @@ export async function runCli(
           }
           return validation.value;
         });
-        const checkpoint = record["checkpoint"] as AppealCheckpoint | undefined;
         const replay = replayAppealEvents(validatedEvents, checkpoint);
         writeJson(stdout, { ok: replay.issues.length === 0, result: replay });
         return replay.issues.length === 0 ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;

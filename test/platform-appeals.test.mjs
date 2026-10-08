@@ -4,6 +4,7 @@ import {
   AppealError,
   appealEventDigest,
   assertAppealAppendable,
+  isAppealCheckpoint,
   replayAppealEvents,
 } from "../dist/appeals.js";
 
@@ -62,6 +63,35 @@ test("empty histories and completeness checkpoints are explicit", () => {
   assert.equal(mismatch.status, "conflicted");
   assert.equal(mismatch.completeness.state, "mismatch");
   assert(mismatch.issues.some((issue) => issue.code === "ALB_APPEAL_CHECKPOINT"));
+});
+
+test("isAppealCheckpoint accepts only the exact checkpoint shape", () => {
+  assert.equal(isAppealCheckpoint({ sequence: 1, headDigest: DIGEST }), true);
+  assert.equal(isAppealCheckpoint({ headDigest: DIGEST, sequence: Number.MAX_SAFE_INTEGER }), true);
+  assert.equal(isAppealCheckpoint(Object.assign(Object.create(null), { sequence: 3, headDigest: DIGEST })), true);
+  for (const candidate of [
+    undefined,
+    null,
+    "nonsense",
+    42,
+    ["a"],
+    [1, DIGEST],
+    {},
+    { sequence: 1 },
+    { headDigest: DIGEST },
+    { sequence: "1", headDigest: DIGEST },
+    { sequence: "x", headDigest: 5 },
+    { sequence: 0, headDigest: DIGEST },
+    { sequence: -1, headDigest: DIGEST },
+    { sequence: 1.5, headDigest: DIGEST },
+    { sequence: Number.MAX_SAFE_INTEGER + 1, headDigest: DIGEST },
+    { sequence: 1, headDigest: "sha256:abc" },
+    { sequence: 1, headDigest: `sha256:${"A".repeat(64)}` },
+    { sequence: 1, headDigest: DIGEST, extra: true },
+    new (class Checkpoint { constructor() { this.sequence = 1; this.headDigest = DIGEST; } })(),
+  ]) {
+    assert.equal(isAppealCheckpoint(candidate), false, JSON.stringify(candidate) ?? String(candidate));
+  }
 });
 
 test("terminal statuses replay without mutating the original decision lineage", () => {

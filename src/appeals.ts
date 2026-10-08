@@ -1,5 +1,5 @@
 import type { AppealEvent, AppealEventType, Sha256Digest } from "./domain.js";
-import { canonicalize, sha256Digest } from "./canonical.js";
+import { canonicalize, isSha256Digest, sha256Digest } from "./canonical.js";
 
 export type AppealStatus = "open" | "upheld" | "reversed" | "withdrawn" | "conflicted";
 export type CompletenessState = "unproven" | "verified" | "mismatch";
@@ -38,6 +38,27 @@ export class AppealError extends Error {
 }
 
 const TERMINAL_EVENTS = new Set<AppealEventType>(["upheld", "reversed", "withdrawn"]);
+
+/**
+ * Exact shape of a caller-retained appeal checkpoint: a plain object with only
+ * `sequence`, a safe integer of at least 1, and `headDigest`, a sha256 digest.
+ * replayAppealEvents keeps its own semantics; a boundary that accepts untrusted
+ * JSON checks this first, so a malformed value is rejected as invalid input
+ * instead of being reported, and echoed back, as a history mismatch.
+ */
+export function isAppealCheckpoint(value: unknown): value is AppealCheckpoint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const keys = Object.keys(value);
+  if (keys.length !== 2 || !keys.includes("sequence") || !keys.includes("headDigest")) return false;
+  const { sequence, headDigest } = value as Record<string, unknown>;
+  return typeof sequence === "number"
+    && Number.isSafeInteger(sequence)
+    && sequence >= 1
+    && typeof headDigest === "string"
+    && isSha256Digest(headDigest);
+}
 
 export function appealEventDigest(event: AppealEvent): Sha256Digest {
   return sha256Digest(canonicalize(event));
