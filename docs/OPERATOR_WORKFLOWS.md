@@ -38,7 +38,7 @@ malformed supplied raw references fail instead of selecting one copy.
 
 ## Assess a queue
 
-`operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases and share the CLI's 4 MiB document cap. Split larger queues into smaller files.
+`operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases in one document of at most 17 MiB, depth 48 and 250,000 JSON nodes, the limits every operator action reads with (see the [CLI reference](CLI.md#input-limits)). Split larger queues into smaller files.
 
 ```bash
 mandatebound operator batch --input queue.json
@@ -131,8 +131,8 @@ the store file itself needs no repair.
 `operator receipt` accepts a case invocation, reruns verification and returns a
 `MandateBoundAssessmentReceipt/v1` metadata record. It binds canonical CasePack
 input, exact raw-evidence digests, supplied anchor context, derived report and
-release/engine/protocol versions. Canonical input is bounded to 4 MiB with the
-existing canonical depth/node limits. Object-key order and raw-reference order
+release/engine/protocol versions. Canonical CasePack input is bounded to 16 MiB,
+depth 48 and 250,000 nodes, the CasePack canonical limits. Object-key order and raw-reference order
 do not change the receipt; raw-byte or assessment-time changes do.
 
 Receipts can preserve failed assessments: `valid: false` stays false and the CLI
@@ -173,7 +173,8 @@ Additional root exports are `inventoryCaseEvidence`, `createCaseReviewQueue`,
 `compareCaseFindings`, `compareCaseAnchorContext`, `createAssessmentReceipt` and
 `verifyAssessmentReceipt`. The new raw-reference metadata views accept at most
 1,024 unique ASCII reference IDs (1 to 128 characters), 16 MiB per byte array and
-64 MiB total in memory; the JSON CLI retains its smaller 4 MiB input cap.
+64 MiB total in memory. Through the JSON CLI, each `bytesBase64` value is at
+most 8 MiB of base64 text and the whole document at most 17 MiB.
 
 Run the self-cleaning persistence demonstration from a source checkout:
 

@@ -57,7 +57,7 @@ import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, tr
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
 import { SIMULATION_SCENARIOS, simulateScenario } from "./simulator.js";
-import { parseStrictJson, StrictJsonError } from "./strict-json.js";
+import { DEFAULT_STRICT_JSON_LIMITS, parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
 import { AP2_DISPUTE_FORMAT_RELEASE, ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
@@ -148,6 +148,25 @@ const MAX_CASEPACK_CLI_INPUT_BYTES = 17 * 1024 * 1024;
 const CASEPACK_CLI_JSON_LIMITS = Object.freeze({
   maxDepth: 48,
   maxNodes: 250_000,
+});
+/**
+ * The JSON document budgets each command family reads with, as documented in
+ * docs/CLI.md. A document's string values share its byte cap; depth and node
+ * limits not overridden here are the strict-JSON defaults. Exported so the
+ * documentation drift test reads the real values.
+ */
+export const CLI_INPUT_LIMITS = Object.freeze({
+  default: Object.freeze({
+    maxBytes: MAX_CLI_INPUT_BYTES,
+    maxDepth: DEFAULT_STRICT_JSON_LIMITS.maxDepth,
+    maxNodes: DEFAULT_STRICT_JSON_LIMITS.maxNodes,
+  }),
+  casepack: Object.freeze({ maxBytes: MAX_CASEPACK_CLI_INPUT_BYTES, ...CASEPACK_CLI_JSON_LIMITS }),
+  ap2Dispute: Object.freeze({
+    maxBytes: MAX_AP2_CLI_INPUT_BYTES,
+    maxDepth: DEFAULT_STRICT_JSON_LIMITS.maxDepth,
+    maxNodes: DEFAULT_STRICT_JSON_LIMITS.maxNodes,
+  }),
 });
 const SIMULATE_SCENARIOS: readonly string[] = Object.freeze(["all", ...SIMULATION_SCENARIOS]);
 const SERVE_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EADDRNOTAVAIL", "EACCES"]);

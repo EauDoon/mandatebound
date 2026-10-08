@@ -12,6 +12,10 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Added
 
+- `docs/CLI.md`, a CLI reference covering every command's input shape, output
+  and exit codes, the input limits, the `review` input and verdicts, and the
+  `serve` loopback, Host and Origin rules, store lock and signal behavior. A
+  test fails when a command, action, scenario, exit code or limit drifts from it.
 - CLI `--help` now lists each subcommand family's `actions` (`casepack`,
   `policy`, `ap2-dispute` and the 23 `operator` actions), the `simulate`
   `scenarios`, and `exitCodes` with a one-line meaning for each code. The
@@ -98,6 +102,11 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- Documentation no longer claims a 4 MiB cap for operator batches, the CLI
+  overall, or operator receipt canonical input: operator actions, `casepack`
+  and `case-report` read up to 17 MiB (depth 48, 250,000 nodes) and receipt
+  canonical input is bounded to 16 MiB. The repository issue chooser now offers
+  only the forms that carry the synthetic-data warning.
 - The metadata-only AP2 evidence timeline HTML now uses column header scopes, a
   caption and a keyboard-focusable scroll region, and its Content Security
   Policy adds `base-uri 'none'` and `form-action 'none'`, matching the case
