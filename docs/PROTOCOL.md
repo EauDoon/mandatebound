@@ -22,8 +22,10 @@ bytes. It never retries the escaped form under the same `RFC8785` proof header.
 
 Commit `c60c75c66cef6c7b59cf5b1b51df5c4dd489b8bd` introduced the regression.
 Artifacts produced by that commit and its descendants before this correction
-can contain digests and signatures over escaped separator bytes. Release
-`1.2.0` and engine `1.0.0` labels alone cannot distinguish those builds. Preserve
+can contain digests and signatures over escaped separator bytes. Those builds,
+like the released 1.2.0 and the corrected builds made before 2.0.0, report
+release `1.2.0` and engine `1.0.0`, so those labels alone cannot distinguish
+them. Release `2.0.0` and later always include the correction. Preserve
 the exact producer commit and original artifact bytes for historical replay;
 an engine label alone is insufficient provenance for affected artifacts.
 

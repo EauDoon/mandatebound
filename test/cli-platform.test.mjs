@@ -424,7 +424,8 @@ test("help and version are stable JSON and use the public brand", async () => {
   const version = await invoke(["--version"], "");
   assert.equal(version.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(version.stdout).result.version, "1.0.0");
-  assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.2.0");
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(JSON.parse(version.stdout).result.releaseVersion, manifest.version);
   assert.equal(JSON.parse(version.stdout).result.engineVersion, "1.0.0");
   // Each version layer is named explicitly; `version` stays the protocol alias.
   assert.equal(JSON.parse(version.stdout).result.protocolVersion, "1.0.0");

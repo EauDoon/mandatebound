@@ -55,7 +55,7 @@ Within its synthetic and reference boundary, MandateBound demonstrates that a re
 - replay the same accepted bytes under explicit policy, trust, schema, rulebook, engine, and time pins;
 - fail closed when evidence is missing, invalid, stale, tampered, contradictory, or multi-causal.
 
-The v1.2 implementation supports one exact target: UCP 2026-04-08 REST with the UCP AP2 Mandates Extension and AP2 v0.2.0. It also provides an AP2 dispute Evidence Pack and resolver, caller-supplied retrieval adapters, metadata-only timeline rendering, native v1 policy tools, and local operator review workflows. These are bounded implementation claims, not protocol certification or production fitness.
+The current release supports one exact evidence-import target: UCP 2026-04-08 REST with the UCP AP2 Mandates Extension and AP2 v0.2.0. It also provides an AP2 dispute Evidence Pack and resolver, caller-supplied retrieval adapters, metadata-only timeline rendering, native v1 policy tools, and local operator review workflows. These are bounded implementation claims, not protocol certification or production fitness.
 
 ## How it works
 
@@ -121,7 +121,7 @@ Build first, then use the local `dist/cli.js` binary or the installed `mandatebo
 | CasePack | `casepack build`, `casepack verify`, `casepack unpack`, `casepack diff`, `case-report` | [`docs/V1_1.md`](docs/V1_1.md) |
 | Policy tools | `policy validate`, `policy test`, `policy diff` | [`BRIEF.md`](BRIEF.md) |
 | AP2 dispute evidence | `ap2-dispute resolve`, `ap2-dispute pack`, `ap2-dispute verify`, `ap2-dispute render` | [`docs/V1_2.md`](docs/V1_2.md) |
-| Capability statement | `conformance` | [`conformance/v1.2/README.md`](conformance/v1.2/README.md) |
+| Capability statement | `conformance` | [`conformance/v2.0/README.md`](conformance/v2.0/README.md) |
 | Help and version | `help`, `version` (also `--help`, `--version`) | [`docs/CLI.md`](docs/CLI.md#conformance-help-and-version) |
 
 JSON commands accept one strict document from `--input PATH`, a positional path, or stdin. The CLI returns `{ok, result}` envelopes and bounded error codes. `casepack verify`, `case-report`, and the operator workflows require caller-owned anchors when the case contract declares them. The [CLI reference](docs/CLI.md) lists every command's input shape, input limits, output, and exit codes; the linked guides add worked workflows.

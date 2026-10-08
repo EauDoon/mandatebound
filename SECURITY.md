@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest `1.2.x` release. Native v1 wire compatibility remains covered by frozen-schema and golden-derivation tests.
+Security fixes are provided for the latest `2.0.x` release; `1.2.x` receives no further fixes. Native v1 wire compatibility remains covered by frozen-schema and golden-derivation tests.
 
 ## Reporting a vulnerability
 

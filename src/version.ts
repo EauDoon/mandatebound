@@ -1,6 +1,6 @@
 export const PROTOCOL_VERSION = "1.0.0" as const;
 export const ENGINE_VERSION = "1.0.0" as const;
-export const RELEASE_VERSION = "1.2.0" as const;
+export const RELEASE_VERSION = "2.0.0" as const;
 /**
  * The release whose schemas/v1.2 define the AP2 dispute resolution, Evidence
  * Pack and Pack verification formats. Those artifacts carry this value as

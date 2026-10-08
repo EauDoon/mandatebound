@@ -5,9 +5,18 @@ import { compareCasePackStatus } from "../dist/casepack-tools.js";
 import { getConformanceStatement } from "../dist/conformance.js";
 import { RELEASE_VERSION } from "../dist/version.js";
 
+// The release under test comes from package.json, and its declaration lives in
+// the conformance directory for that major.minor; nothing here names a release.
+const MANIFEST_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const [RELEASE_MAJOR, RELEASE_MINOR] = MANIFEST_VERSION.split(".");
+const DECLARATION_URL = new URL(
+  `../conformance/v${RELEASE_MAJOR}.${RELEASE_MINOR}/capabilities.json`,
+  import.meta.url,
+);
+
 test("conformance statement names the exact evidence-import profile and its limits", () => {
   const statement = getConformanceStatement();
-  assert.equal(statement.release, "1.2.0");
+  assert.equal(statement.release, MANIFEST_VERSION);
   assert.equal(statement.evidenceProfile.ucpVersion, "2026-04-08");
   assert.equal(statement.evidenceProfile.ucpTransport, "REST");
   assert.equal(statement.evidenceProfile.ap2Version, "0.2.0");
@@ -45,9 +54,9 @@ test("conformance statement is immutable to callers", () => {
   }, TypeError);
 });
 
-test("published v1.2 capability declaration matches the runtime statement", () => {
+test("published capability declaration for this release matches the runtime statement", () => {
   const published = JSON.parse(readFileSync(
-    new URL("../conformance/v1.2/capabilities.json", import.meta.url),
+    DECLARATION_URL,
     "utf8",
   ));
   const runtime = getConformanceStatement();
@@ -72,7 +81,7 @@ test("published v1.2 capability declaration matches the runtime statement", () =
 
 test("published fixture list is exactly what npm run conformance executes", () => {
   const published = JSON.parse(readFileSync(
-    new URL("../conformance/v1.2/capabilities.json", import.meta.url),
+    DECLARATION_URL,
     "utf8",
   ));
   const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -126,7 +135,7 @@ test("release version cannot drift from the manifest, the changelog, or the publ
   const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
   const published = JSON.parse(readFileSync(
-    new URL("../conformance/v1.2/capabilities.json", import.meta.url),
+    DECLARATION_URL,
     "utf8",
   ));
 

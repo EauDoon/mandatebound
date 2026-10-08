@@ -10,6 +10,42 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-09
+
+### Upgrading from 1.2.0
+
+2.0.0 is a major release because the package API and CLI changed in ways a 1.2.0
+caller can notice. Protocol `1.0.0`, engine `1.0.0`, native artifact bytes,
+schemas and decision pins are unchanged, and Node.js 22.12 or newer is still
+required.
+
+- `CreateApiServerOptions.allowRemote` and `serve --allow-remote` are removed.
+  The server binds only to loopback; put a reverse proxy you operate in front of
+  it for remote access.
+- CLI `decide` and `preview` reject an incomplete evaluation case with exit 3
+  instead of exit 0 with a fabricated `malformed-case` decision. Send the
+  complete case the API's `POST /v1/evaluations` accepts.
+- A held store lock exits 6 instead of 5, a busy or unbindable `serve` port
+  exits 6 instead of 70, and an invalid `serve --host` exits 2 instead of 3.
+- `operator compare` exits 3 instead of 0 when the current assessment is
+  invalid without a regression. CLI `replay` rejects a malformed checkpoint or
+  extra envelope keys with exit 3 instead of reporting a mismatch (exit 5), and
+  `appeal` rejects keys beside `{event, decision?}`.
+- Public `EvaluationAnchors` uses the nested `pins` shape, and strict JSON, API
+  and JSONL store limit overrides reject unknown limit names.
+- Operator assessment receipts embed the package release, so a receipt made by
+  a 1.2.0 or earlier build reports a `releaseVersion` difference (exit 5 from
+  `receipt-verify`) under 2.0.0. Review and re-issue it; this is not evidence of
+  tampering.
+- AP2 resolutions, Evidence Packs and Pack verification reports keep
+  `releaseVersion` `1.2.0`, the frozen format release, and Packs retained from
+  1.2.0 verify unchanged.
+- Artifacts from the RFC 8785 separator regression window carry 1.2.0 labels,
+  as does every other build before this release; 2.0.0 and later always include
+  the correction. See
+  [Protocol compatibility](docs/PROTOCOL.md#separator-correction-and-historical-compatibility).
+- OpenAPI `info.version` now tracks the package release and reads `2.0.0`.
+
 ### Added
 
 - `docs/CLI.md`, a CLI reference covering every command's input shape, output
@@ -250,7 +286,8 @@ in [Protocol v1](docs/PROTOCOL.md).
 - Added CLI, localhost API, simulator, OpenAPI contract, and synthetic test suite.
 - Added security, privacy, interoperability, governance, and legal-boundary documentation.
 
-[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/EauDoon/mandatebound/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/EauDoon/mandatebound/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/EauDoon/mandatebound/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/EauDoon/mandatebound/tree/v1.0.0

@@ -3,7 +3,7 @@
 These additive SDK and `operator` commands reverify the supplied CasePack with its
 caller-owned anchors. They preserve failed assessments, expose metadata only, and
 never retrieve evidence, write a store, establish source truth, or decide legal
-effect. Version 1.2.0, artifact bytes and policy semantics remain unchanged.
+effect. Native artifact bytes and policy semantics are unchanged from 1.2.0.
 
 ## Collection plan
 

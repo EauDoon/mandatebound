@@ -1,6 +1,6 @@
 {
   "name": "@oonyl/mandatebound",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "Evidence-to-policy tooling for verifiable AI agent transactions and non-binding loss allocation.",
   "type": "module",
   "main": "./dist/index.js",
