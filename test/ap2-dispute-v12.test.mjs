@@ -381,6 +381,16 @@ test("AP2 Evidence Pack runs pack, independent verify, and metadata-only render"
   assert.match(html, /not authenticated facts/);
   // The label names the frozen format, not a package release.
   assert.match(html, /Pack format 1\.2\.0/);
+  // Same CSP locks and table semantics as the case report.
+  assert.match(
+    html,
+    /content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"/u,
+  );
+  assert.equal(html.match(/<th scope="col">/gu)?.length, 6);
+  assert.equal(html.includes("<th>"), false);
+  assert.match(html, /<caption>Metadata only; raw artifacts are omitted<\/caption>/u);
+  assert.match(html, /<div class="table-scroll" role="region" aria-label="Evidence timeline" tabindex="0"><table>/u);
+  assert.equal(html.match(/<tr>/gu)?.length, 1 + timeline.length);
   assert.equal(html.includes(fixture.checkoutJwt), false);
   assert.equal(html.includes(fixture.checkoutMandate), false);
   assert.equal(html.includes(pack.revocations[0].snapshotBase64), false);

@@ -93,6 +93,10 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- The metadata-only AP2 evidence timeline HTML now uses column header scopes, a
+  caption and a keyboard-focusable scroll region, and its Content Security
+  Policy adds `base-uri 'none'` and `form-action 'none'`, matching the case
+  report. Escaping and raw-token omission are unchanged.
 - `npm run conformance` and the published `fixtureTests` now include the
   external evidence review fixtures behind the supported
   `external_evidence_review_v1` capability. The published declaration also lists
