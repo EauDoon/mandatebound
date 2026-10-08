@@ -43,6 +43,53 @@ test("license check inspects nested installed dependencies", () => {
   }
 });
 
+function fixtureLicenseChecker(directory) {
+  mkdirSync(join(directory, "scripts"));
+  const fixtureChecker = join(directory, "scripts", "check-licenses.mjs");
+  copyFileSync(checker, fixtureChecker);
+  return fixtureChecker;
+}
+
+test("license check fails closed when node_modules is missing", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-missing-"));
+  try {
+    const result = spawnSync(process.execPath, [fixtureLicenseChecker(directory)], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /license check failed: node_modules is missing; run npm ci --ignore-scripts/u);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("license check fails closed when node_modules holds no package manifests", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-empty-"));
+  try {
+    const fixtureChecker = fixtureLicenseChecker(directory);
+    mkdirSync(join(directory, "node_modules", ".bin"), { recursive: true });
+    mkdirSync(join(directory, "node_modules", "not-a-package"));
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /license check failed: no installed package manifests were found/u);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("license check still passes a tree of approved licenses", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-approved-"));
+  try {
+    const fixtureChecker = fixtureLicenseChecker(directory);
+    writeManifest(join(directory, "node_modules", "approved"), { name: "approved", version: "1.0.0", license: "MIT" });
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "license check: 1 installed packages use approved licenses\n");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 // Windows only permits symlink creation for elevated or Developer Mode
 // processes. Where the platform refuses, skip rather than report a false
 // failure; the Linux CI runners still exercise these paths.

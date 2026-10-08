@@ -84,6 +84,9 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- The license check now fails closed when `node_modules` is missing or holds no
+  package manifests, matching the dependency advisory check. It previously
+  reported that 0 installed packages used approved licenses and exited 0.
 - CLI `replay` accepts only a bare events array or exactly
   `{events, checkpoint?}`, and rejects a checkpoint that is not
   `{sequence, headDigest}` with exit 3 and a fixed message. A malformed

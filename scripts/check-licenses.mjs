@@ -62,7 +62,19 @@ function scanNodeModules(directory, seen = new Set()) {
   }
 }
 
+// An absent or empty tree would otherwise "approve" zero packages and pass.
+// Fail closed, like scripts/check-dependencies.mjs.
+if (!existsSync(root)) {
+  process.stderr.write("license check failed: node_modules is missing; run npm ci --ignore-scripts\n");
+  process.exit(1);
+}
+
 scanNodeModules(root);
+
+if (packages.length === 0 && issues.length === 0) {
+  process.stderr.write("license check failed: no installed package manifests were found\n");
+  process.exit(1);
+}
 
 for (const dependency of packages) {
   if (!allowed.has(dependency.license)) {
