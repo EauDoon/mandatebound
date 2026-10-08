@@ -111,6 +111,21 @@ Audit opens the existing file read-only. It neither creates a store nor takes a 
 
 Without a checkpoint, completeness is `unproven` even when the local chain is valid. A matching independent checkpoint establishes completeness only relative to that checkpoint. Defaults are 32 MiB, 100,000 records, and 1 MiB per record. The SDK accepts tighter limits. Empty stores are locally valid but have no checkpoint head.
 
+## Store locking
+
+`decide --store`, `appeal --store` and `serve --store` open a JSONL store as its
+only writer. Opening creates a `<store>.lock` file next to the store and closing
+the store removes it. A second writer that finds the lock exits 6 with
+`ALB_STORE_LOCKED`; the API reports the same condition as HTTP 503. `operator
+audit` opens a snapshot read-only and never takes the lock.
+
+`serve` runs until it is stopped. SIGINT (Ctrl+C) or SIGTERM closes the server
+and its store, removes the lock, and exits 130 or 143. A second signal
+terminates immediately. If a process is killed without that chance, for example
+by SIGKILL, a crash or a Windows console close, the lock stays behind. Confirm
+that no MandateBound process is using the store, then delete the `.lock` file;
+the store file itself needs no repair.
+
 ## Preserve an assessment receipt
 
 `operator receipt` accepts a case invocation, reruns verification and returns a

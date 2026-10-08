@@ -149,6 +149,8 @@ const CASEPACK_CLI_JSON_LIMITS = Object.freeze({
   maxDepth: 48,
   maxNodes: 250_000,
 });
+const STORE_LOCKED_MESSAGE =
+  "Store already has a writer. If no MandateBound process is using it, remove the stale .lock file next to the store.";
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
@@ -358,7 +360,13 @@ function mappedCliError(error: unknown): CliError {
     if (error.code.endsWith("NOT_FOUND")) {
       return new CliError(error.code, CLI_EXIT.NOT_FOUND, "Requested resource was not found.", options);
     }
-    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP|LOCKED/.test(error.code)) {
+    if (error.code === "ALB_STORE_LOCKED") {
+      // Another writer, or a lock left by a process that was killed, holds the
+      // store. That is an availability condition, not a state conflict, and
+      // the message stays path-free.
+      return new CliError(error.code, CLI_EXIT.UNAVAILABLE, STORE_LOCKED_MESSAGE, options);
+    }
+    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP/.test(error.code)) {
       return new CliError(error.code, CLI_EXIT.CONFLICT, "Requested state transition conflicts with current state.", options);
     }
     if (/OPEN|WRITE|CLOSED/.test(error.code)) {
@@ -1026,9 +1034,42 @@ function isCliEntrypoint(entry: string | undefined): boolean {
   }
 }
 
+/** Conventional exit codes for a process stopped by SIGINT (128 + 2) or SIGTERM (128 + 15). */
+export const SIGNAL_EXIT = Object.freeze({ SIGINT: 130, SIGTERM: 143 } as const);
+
+/**
+ * Stop a foreground `serve` cleanly on SIGINT or SIGTERM. Closing the server
+ * closes an owned JsonlStore, which removes its writer lock; without this,
+ * Ctrl+C left a stale lock that blocked every later writer. Handlers are added
+ * only once a server exists, so every other command keeps Node's default
+ * signal behavior, and each is registered once, so a second signal falls back
+ * to the default termination.
+ */
+export function closeServerOnSignals(
+  server: Pick<ApiServer, "close">,
+  signals: Pick<NodeJS.Process, "once"> = process,
+  setExitCode: (code: number) => void = (code) => { process.exitCode = code; },
+): void {
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    signals.once(signal, () => {
+      setExitCode(SIGNAL_EXIT[signal]);
+      server.close().catch(() => setExitCode(CLI_EXIT.INTERNAL));
+    });
+  }
+}
+
 if (isCliEntrypoint(process.argv[1])) {
-  runCli(process.argv.slice(2)).then((code) => {
+  // A signal that lands while serve is still starting must not be overwritten
+  // by the command's own success code when runCli settles afterwards.
+  let stoppedWith: number | undefined;
+  const recordExit = (code: number): void => {
+    stoppedWith = code;
     process.exitCode = code;
+  };
+  runCli(process.argv.slice(2), {
+    onServer: (server) => closeServerOnSignals(server, process, recordExit),
+  }).then((code) => {
+    process.exitCode = stoppedWith ?? code;
   }).catch(() => {
     process.exitCode = CLI_EXIT.INTERNAL;
   });

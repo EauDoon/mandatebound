@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -9,10 +10,10 @@ import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createDefaultPlatformEngine } from "../dist/api.js";
-import { CLI_EXIT, runCli } from "../dist/cli.js";
+import { CLI_EXIT, closeServerOnSignals, runCli, SIGNAL_EXIT } from "../dist/cli.js";
 import { sha256Digest } from "../dist/canonical.js";
 import { buildScenario } from "../dist/simulator.js";
-import { MemoryStore, StoreError } from "../dist/store.js";
+import { JsonlStore, MemoryStore, StoreError } from "../dist/store.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
@@ -682,6 +683,86 @@ test("CLI store diagnostics name the failing JSONL line without reflecting recor
     assert.equal(JSON.parse(result.stderr).line, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a held store lock is an availability error with a path-free recovery hint", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-lock-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    await writeFile(`${file}.lock`, "", "utf8");
+    const result = await invoke(["decide", "--store", file, "-"], CASE_INPUT);
+    assert.equal(result.code, CLI_EXIT.UNAVAILABLE);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_STORE_LOCKED");
+    assert.match(error.message, /Store already has a writer/u);
+    assert.match(error.message, /stale \.lock file/u);
+    assert.equal(JSON.parse(result.stderr).code, "ALB_STORE_LOCKED");
+    for (const text of [result.stdout, result.stderr]) {
+      assert.equal(text.includes(directory), false);
+      assert.equal(text.includes("s.jsonl"), false);
+    }
+    assert.equal(existsSync(file), false, "a refused writer must not create the store");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("serve signal handlers close the server once per signal and set the conventional exit code", async () => {
+  for (const [signal, expected] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const signals = new EventEmitter();
+    const codes = [];
+    let closed = 0;
+    closeServerOnSignals({ close: async () => { closed += 1; } }, signals, (code) => codes.push(code));
+    assert.equal(signals.listenerCount("SIGINT"), 1);
+    assert.equal(signals.listenerCount("SIGTERM"), 1);
+    signals.emit(signal);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(codes, [expected]);
+    assert.equal(SIGNAL_EXIT[signal], expected);
+    assert.equal(closed, 1);
+    // `once`: a repeated signal reaches Node's default handler instead.
+    assert.equal(signals.listenerCount(signal), 0);
+  }
+
+  const signals = new EventEmitter();
+  const codes = [];
+  closeServerOnSignals({ close: async () => { throw new Error("close failed"); } }, signals, (code) => codes.push(code));
+  signals.emit("SIGTERM");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(codes, [143, CLI_EXIT.INTERNAL]);
+});
+
+// Windows has no catchable SIGINT for a child: ChildProcess.kill("SIGINT")
+// terminates it outright. The Linux CI legs run this end to end.
+test("serve --store releases its writer lock on SIGINT and SIGTERM", { skip: process.platform === "win32" }, async () => {
+  for (const [signal, expected] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-signal-"));
+    const file = join(directory, "s.jsonl");
+    try {
+      const child = spawn(process.execPath, [CLI_PATH, "serve", "--store", file], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const exited = new Promise((resolve) => child.once("exit", (code, received) => resolve({ code, received })));
+      let stdout = "";
+      await new Promise((resolve, reject) => {
+        child.stdout.on("data", (chunk) => {
+          stdout += chunk;
+          if (stdout.includes('"listening"')) resolve();
+        });
+        child.once("exit", () => reject(new Error(`serve exited before listening: ${stdout}`)));
+      });
+      assert.equal(existsSync(`${file}.lock`), true);
+      child.kill(signal);
+      const { code, received } = await exited;
+      assert.equal(received, null, `${signal} must be handled, not fatal`);
+      assert.equal(code, expected);
+      assert.equal(existsSync(`${file}.lock`), false);
+      const reopened = await JsonlStore.open(file);
+      await reopened.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 });
 

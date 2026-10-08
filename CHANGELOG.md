@@ -82,6 +82,12 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `serve` now closes its server and store on SIGINT or SIGTERM, removing the
+  JSONL writer lock and exiting 130 or 143. Ctrl+C previously left a stale
+  `.lock` file that blocked every later writer.
+- A held store lock now exits 6 (unavailable) with `ALB_STORE_LOCKED` and a
+  path-free hint about stale `.lock` files, instead of exit 5 with a message
+  blaming a state conflict.
 - `operator compare` now exits 3 with `ok: false` when the current assessment is
   invalid and no regression is found. It read only the `afterValid` field of the
   targeted comparisons, so a pair of equally tampered revisions exited 0.
