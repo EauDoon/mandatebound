@@ -955,7 +955,10 @@ export async function runCli(
             : invocation.action === "envelope-diff" ? compareCaseEnvelopes
             : invocation.action === "finding-diff" ? compareCaseFindings : compareCaseAssessments;
           const result = compare(decodeCasePackInvocation(input["before"]), decodeCasePackInvocation(input["after"]));
-          const currentInvalid = "afterValid" in result && !result.afterValid;
+          // The detail comparisons report `afterValid`; the assessment
+          // comparison nests the same fact as `after.valid`. Reading only the
+          // first spelling let `compare` pass an invalid current case.
+          const currentInvalid = "afterValid" in result ? !result.afterValid : !result.after.valid;
           writeJson(stdout, { ok: result.comparable && !result.hasRegression && !currentInvalid, result });
           return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT
             : currentInvalid ? CLI_EXIT.INVALID : CLI_EXIT.SUCCESS;

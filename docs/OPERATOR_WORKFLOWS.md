@@ -62,6 +62,9 @@ mandatebound operator compare --input comparison.json
 ```
 
 A lost satisfied assurance status or a previously valid case becoming invalid is flagged as a regression. This is a comparison of verifier assurance dimensions, not proof that facts improved or worsened. A change between two unresolved dimensions remains a change without an ordinal confidence score. Use `casepack diff` to inspect artifact-level additions, removals, and modifications.
+When the current assessment is invalid and no regression is found, for example
+because both revisions carry the same tampered evidence, `compare` exits 3 with
+`ok: false`, matching the targeted comparisons below.
 
 `operator coverage-diff` accepts the same `{before, after}` invocations and
 compares individual requirement statuses and matched-envelope counts. It requires

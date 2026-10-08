@@ -75,6 +75,9 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `operator compare` now exits 3 with `ok: false` when the current assessment is
+  invalid and no regression is found. It read only the `afterValid` field of the
+  targeted comparisons, so a pair of equally tampered revisions exited 0.
 - Restore RFC 8785 UTF-8 serialization of U+2028 and U+2029 in values and keys.
   Independent byte and signature checks reject the regressed escaped form.
   Existing affected artifacts require the explicit historical-replay and
