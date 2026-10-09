@@ -36,7 +36,9 @@ Operator assessment receipts embed the package `releaseVersion` together with th
 
 ## Consequences
 
-The package release can move without touching any retained AP2 artifact. A frozen Pack written by the released 1.2.0 code is kept as a test fixture and must keep verifying unchanged.
+The package release can move without changing the format label, Pack digest or anchor match of any retained AP2 artifact. Pack verification still re-derives the resolution from the embedded evidence under the verifying build's gates, so a gate tightened after a Pack was written can make it verify as `unresolved` with `AP2_PACK_RESOLUTION_UNRESOLVED`, while `digestValid` and `anchorMatched` stay true. Delegated Mandate payloads require `exp` since 2.0.0, so a 1.2.0 Pack whose delegated Mandate payload has no `exp` verifies that way.
+
+Two frozen Packs written by the released 1.2.0 code are kept as test fixtures. One was packed after its Checkout Mandate was given `iat` and `exp` and must keep verifying unchanged. The other was packed from the tag's unmodified test helpers, has no delegated `exp`, and must keep verifying as `unresolved` with a valid digest and a matched anchor.
 
 Native artifact bytes, decision pins, protocol `1.0.0` and engine `1.0.0` do not move with a package release.
 

@@ -38,8 +38,14 @@ required.
   `receipt-verify`) under 2.0.0. Review and re-issue it; this is not evidence of
   tampering.
 - AP2 resolutions, Evidence Packs and Pack verification reports keep
-  `releaseVersion` `1.2.0`, the frozen format release, and Packs retained from
-  1.2.0 verify unchanged.
+  `releaseVersion` `1.2.0`, the frozen format release, so a Pack retained from
+  1.2.0 keeps its format label and Pack digest and still matches its retained
+  anchor. Pack verification re-derives the resolution from the embedded
+  evidence under the current gates, though, and delegated Mandate payloads
+  require `exp` since this release. A 1.2.0 Pack whose delegated Mandate
+  payload has no `exp` now verifies as `unresolved` with
+  `AP2_PACK_RESOLUTION_UNRESOLVED`, while `digestValid` and `anchorMatched`
+  stay true. That reflects the stricter gate, not tampering.
 - Artifacts from the RFC 8785 separator regression window carry 1.2.0 labels,
   as does every other build before this release; 2.0.0 and later always include
   the correction. See
@@ -89,9 +95,10 @@ required.
 - AP2 dispute resolutions, Evidence Packs and Pack verification reports now
   carry `AP2_DISPUTE_FORMAT_RELEASE` (frozen at `1.2.0`, exported from the
   package root) as their `releaseVersion` instead of the package release, so a
-  package release no longer invalidates retained Packs or the `schemas/v1.2`
-  constants. Resolution, Pack and verification bytes are unchanged; the HTML
-  timeline now labels the value "Pack format" instead of "MandateBound". CLI
+  package release label on its own no longer invalidates retained Packs or the
+  `schemas/v1.2` constants. Resolution, Pack and verification bytes are
+  unchanged; the HTML timeline now labels the value "Pack format" instead of
+  "MandateBound". CLI
   `--version` and `--help` add `protocolVersion` and `ap2PackFormatRelease`;
   `version` remains the protocol alias. The version layers are recorded in
   [ADR 0003](docs/adr/0003-version-layers.md).
@@ -102,7 +109,6 @@ required.
   `malformed-case` decision with exit 0. The API boundary and its messages are
   unchanged. `examples/README.md` no longer tells users to `decide` a saved
   bundle; a bundle belongs to `verify`.
-- Preserve 1.2.0 release pins, native engine/protocol bytes and historical AP2 packs.
 - Public `EvaluationAnchors` now matches `evaluateBundle`: nested `pins`, optional `trustRootJwk`, and optional `expectedBundleRootDigest`. The previous flattened `BundlePins` shape was never accepted at runtime. `EngineEvaluationAnchors` remains an alias.
 - `PlatformEngine.explainDecision` is typed as returning a string, matching `explainDecision`.
 - CLI `--help` now lists commands and the JSON input convention. Unknown commands, a missing bundle path on an interactive terminal, and empty evidence documents fail with actionable usage or input errors instead of a generic parse failure.
