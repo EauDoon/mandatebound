@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest `1.2.x` release. Native v1 wire compatibility remains covered by frozen-schema and golden-derivation tests.
+Security fixes are provided for the latest `2.0.x` release; `1.2.x` receives no further fixes. Native v1 wire compatibility remains covered by frozen-schema and golden-derivation tests.
 
 ## Reporting a vulnerability
 
@@ -31,7 +31,7 @@ The trusted core assumes:
 - external discovery material and source-checkpoint keys never enter native `TrustSnapshot/v1` automatically
 - CasePack coverage is relative to caller-pinned declared sources and windows; source truth and global completeness remain unestablished
 - imported revocation snapshots are reported evidence, not authenticated revocation facts
-- the reference API is local development infrastructure, not a production security boundary; it binds only to loopback and rejects non-loopback peers, mismatched Host headers, and foreign Origins, but it has no production authentication, TLS, tenant isolation, or DDoS controls
+- the reference API is local development infrastructure, not a production security boundary; it binds only to loopback and rejects non-loopback peers, mismatched Host headers, and foreign Origins (exact rules in the [CLI reference](docs/CLI.md#serve)), but it has no production authentication, TLS, tenant isolation, or DDoS controls
 
 The engine, CasePack verifier, and UCP/AP2 adapter perform no built-in live key, schema, policy, DID, DNS, revocation, timestamp, profile, or network resolution. The AP2 dispute resolver can invoke caller-supplied retrieval adapters, but the caller owns their transport authentication, authorization, privacy, and retention controls.
 
@@ -55,11 +55,11 @@ The repository contains no tracked private keys. Simulator and test keys are gen
 
 ## Dependency and release controls
 
-- Dependencies are exact-version locked.
-- Dependency lifecycle scripts are disabled in the documented install, packaging, and CI commands.
-- `npm run verify` must pass before release.
-- The packed package is checked against an explicit content allowlist.
-- The release workflow produces an SPDX SBOM and a GitHub artifact attestation for the package tarball.
-- Public release bytes receive a separate exact Git-tree privacy and secret scan.
+These controls run in CI and in `.github/workflows/release.yml`:
+
+- Dependencies are exact-version locked, and `npm ci --ignore-scripts` installs them without lifecycle scripts in every documented install, packaging, CI and release command.
+- `npm run verify` must pass on the tagged source before anything is packed. It runs the version agreement check, lint, the license and advisory gates (both fail closed without a dependency tree), type checking, the coverage-gated test suite and the package check.
+- The package check rejects any packed path outside an explicit allowlist, any key, environment, log, source-map or archive file, and any packed file whose content holds a PEM private-key block. It reports only the offending path.
+- Verification and packing run in a job with read-only repository access and no OIDC or attestation scopes. A separate job, which installs nothing and runs no repository code, re-checks the files against their SHA-256 checksums, attests the tarball's provenance and its SPDX SBOM, and uploads them to the GitHub Release.
 
 See [Threat model](docs/THREAT_MODEL.md) for attack classes and fail-closed invariants.

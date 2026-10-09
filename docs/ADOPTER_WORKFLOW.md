@@ -3,7 +3,7 @@
 This acceptance example uses only the public exports of an installed package. It
 ships in `docs/examples/adopter-workflow.mjs`; no source files, test fixtures,
 TypeScript compiler, or author checkout are needed to run it. Node.js 22.12 or
-newer is required. The CI release gate tests Node 22.12.0 and 24.18.0.
+newer is required. CI tests Node 22.12.0, 24.18.0 and 26.11.1.
 
 All evidence is **synthetic**. The example verifies the UCP 2026-04-08 REST profile
 declaration and an ES256 detached merchant authorization under its AP2 Mandates
@@ -33,9 +33,11 @@ access. The subsequent verification processes disable network APIs and use the
 package's shipped schemas. A failure names the install, export, CLI, or evidence
 assertion that failed. The temporary consumer is removed on completion.
 
-For version 1.2.0 the archive is `oonyl-mandatebound-1.2.0.tgz`. Use the filename
-printed by `npm pack` if building a later version. This guide uses the candidate
-tarball so it exercises these changes without assuming a new registry release.
+`npm pack` prints the archive name, `oonyl-mandatebound-<version>.tgz`. The
+commands below use 2.0.0; substitute the filename `npm pack` printed. A GitHub
+Release asset, `mandatebound-<version>.tgz`, installs the same way. This guide
+uses a local tarball so it exercises a checkout without assuming a registry
+release.
 
 ## Run as a consumer
 
@@ -45,7 +47,7 @@ In a new directory next to the archive:
 mkdir mandatebound-consumer
 cd mandatebound-consumer
 npm init -y
-npm install --ignore-scripts --omit=dev ../oonyl-mandatebound-1.2.0.tgz
+npm install --ignore-scripts --omit=dev ../oonyl-mandatebound-2.0.0.tgz
 cp node_modules/@oonyl/mandatebound/docs/examples/adopter-workflow.mjs workflow.mjs
 node workflow.mjs create synthetic-case > accepted.json
 ```

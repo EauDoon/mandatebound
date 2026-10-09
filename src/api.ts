@@ -16,6 +16,7 @@ import type {
   EvaluationInput,
   LiabilityDecision,
 } from "./domain.js";
+import { assertEvaluationInput, EvaluationInputError } from "./evaluation-input.js";
 import { DEFAULT_STRICT_JSON_LIMITS, parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { MemoryStore, StoreError } from "./store.js";
@@ -487,66 +488,15 @@ function objectValue(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function evaluationInput(value: Record<string, unknown>): EvaluationInput {
-  const allowed = new Set([
-    "caseId",
-    "asOf",
-    "pins",
-    "trustRootJwk",
-    "mandate",
-    "runtimeEvents",
-    "executionReceipt",
-    "priorReceipts",
-    "incidentReport",
-    "causationAttestations",
-    "policy",
-    "rulebook",
-    "trustSnapshot",
-    "evidenceBundle",
-    "priorDecision",
-    "appealId",
-  ]);
-  if (Object.keys(value).some((key) => !allowed.has(key))) {
-    throw new PlatformError("ALB_EVALUATION_SHAPE", 422, "Evaluation input has an invalid shape.");
+  try {
+    return assertEvaluationInput(value);
+  } catch (error) {
+    // Rethrow with the gate's own message: the generic coded mapping would
+    // otherwise answer "Artifact validation failed." for these 422s.
+    if (error instanceof EvaluationInputError) throw new PlatformError(error.code, 422, error.message);
+    throw error;
   }
-  const pins = value["pins"];
-  if (
-    typeof value["caseId"] !== "string"
-    || typeof value["asOf"] !== "string"
-    || !isObject(pins)
-    || typeof pins["asOf"] !== "string"
-    || typeof pins["policyDigest"] !== "string"
-    || typeof pins["trustSnapshotDigest"] !== "string"
-    || typeof pins["rulebookDigest"] !== "string"
-    || !Array.isArray(pins["schemaDigests"])
-    || typeof pins["engineVersion"] !== "string"
-    || !Array.isArray(value["runtimeEvents"])
-    || !Array.isArray(value["priorReceipts"])
-    || !Array.isArray(value["causationAttestations"])
-    || !isObject(value["policy"])
-    || !isObject(value["rulebook"])
-    || !isObject(value["trustSnapshot"])
-  ) {
-    throw new PlatformError("ALB_EXTERNAL_PINS_REQUIRED", 422, "A complete evaluation case with external pins is required.");
-  }
-  for (const optionalArtifact of [
-    "trustRootJwk",
-    "mandate",
-    "executionReceipt",
-    "incidentReport",
-    "evidenceBundle",
-    "priorDecision",
-  ] as const) {
-    const candidate = value[optionalArtifact];
-    if (candidate !== undefined && !isObject(candidate)) {
-      throw new PlatformError("ALB_EVALUATION_SHAPE", 422, "Evaluation input has an invalid shape.");
-    }
-  }
-  return value as unknown as EvaluationInput;
 }
 
 function appealEvent(value: unknown): AppealEvent {

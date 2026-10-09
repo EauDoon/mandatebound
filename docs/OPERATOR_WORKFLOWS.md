@@ -8,6 +8,10 @@ These workflows turn verifier output into review tasks and portable reports. The
 input and engine as `decide`, but never opens or writes a store. It rejects
 `--store`. An unresolved result remains a successful evaluation with
 `legalEffect: "not-determined"`; preview neither approves nor executes a transaction.
+Like `decide`, preview applies the reference API's complete-case boundary first:
+an input without the case identifier, external pins and required artifacts exits
+3 with `ALB_EXTERNAL_PINS_REQUIRED` or `ALB_EVALUATION_SHAPE`, and the engine
+never runs.
 
 Use the same `{casePack, anchors}` JSON input accepted by `case-report`. Keep coverage policy and contract digests in an independently trusted case record. Encode optional `anchors.rawEvidence` entries as `{referenceId, bytesBase64}` using canonical standard base64.
 
@@ -34,7 +38,7 @@ malformed supplied raw references fail instead of selecting one copy.
 
 ## Assess a queue
 
-`operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases and share the CLI's 4 MiB document cap. Split larger queues into smaller files.
+`operator batch` accepts `{cases: [{id, casePack, anchors}]}`. Each case carries separate anchors. IDs must be unique ASCII identifiers, at most 128 characters. Batches contain 1 to 100 cases in one document of at most 17 MiB, depth 48 and 250,000 JSON nodes, the limits every operator action reads with (see the [CLI reference](CLI.md#input-limits)). Split larger queues into smaller files.
 
 ```bash
 mandatebound operator batch --input queue.json
@@ -62,6 +66,9 @@ mandatebound operator compare --input comparison.json
 ```
 
 A lost satisfied assurance status or a previously valid case becoming invalid is flagged as a regression. This is a comparison of verifier assurance dimensions, not proof that facts improved or worsened. A change between two unresolved dimensions remains a change without an ordinal confidence score. Use `casepack diff` to inspect artifact-level additions, removals, and modifications.
+When the current assessment is invalid and no regression is found, for example
+because both revisions carry the same tampered evidence, `compare` exits 3 with
+`ok: false`, matching the targeted comparisons below.
 
 `operator coverage-diff` accepts the same `{before, after}` invocations and
 compares individual requirement statuses and matched-envelope counts. It requires
@@ -104,13 +111,28 @@ Audit opens the existing file read-only. It neither creates a store nor takes a 
 
 Without a checkpoint, completeness is `unproven` even when the local chain is valid. A matching independent checkpoint establishes completeness only relative to that checkpoint. Defaults are 32 MiB, 100,000 records, and 1 MiB per record. The SDK accepts tighter limits. Empty stores are locally valid but have no checkpoint head.
 
+## Store locking
+
+`decide --store`, `appeal --store` and `serve --store` open a JSONL store as its
+only writer. Opening creates a `<store>.lock` file next to the store and closing
+the store removes it. A second writer that finds the lock exits 6 with
+`ALB_STORE_LOCKED`; the API reports the same condition as HTTP 503. `operator
+audit` opens a snapshot read-only and never takes the lock.
+
+`serve` runs until it is stopped. SIGINT (Ctrl+C) or SIGTERM closes the server
+and its store, removes the lock, and exits 130 or 143. A second signal
+terminates immediately. If a process is killed without that chance, for example
+by SIGKILL, a crash or a Windows console close, the lock stays behind. Confirm
+that no MandateBound process is using the store, then delete the `.lock` file;
+the store file itself needs no repair.
+
 ## Preserve an assessment receipt
 
 `operator receipt` accepts a case invocation, reruns verification and returns a
 `MandateBoundAssessmentReceipt/v1` metadata record. It binds canonical CasePack
 input, exact raw-evidence digests, supplied anchor context, derived report and
-release/engine/protocol versions. Canonical input is bounded to 4 MiB with the
-existing canonical depth/node limits. Object-key order and raw-reference order
+release/engine/protocol versions. Canonical CasePack input is bounded to 16 MiB,
+depth 48 and 250,000 nodes, the CasePack canonical limits. Object-key order and raw-reference order
 do not change the receipt; raw-byte or assessment-time changes do.
 
 Receipts can preserve failed assessments: `valid: false` stays false and the CLI
@@ -151,7 +173,8 @@ Additional root exports are `inventoryCaseEvidence`, `createCaseReviewQueue`,
 `compareCaseFindings`, `compareCaseAnchorContext`, `createAssessmentReceipt` and
 `verifyAssessmentReceipt`. The new raw-reference metadata views accept at most
 1,024 unique ASCII reference IDs (1 to 128 characters), 16 MiB per byte array and
-64 MiB total in memory; the JSON CLI retains its smaller 4 MiB input cap.
+64 MiB total in memory. Through the JSON CLI, each `bytesBase64` value is at
+most 8 MiB of base64 text and the whole document at most 17 MiB.
 
 Run the self-cleaning persistence demonstration from a source checkout:
 

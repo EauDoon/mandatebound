@@ -1,0 +1,89 @@
+{
+  "release": "2.0.0",
+  "claim": "bounded-evidence-profile",
+  "evidenceProfile": {
+    "id": "ucp-2026-04-08-rest+ap2-mandates-0.2.0",
+    "ucpVersion": "2026-04-08",
+    "ucpTransport": "REST",
+    "ap2Version": "0.2.0"
+  },
+  "disputeProfile": {
+    "id": "ap2-v0.2.0+b4587ac1d055888a73b4b21750973cffba961793",
+    "ap2ReleaseCommit": "b4587ac1d055888a73b4b21750973cffba961793",
+    "mandateProfileId": "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
+    "receiptReferenceProfile": "sha256-terminal-compact-jws",
+    "operations": [
+      "resolve",
+      "pack",
+      "verify",
+      "render"
+    ],
+    "revocationEvidence": "imported-reported-state",
+    "builtInNetworkAccess": false,
+    "legalEffect": "not-determined"
+  },
+  "capabilities": [
+    {
+      "id": "native_evidence_bundle_v1",
+      "status": "supported"
+    },
+    {
+      "id": "mandatebound_casepack_v1",
+      "status": "supported"
+    },
+    {
+      "id": "ucp_2026_04_08_rest_evidence_import",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_mandates_evidence_import",
+      "status": "supported"
+    },
+    {
+      "id": "transaction_lifecycle_correlation",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_dispute_evidence_resolution",
+      "status": "supported"
+    },
+    {
+      "id": "ap2_0_2_0_evidence_pack",
+      "status": "supported"
+    },
+    {
+      "id": "external_evidence_review_v1",
+      "status": "supported"
+    },
+    {
+      "id": "ucp_mcp_transport",
+      "status": "deferred"
+    },
+    {
+      "id": "ucp_a2a_transport",
+      "status": "deferred"
+    },
+    {
+      "id": "external_trust_auto_promotion",
+      "status": "unsupported"
+    },
+    {
+      "id": "normative_liability_waterfall",
+      "status": "unsupported"
+    },
+    {
+      "id": "legal_adjudication",
+      "status": "unsupported"
+    }
+  ],
+  "fixtureTests": [
+    "test/v1-compatibility.test.mjs",
+    "test/casepack-v11.test.mjs",
+    "test/ucp-ap2.test.mjs",
+    "test/ap2-dispute-v12.test.mjs",
+    "test/policy-tools-v11.test.mjs",
+    "test/conformance-v12.test.mjs",
+    "test/review-external.test.mjs"
+  ],
+  "legalEffect": "not-determined"
+}

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MandateBound API",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "summary": "Agent Loss Allocation Protocol for deterministic evidence verification and policy allocation",
     "description": "A localhost-first reference API for evidence integrity, deterministic policy allocation, append-only appeals, and synthetic simulations. Outputs are technical policy allocations with legalEffect set to not-determined. They are not legal judgments, insurance determinations, or proof of identity, authority, intent, or causation."
   },

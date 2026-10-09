@@ -43,6 +43,53 @@ test("license check inspects nested installed dependencies", () => {
   }
 });
 
+function fixtureLicenseChecker(directory) {
+  mkdirSync(join(directory, "scripts"));
+  const fixtureChecker = join(directory, "scripts", "check-licenses.mjs");
+  copyFileSync(checker, fixtureChecker);
+  return fixtureChecker;
+}
+
+test("license check fails closed when node_modules is missing", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-missing-"));
+  try {
+    const result = spawnSync(process.execPath, [fixtureLicenseChecker(directory)], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /license check failed: node_modules is missing; run npm ci --ignore-scripts/u);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("license check fails closed when node_modules holds no package manifests", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-empty-"));
+  try {
+    const fixtureChecker = fixtureLicenseChecker(directory);
+    mkdirSync(join(directory, "node_modules", ".bin"), { recursive: true });
+    mkdirSync(join(directory, "node_modules", "not-a-package"));
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /license check failed: no installed package manifests were found/u);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("license check still passes a tree of approved licenses", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-license-approved-"));
+  try {
+    const fixtureChecker = fixtureLicenseChecker(directory);
+    writeManifest(join(directory, "node_modules", "approved"), { name: "approved", version: "1.0.0", license: "MIT" });
+    const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "license check: 1 installed packages use approved licenses\n");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 // Windows only permits symlink creation for elevated or Developer Mode
 // processes. Where the platform refuses, skip rather than report a false
 // failure; the Linux CI runners still exercise these paths.
@@ -72,6 +119,46 @@ test("license check follows a symlinked installed package", (t) => {
     const result = spawnSync(process.execPath, [fixtureChecker], { cwd: directory, encoding: "utf8" });
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, /copyleft@1\.0\.0 has unapproved license GPL-3\.0/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("package check rejects packed content holding a PEM private key and reports only the path", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-package-secret-"));
+  try {
+    mkdirSync(join(directory, "scripts"));
+    for (const name of ["check-package.mjs", "check-package-consumer.mjs"]) {
+      copyFileSync(fileURLToPath(new URL(`../scripts/${name}`, import.meta.url)), join(directory, "scripts", name));
+    }
+    writeFileSync(join(directory, "package.json"), JSON.stringify({
+      name: "secret-scan-fixture",
+      version: "1.0.0",
+      license: "Apache-2.0",
+      files: ["docs", "DISCLAIMER.md", "NOTICE", "README.md", "SECURITY.md", "LICENSE"],
+    }));
+    for (const name of ["DISCLAIMER.md", "NOTICE", "README.md", "SECURITY.md", "LICENSE"]) {
+      writeFileSync(join(directory, name), "synthetic\n");
+    }
+    mkdirSync(join(directory, "docs", "examples"), { recursive: true });
+    writeFileSync(join(directory, "docs", "ADOPTER_WORKFLOW.md"), "synthetic\n");
+    writeFileSync(join(directory, "docs", "examples", "adopter-workflow.mjs"), "export {};\n");
+    // Assembled at runtime so this source file never holds a key block itself.
+    const body = "SYNTHETICKEYBODYCANARY";
+    const label = ["PRIVATE", "KEY"].join(" ");
+    writeFileSync(
+      join(directory, "docs", "notes.md"),
+      `Notes\n\n-----BEGIN EC ${label}-----\n${body}\n-----END EC ${label}-----\n`,
+    );
+    const result = spawnSync(process.execPath, [join(directory, "scripts", "check-package.mjs")], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+      env: { ...process.env, npm_config_cache: join(directory, "npm-cache") },
+    });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /package check failed: private key material in packed files: docs\/notes\.md/u);
+    assert.equal(result.stderr.includes(body), false);
+    assert.equal(result.stdout.includes(body), false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

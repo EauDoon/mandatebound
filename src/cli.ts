@@ -6,11 +6,11 @@ import { lstat, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
 import type { Readable, Writable } from "node:stream";
-import type { AppealCheckpoint } from "./appeals.js";
-import { replayAppealEvents } from "./appeals.js";
+import { isAppealCheckpoint, replayAppealEvents } from "./appeals.js";
 import {
   createApiServer,
   createDefaultPlatformEngine,
+  isLoopbackAddress,
   type ApiServer,
   type PlatformEngine,
 } from "./api.js";
@@ -36,6 +36,7 @@ import {
 } from "./ap2-dispute.js";
 import { isSha256Digest } from "./canonical.js";
 import { getConformanceStatement } from "./conformance.js";
+import { assertEvaluationInput, EvaluationInputError } from "./evaluation-input.js";
 import type {
   AppealEvent,
   EvidenceBundle,
@@ -55,11 +56,11 @@ import { auditJsonlStore } from "./store-audit.js";
 import { planCaseCollection, summarizeCaseSources, createCaseCaptureTimeline, traceCaseMappings, inspectCaseCheckpoints, inspectCaseValidityWindows, findCaseContentReuse, findBatchCollectionBottlenecks, summarizeBatchFindings, compareCaseBatches } from "./operator-evidence.js";
 import type { StoreCheckpoint } from "./store.js";
 import { ReviewInputError, reviewExternalEvidence } from "./review.js";
-import { simulateScenario } from "./simulator.js";
-import { parseStrictJson, StrictJsonError } from "./strict-json.js";
+import { SIMULATION_SCENARIOS, simulateScenario } from "./simulator.js";
+import { DEFAULT_STRICT_JSON_LIMITS, parseStrictJson, StrictJsonError } from "./strict-json.js";
 import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
-import { ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
+import { AP2_DISPUTE_FORMAT_RELEASE, ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 import { validateArtifact } from "./validation.js";
 
 export const CLI_EXIT = Object.freeze({
@@ -148,7 +149,50 @@ const CASEPACK_CLI_JSON_LIMITS = Object.freeze({
   maxDepth: 48,
   maxNodes: 250_000,
 });
+/**
+ * The JSON document budgets each command family reads with, as documented in
+ * docs/CLI.md. A document's string values share its byte cap; depth and node
+ * limits not overridden here are the strict-JSON defaults. Exported so the
+ * documentation drift test reads the real values.
+ */
+export const CLI_INPUT_LIMITS = Object.freeze({
+  default: Object.freeze({
+    maxBytes: MAX_CLI_INPUT_BYTES,
+    maxDepth: DEFAULT_STRICT_JSON_LIMITS.maxDepth,
+    maxNodes: DEFAULT_STRICT_JSON_LIMITS.maxNodes,
+  }),
+  casepack: Object.freeze({ maxBytes: MAX_CASEPACK_CLI_INPUT_BYTES, ...CASEPACK_CLI_JSON_LIMITS }),
+  ap2Dispute: Object.freeze({
+    maxBytes: MAX_AP2_CLI_INPUT_BYTES,
+    maxDepth: DEFAULT_STRICT_JSON_LIMITS.maxDepth,
+    maxNodes: DEFAULT_STRICT_JSON_LIMITS.maxNodes,
+  }),
+});
+const SIMULATE_SCENARIOS: readonly string[] = Object.freeze(["all", ...SIMULATION_SCENARIOS]);
+const SERVE_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EADDRNOTAVAIL", "EACCES"]);
+const STORE_LOCKED_MESSAGE =
+  "Store already has a writer. If no MandateBound process is using it, remove the stale .lock file next to the store.";
+// `version` keeps its original meaning, the protocol version, for existing
+// callers; the explicit fields say which version layer each value is.
+const VERSION_FIELDS = Object.freeze({
+  version: PROTOCOL_VERSION,
+  protocolVersion: PROTOCOL_VERSION,
+  releaseVersion: RELEASE_VERSION,
+  engineVersion: ENGINE_VERSION,
+  ap2PackFormatRelease: AP2_DISPUTE_FORMAT_RELEASE,
+});
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+// One list per subcommand family: the dispatcher validates against it and
+// --help prints it, so the two cannot drift apart.
+const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
+const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
+const AP2_DISPUTE_ACTIONS = Object.freeze(["resolve", "pack", "verify", "render"] as const);
+const OPERATOR_ACTIONS = Object.freeze([
+  "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
+  "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect",
+  "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks",
+  "findings", "batch-diff",
+] as const);
 const CLI_COMMANDS = Object.freeze([
   { name: "verify", summary: "Verify a native evidence bundle" },
   { name: "decide", summary: "Evaluate a case and persist the policy result" },
@@ -159,14 +203,33 @@ const CLI_COMMANDS = Object.freeze([
   { name: "simulate", summary: "Run a named synthetic scenario" },
   { name: "review", summary: "Bind external source evidence to a review record" },
   { name: "serve", summary: "Listen on loopback with the reference API" },
-  { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack" },
-  { name: "policy", summary: "Validate, test, or diff a policy pack" },
+  { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack", actions: CASEPACK_ACTIONS },
+  { name: "policy", summary: "Validate, test, or diff a policy pack", actions: POLICY_ACTIONS },
   { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
-  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence" },
+  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence", actions: AP2_DISPUTE_ACTIONS },
   { name: "conformance", summary: "Print the bounded capability statement" },
-  { name: "operator", summary: "Inspect evidence, prioritize review, compare revisions, anchor receipts or audit snapshots" },
+  {
+    name: "operator",
+    summary: "Inspect evidence, prioritize review, compare revisions, anchor receipts or audit snapshots",
+    actions: OPERATOR_ACTIONS,
+  },
 ] as const);
 const CLI_COMMAND_NAMES = CLI_COMMANDS.map((command) => command.name);
+const CLI_EXIT_MEANINGS: Readonly<Record<keyof typeof CLI_EXIT, string>> = Object.freeze({
+  SUCCESS: "Completed; an unresolved policy outcome is still a successful evaluation.",
+  USAGE: "Unknown command, action or option, or an invalid option value.",
+  INVALID: "Invalid input, evidence or artifact, or a noncomparable or failed verification.",
+  NOT_FOUND: "A requested stored resource does not exist.",
+  CONFLICT: "A regression, conflict, mismatch or unresolved verification that needs review.",
+  UNAVAILABLE: "Storage, a held store lock, or the requested loopback address or port is unavailable.",
+  INTERNAL: "Unexpected internal failure; the command could not be completed.",
+});
+const CLI_EXIT_HELP = Object.freeze(Object.fromEntries(
+  (Object.keys(CLI_EXIT) as (keyof typeof CLI_EXIT)[]).map((name) => [
+    name,
+    Object.freeze({ code: CLI_EXIT[name], meaning: CLI_EXIT_MEANINGS[name] }),
+  ]),
+));
 const CLI_USAGE =
   "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
 const CLI_INPUT_HELP =
@@ -332,6 +395,23 @@ async function storeFor(
   return { store: new MemoryStore(), owned: true };
 }
 
+/**
+ * Apply the API's complete-case boundary before the engine runs or a store is
+ * opened. The engine would otherwise turn any JSON into a fabricated
+ * `malformed-case` decision that decide persists and both commands print as a
+ * successful evaluation.
+ */
+function evaluationCase(value: unknown): EvaluationInput {
+  try {
+    return assertEvaluationInput(value);
+  } catch (error) {
+    if (error instanceof EvaluationInputError) {
+      throw new CliError(error.code, CLI_EXIT.INVALID, error.message, { cause: error });
+    }
+    throw error;
+  }
+}
+
 function mappedCliError(error: unknown): CliError {
   const location = locationFrom(error);
   if (error instanceof CliError) return error;
@@ -340,7 +420,13 @@ function mappedCliError(error: unknown): CliError {
     if (error.code.endsWith("NOT_FOUND")) {
       return new CliError(error.code, CLI_EXIT.NOT_FOUND, "Requested resource was not found.", options);
     }
-    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP|LOCKED/.test(error.code)) {
+    if (error.code === "ALB_STORE_LOCKED") {
+      // Another writer, or a lock left by a process that was killed, holds the
+      // store. That is an availability condition, not a state conflict, and
+      // the message stays path-free.
+      return new CliError(error.code, CLI_EXIT.UNAVAILABLE, STORE_LOCKED_MESSAGE, options);
+    }
+    if (/CONFLICT|FORK|DUPLICATE|SEQUENCE|TERMINAL|SUPERSESSION|EVENT_CAP/.test(error.code)) {
       return new CliError(error.code, CLI_EXIT.CONFLICT, "Requested state transition conflicts with current state.", options);
     }
     if (/OPEN|WRITE|CLOSED/.test(error.code)) {
@@ -573,12 +659,12 @@ export async function runCli(
         ok: true,
         result: {
           name: "MandateBound",
-          version: PROTOCOL_VERSION,
-          releaseVersion: RELEASE_VERSION,
-          engineVersion: ENGINE_VERSION,
+          ...VERSION_FIELDS,
           usage: CLI_USAGE,
           commands: CLI_COMMANDS,
           input: CLI_INPUT_HELP,
+          scenarios: SIMULATE_SCENARIOS,
+          exitCodes: CLI_EXIT_HELP,
         },
       });
       return CLI_EXIT.SUCCESS;
@@ -589,9 +675,7 @@ export async function runCli(
         ok: true,
         result: {
           name: "MandateBound",
-          version: PROTOCOL_VERSION,
-          releaseVersion: RELEASE_VERSION,
-          engineVersion: ENGINE_VERSION,
+          ...VERSION_FIELDS,
         },
       });
       return CLI_EXIT.SUCCESS;
@@ -608,7 +692,7 @@ export async function runCli(
       case "preview": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
+        const input = evaluationCase(await readInput(requireSingleInput(args), stdin));
         const decision = await engine.evaluateCase(input);
         writeJson(stdout, { ok: true, result: decision });
         return CLI_EXIT.SUCCESS;
@@ -616,7 +700,7 @@ export async function runCli(
       case "decide": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input", "store"]);
-        const input = await readInput(requireSingleInput(args), stdin) as EvaluationInput;
+        const input = evaluationCase(await readInput(requireSingleInput(args), stdin));
         const decision = await engine.evaluateCase(input);
         const resolved = await storeFor(args, io.store);
         if (resolved.owned) ownedStore = resolved.store;
@@ -637,8 +721,18 @@ export async function runCli(
         assertAllowedOptions(args, ["input", "store"]);
         const input = await readInput(requireSingleInput(args), stdin);
         const record = asObject(input);
-        const event = (record["event"] ?? input) as AppealEvent;
-        const seedDecision = record["event"] === undefined ? undefined : record["decision"] as LiabilityDecision | undefined;
+        let event = input as AppealEvent;
+        let seedDecision: LiabilityDecision | undefined;
+        // An `event` key selects the {event, decision?} envelope, and then
+        // nothing else may sit beside it: a misspelled `decision` was silently
+        // dropped. Any other document is the event itself.
+        if (Object.hasOwn(record, "event")) {
+          if (!hasExactKeys(record, ["event"], ["decision"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Appeal input is invalid.");
+          }
+          event = record["event"] as AppealEvent;
+          seedDecision = record["decision"] as LiabilityDecision | undefined;
+        }
         const resolved = await storeFor(args, io.store);
         if (resolved.owned) ownedStore = resolved.store;
         if (seedDecision !== undefined) await resolved.store.putDecision(seedDecision);
@@ -650,9 +744,17 @@ export async function runCli(
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
         const input = await readInput(requireSingleInput(args), stdin);
-        const record = Array.isArray(input) ? { events: input } : asObject(input);
+        // Either a bare events array or exactly {events, checkpoint?}.
+        const record: Record<string, unknown> = Array.isArray(input) ? { events: input }
+          : typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
         const events = record["events"];
-        if (!Array.isArray(events)) throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay input is invalid.");
+        if (!Array.isArray(events) || !hasExactKeys(record, ["events"], ["checkpoint"])) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay input is invalid.");
+        }
+        const checkpoint = record["checkpoint"];
+        if (checkpoint !== undefined && !isAppealCheckpoint(checkpoint)) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Replay checkpoint is invalid.");
+        }
         const validatedEvents = events.map((event) => {
           const validation = validateArtifact<AppealEvent>("appeal_event", event);
           if (!validation.ok) {
@@ -660,7 +762,6 @@ export async function runCli(
           }
           return validation.value;
         });
-        const checkpoint = record["checkpoint"] as AppealCheckpoint | undefined;
         const replay = replayAppealEvents(validatedEvents, checkpoint);
         writeJson(stdout, { ok: replay.issues.length === 0, result: replay });
         return replay.issues.length === 0 ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
@@ -676,6 +777,13 @@ export async function runCli(
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Simulate scenario must be provided once.");
         }
         const scenario = typeof optionScenario === "string" ? optionScenario : (args.positionals[0] ?? "all");
+        if (!SIMULATE_SCENARIOS.includes(scenario)) {
+          throw new CliError(
+            "ALB_SCENARIO_UNKNOWN",
+            CLI_EXIT.INVALID,
+            `Unknown scenario. Expected one of: ${SIMULATE_SCENARIOS.join(", ")}.`,
+          );
+        }
         const result = await simulateScenario(scenario);
         writeJson(stdout, { ok: true, result });
         return CLI_EXIT.SUCCESS;
@@ -704,14 +812,24 @@ export async function runCli(
         if (args.positionals.length !== 0) {
           throw new CliError("ALB_CLI_USAGE", CLI_EXIT.USAGE, "Serve does not accept an input path.");
         }
+        // Validate the bind before opening, and so locking, a store.
+        const host = typeof args.options["host"] === "string" ? args.options["host"] : "127.0.0.1";
+        if (!isLoopbackAddress(host)) {
+          throw new CliError(
+            "ALB_CLI_USAGE",
+            CLI_EXIT.USAGE,
+            "Serve binds only to a loopback IP literal such as 127.0.0.1 or ::1.",
+          );
+        }
+        const port = parsePort(args.options["port"]);
         const resolvedStore = await storeFor(args, io.store);
         let server: ApiServer | undefined;
         try {
           server = createApiServer({
             store: resolvedStore.store,
             engine,
-            host: typeof args.options["host"] === "string" ? args.options["host"] : "127.0.0.1",
-            port: parsePort(args.options["port"]),
+            host,
+            port,
           });
           io.onServer?.(server);
           if (io.signal !== undefined) {
@@ -723,13 +841,24 @@ export async function runCli(
         } catch (error) {
           if (server !== undefined) await server.close().catch(() => undefined);
           else if (resolvedStore.owned) await resolvedStore.store.close().catch(() => undefined);
+          const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
+          if (typeof code === "string" && SERVE_UNAVAILABLE_CODES.has(code)) {
+            // A busy or unbindable port is an environment condition, not an
+            // internal error.
+            throw new CliError(
+              "ALB_SERVE_UNAVAILABLE",
+              CLI_EXIT.UNAVAILABLE,
+              "The requested loopback address or port is unavailable.",
+              { cause: error },
+            );
+          }
           throw error;
         }
       }
       case "casepack": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const invocation = requireSubcommandInput(args, ["build", "verify", "unpack", "diff"]);
+        const invocation = requireSubcommandInput(args, CASEPACK_ACTIONS);
         const input = await readCasePackInput(invocation.path, stdin);
         if (invocation.action === "build") {
           writeJson(stdout, { ok: true, result: buildCasePack(input) });
@@ -765,7 +894,7 @@ export async function runCli(
       case "policy": {
         assertOutputFormat(args, ["json"]);
         assertAllowedOptions(args, ["input"]);
-        const invocation = requireSubcommandInput(args, ["validate", "test", "diff"]);
+        const invocation = requireSubcommandInput(args, POLICY_ACTIONS);
         const input = await readInput(invocation.path, stdin);
         if (invocation.action === "validate") {
           const report = validatePolicyPack(input);
@@ -795,7 +924,7 @@ export async function runCli(
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }
       case "ap2-dispute": {
-        const invocation = requireSubcommandInput(args, ["resolve", "pack", "verify", "render"]);
+        const invocation = requireSubcommandInput(args, AP2_DISPUTE_ACTIONS);
         const needsPackAnchor = invocation.action === "verify" || invocation.action === "render";
         assertAllowedOptions(
           args,
@@ -892,7 +1021,7 @@ export async function runCli(
         return CLI_EXIT.SUCCESS;
       }
       case "operator": {
-        const invocation = requireSubcommandInput(args, ["triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff", "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect", "sources", "timeline", "lineage", "checkpoints", "windows", "reuse", "bottlenecks", "findings", "batch-diff"]);
+        const invocation = requireSubcommandInput(args, OPERATOR_ACTIONS);
         assertAllowedOptions(args, invocation.action === "audit" ? ["input", "store"]
           : invocation.action === "receipt-verify" ? ["input", "expected-receipt-digest"] : ["input"]);
         const format = assertOutputFormat(args, invocation.action === "queue" ? ["json", "csv"] : ["json"]);
@@ -955,7 +1084,10 @@ export async function runCli(
             : invocation.action === "envelope-diff" ? compareCaseEnvelopes
             : invocation.action === "finding-diff" ? compareCaseFindings : compareCaseAssessments;
           const result = compare(decodeCasePackInvocation(input["before"]), decodeCasePackInvocation(input["after"]));
-          const currentInvalid = "afterValid" in result && !result.afterValid;
+          // The detail comparisons report `afterValid`; the assessment
+          // comparison nests the same fact as `after.valid`. Reading only the
+          // first spelling let `compare` pass an invalid current case.
+          const currentInvalid = "afterValid" in result ? !result.afterValid : !result.after.valid;
           writeJson(stdout, { ok: result.comparable && !result.hasRegression && !currentInvalid, result });
           return !result.comparable ? CLI_EXIT.INVALID : result.hasRegression ? CLI_EXIT.CONFLICT
             : currentInvalid ? CLI_EXIT.INVALID : CLI_EXIT.SUCCESS;
@@ -1005,9 +1137,42 @@ function isCliEntrypoint(entry: string | undefined): boolean {
   }
 }
 
+/** Conventional exit codes for a process stopped by SIGINT (128 + 2) or SIGTERM (128 + 15). */
+export const SIGNAL_EXIT = Object.freeze({ SIGINT: 130, SIGTERM: 143 } as const);
+
+/**
+ * Stop a foreground `serve` cleanly on SIGINT or SIGTERM. Closing the server
+ * closes an owned JsonlStore, which removes its writer lock; without this,
+ * Ctrl+C left a stale lock that blocked every later writer. Handlers are added
+ * only once a server exists, so every other command keeps Node's default
+ * signal behavior, and each is registered once, so a second signal falls back
+ * to the default termination.
+ */
+export function closeServerOnSignals(
+  server: Pick<ApiServer, "close">,
+  signals: Pick<NodeJS.Process, "once"> = process,
+  setExitCode: (code: number) => void = (code) => { process.exitCode = code; },
+): void {
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    signals.once(signal, () => {
+      setExitCode(SIGNAL_EXIT[signal]);
+      server.close().catch(() => setExitCode(CLI_EXIT.INTERNAL));
+    });
+  }
+}
+
 if (isCliEntrypoint(process.argv[1])) {
-  runCli(process.argv.slice(2)).then((code) => {
+  // A signal that lands while serve is still starting must not be overwritten
+  // by the command's own success code when runCli settles afterwards.
+  let stoppedWith: number | undefined;
+  const recordExit = (code: number): void => {
+    stoppedWith = code;
     process.exitCode = code;
+  };
+  runCli(process.argv.slice(2), {
+    onServer: (server) => closeServerOnSignals(server, process, recordExit),
+  }).then((code) => {
+    process.exitCode = stoppedWith ?? code;
   }).catch(() => {
     process.exitCode = CLI_EXIT.INTERNAL;
   });

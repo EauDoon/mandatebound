@@ -1,17 +1,27 @@
 import assert from "node:assert/strict";
+import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
-import { CLI_EXIT, runCli } from "../dist/cli.js";
+import { fileURLToPath } from "node:url";
+import { createDefaultPlatformEngine } from "../dist/api.js";
+import { appealEventDigest } from "../dist/appeals.js";
+import { CLI_EXIT, closeServerOnSignals, runCli, SIGNAL_EXIT } from "../dist/cli.js";
 import { sha256Digest } from "../dist/canonical.js";
-import { buildScenario } from "../dist/simulator.js";
-import { MemoryStore, StoreError } from "../dist/store.js";
+import { buildScenario, SIMULATION_SCENARIOS } from "../dist/simulator.js";
+import { JsonlStore, MemoryStore, StoreError } from "../dist/store.js";
 import { deriveLiabilityDecisionId } from "../dist/validation.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
+// decide and preview accept only a complete evaluation case, so tests that
+// exercise the stub engine, stub store, or store-error mapping send a real one.
+const CASE_INPUT = JSON.stringify(buildScenario("principal").input);
+const CLI_PATH = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 
 function decision(overrides = {}) {
   const { artifactId: _artifactId, ...fields } = overrides;
@@ -120,12 +130,78 @@ test("verify and decide use stable success/invalid exit codes with JSON stdout",
   assert.equal(JSON.parse(invalid.stdout).ok, false);
 
   const store = new MemoryStore();
-  const decided = await invoke(["decide", "-"], JSON.stringify({ pins: {} }), { store });
+  const decided = await invoke(["decide", "-"], CASE_INPUT, { store });
   assert.equal(decided.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(decided.stdout).result.outcome, "unresolved");
   const decidedArtifact = JSON.parse(decided.stdout).result;
   assert.equal((await store.getDecision(decidedArtifact.artifactId)).legalEffect, "not-determined");
   await store.close();
+});
+
+const INCOMPLETE_CASES = [
+  ["{}", "ALB_EXTERNAL_PINS_REQUIRED"],
+  ["[1,2]", "ALB_EVALUATION_SHAPE"],
+  ['{"pins":{}}', "ALB_EXTERNAL_PINS_REQUIRED"],
+  ['{"caseId":"c","unexpected":1}', "ALB_EVALUATION_SHAPE"],
+];
+
+test("decide and preview reject incomplete cases before the engine runs or a store opens", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-case-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    for (const [input, code] of INCOMPLETE_CASES) {
+      let evaluated = false;
+      const guarded = engine({ evaluateCase: () => { evaluated = true; return decision(); } });
+      for (const argv of [["decide", "--store", file, "-"], ["preview", "-"]]) {
+        const result = await invoke(argv, input, { engine: guarded });
+        assert.equal(result.code, CLI_EXIT.INVALID, `${argv[0]} ${input}`);
+        const error = JSON.parse(result.stdout).error;
+        assert.equal(error.code, code, `${argv[0]} ${input}`);
+        assert.equal(
+          error.message,
+          code === "ALB_EVALUATION_SHAPE"
+            ? "Evaluation input has an invalid shape."
+            : "A complete evaluation case with external pins is required.",
+        );
+        assert.equal(JSON.parse(result.stderr).code, code);
+      }
+      assert.equal(evaluated, false, input);
+      assert.equal(existsSync(file), false, "no store file may be created");
+      assert.equal(existsSync(`${file}.lock`), false, "no store lock may be taken");
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("decide and preview still evaluate complete scenario cases with the real engine", async () => {
+  for (const name of ["principal", "unresolved"]) {
+    const scenario = buildScenario(name);
+    const input = JSON.stringify(scenario.input);
+    const store = new MemoryStore();
+    for (const argv of [["preview", "-"], ["decide", "-"]]) {
+      const result = await invoke(argv, input, { engine: createDefaultPlatformEngine(), store });
+      assert.equal(result.code, CLI_EXIT.SUCCESS, `${argv[0]} ${name}: ${result.stdout}`);
+      const output = JSON.parse(result.stdout).result;
+      assert.equal(output.caseId, scenario.input.caseId);
+      assert.notEqual(output.caseId, "malformed-case");
+      assert.equal(output.outcome, scenario.expected);
+    }
+    await store.close();
+  }
+});
+
+test("the installed CLI rejects an empty case without engine diagnostics on stderr", () => {
+  for (const command of ["preview", "decide"]) {
+    const result = spawnSync(process.execPath, [CLI_PATH, command, "-"], { input: "{}", encoding: "utf8" });
+    assert.equal(result.status, CLI_EXIT.INVALID, result.stdout);
+    assert.equal(JSON.parse(result.stdout).error.code, "ALB_EXTERNAL_PINS_REQUIRED");
+    assert.doesNotMatch(result.stderr, /\[mandatebound\] evaluateCase/u);
+    // stderr carries exactly the CLI's own JSON diagnostic line.
+    const lines = result.stderr.trim().split(/\r?\n/u);
+    assert.equal(lines.length, 1, result.stderr);
+    assert.equal(JSON.parse(lines[0]).code, "ALB_EXTERNAL_PINS_REQUIRED");
+  }
 });
 
 test("explain is JSON and explicitly nonlegal", async () => {
@@ -164,6 +240,87 @@ test("appeal and replay commands preserve append order", async () => {
   assert.equal(rejected.code, CLI_EXIT.INVALID);
   assert.equal(JSON.parse(rejected.stdout).error.code, "ALB_CLI_INPUT");
   await store.close();
+});
+
+function appealHistory() {
+  const filed = {
+    schemaVersion: "1.0.0",
+    artifactId: "event-cli-1",
+    appealId: "appeal-cli-1",
+    decisionId: decision().artifactId,
+    sequence: 1,
+    eventType: "filed",
+    actor: { id: "principal-synthetic", role: "principal" },
+    occurredAt: "2026-07-23T00:00:00.000Z",
+    reasonCodes: ["review_requested"],
+  };
+  const started = {
+    ...filed,
+    artifactId: "event-cli-2",
+    sequence: 2,
+    previousEventDigest: appealEventDigest(filed),
+    eventType: "review_started",
+    actor: { id: "reviewer-synthetic", role: "reviewer" },
+    reasonCodes: ["review_started"],
+  };
+  return [filed, started];
+}
+
+test("replay validates its envelope and checkpoint without reflecting bad values", async () => {
+  const events = appealHistory();
+  const head = { sequence: 2, headDigest: appealEventDigest(events[1]) };
+
+  const verified = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint: head }));
+  assert.equal(verified.code, CLI_EXIT.SUCCESS, verified.stdout);
+  assert.equal(JSON.parse(verified.stdout).result.completeness.state, "verified");
+
+  const wrong = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint: { sequence: 1, headDigest: DIGEST } }));
+  assert.equal(wrong.code, CLI_EXIT.CONFLICT);
+  assert.equal(JSON.parse(wrong.stdout).result.completeness.state, "mismatch");
+
+  const badCheckpoints = [
+    "CANARY_STRING_CHECKPOINT",
+    424242,
+    { sequence: "CANARY_SEQUENCE", headDigest: 5 },
+    ["CANARY_ARRAY_ITEM"],
+    { ...head, note: "CANARY_EXTRA_KEY" },
+    { sequence: 0, headDigest: head.headDigest },
+    { sequence: 2, headDigest: "sha256:CANARY" },
+    null,
+  ];
+  for (const checkpoint of badCheckpoints) {
+    const result = await invoke(["replay", "-"], JSON.stringify({ events, checkpoint }));
+    assert.equal(result.code, CLI_EXIT.INVALID, JSON.stringify(checkpoint));
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_CLI_INPUT");
+    assert.equal(error.message, "Replay checkpoint is invalid.");
+    for (const text of [result.stdout, result.stderr]) {
+      assert.doesNotMatch(text, /CANARY|424242/u);
+    }
+  }
+
+  for (const envelope of [{ events, extra: 1 }, { checkpoint: head }, { events: {} }, "events", null]) {
+    const result = await invoke(["replay", "-"], JSON.stringify(envelope));
+    assert.equal(result.code, CLI_EXIT.INVALID, JSON.stringify(envelope));
+    assert.equal(JSON.parse(result.stdout).error.message, "Replay input is invalid.");
+  }
+});
+
+test("appeal rejects keys beside an {event, decision} envelope", async () => {
+  const [filed] = appealHistory();
+  const store = new MemoryStore();
+  try {
+    const misspelled = await invoke(["appeal", "-"], JSON.stringify({ event: filed, decsion: decision() }), { store });
+    assert.equal(misspelled.code, CLI_EXIT.INVALID);
+    assert.equal(JSON.parse(misspelled.stdout).error.message, "Appeal input is invalid.");
+    assert.equal(await store.getAppeal(filed.appealId), undefined, "nothing may be appended");
+
+    const seeded = await invoke(["appeal", "-"], JSON.stringify({ event: filed, decision: decision() }), { store });
+    assert.equal(seeded.code, CLI_EXIT.SUCCESS, seeded.stdout);
+    assert.equal(JSON.parse(seeded.stdout).result.status, "open");
+  } finally {
+    await store.close();
+  }
 });
 
 test("usage and input failures are privacy-safe", async () => {
@@ -212,6 +369,49 @@ test("documented --input and --format options work, while ambiguous and unsuppor
   }
 });
 
+// Options an action needs to get past argument validation to input checks.
+const ACTION_OPTIONS = {
+  "ap2-dispute verify": ["--expected-pack-digest", DIGEST],
+  "ap2-dispute render": ["--expected-pack-digest", DIGEST],
+  "operator receipt-verify": ["--expected-receipt-digest", DIGEST],
+};
+
+test("help lists every dispatcher action, the simulate scenarios and the exit codes", async () => {
+  const help = JSON.parse((await invoke(["--help"], "")).stdout).result;
+
+  const withActions = help.commands.filter((command) => command.actions !== undefined);
+  assert.deepEqual(withActions.map((command) => command.name), ["casepack", "policy", "ap2-dispute", "operator"]);
+  for (const command of withActions) {
+    assert.equal(new Set(command.actions).size, command.actions.length, command.name);
+    for (const action of command.actions) {
+      const extra = ACTION_OPTIONS[`${command.name} ${action}`] ?? [];
+      const result = await invoke([command.name, action, "-", ...extra], "{}");
+      // Every listed action passes argument validation; "{}" then fails as input.
+      assert.notEqual(result.code, CLI_EXIT.USAGE, `${command.name} ${action}: ${result.stdout}`);
+    }
+    const unlisted = await invoke([command.name, "not-an-action", "-"], "{}");
+    assert.equal(unlisted.code, CLI_EXIT.USAGE, command.name);
+    assert.equal(
+      JSON.parse(unlisted.stdout).error.message,
+      `Command action is unsupported. Expected one of: ${command.actions.join(", ")}.`,
+    );
+  }
+  assert.equal(withActions.find((command) => command.name === "operator").actions.length, 23);
+
+  assert.deepEqual(help.scenarios, ["all", ...SIMULATION_SCENARIOS]);
+  for (const scenario of help.scenarios.filter((name) => name !== "all")) {
+    const result = await invoke(["simulate", scenario], "");
+    assert.equal(result.code, CLI_EXIT.SUCCESS, scenario);
+  }
+
+  assert.deepEqual(Object.keys(help.exitCodes), Object.keys(CLI_EXIT));
+  for (const [name, entry] of Object.entries(help.exitCodes)) {
+    assert.equal(entry.code, CLI_EXIT[name], name);
+    assert.equal(typeof entry.meaning, "string");
+    assert.ok(entry.meaning.length > 10, name);
+  }
+});
+
 test("help and version are stable JSON and use the public brand", async () => {
   const help = await invoke(["--help"], "");
   assert.equal(help.code, CLI_EXIT.SUCCESS);
@@ -224,8 +424,15 @@ test("help and version are stable JSON and use the public brand", async () => {
   const version = await invoke(["--version"], "");
   assert.equal(version.code, CLI_EXIT.SUCCESS);
   assert.equal(JSON.parse(version.stdout).result.version, "1.0.0");
-  assert.equal(JSON.parse(version.stdout).result.releaseVersion, "1.2.0");
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(JSON.parse(version.stdout).result.releaseVersion, manifest.version);
   assert.equal(JSON.parse(version.stdout).result.engineVersion, "1.0.0");
+  // Each version layer is named explicitly; `version` stays the protocol alias.
+  assert.equal(JSON.parse(version.stdout).result.protocolVersion, "1.0.0");
+  assert.equal(JSON.parse(version.stdout).result.ap2PackFormatRelease, "1.2.0");
+  for (const field of ["version", "protocolVersion", "releaseVersion", "engineVersion", "ap2PackFormatRelease"]) {
+    assert.equal(helpResult[field], JSON.parse(version.stdout).result[field], field);
+  }
 });
 
 test("v1.2 policy and conformance commands are deterministic and fail closed", async () => {
@@ -555,14 +762,14 @@ test("casepack commands accept documents inside the CasePack canonical budget", 
 });
 
 test("CLI error mapping uses stable exit classes and never reflects exception secrets", async () => {
-  const typeFailure = await invoke(["decide", "-"], "{}", {
+  const typeFailure = await invoke(["decide", "-"], CASE_INPUT, {
     engine: engine({ evaluateCase: () => { throw new TypeError("PRIVATE_TYPE_DETAIL"); } }),
   });
   assert.equal(typeFailure.code, CLI_EXIT.INVALID);
   assert.equal(JSON.parse(typeFailure.stdout).error.code, "ALB_ARTIFACT_INVALID");
   assert.equal(typeFailure.stdout.includes("PRIVATE_TYPE_DETAIL"), false);
 
-  const internal = await invoke(["decide", "-"], "{}", {
+  const internal = await invoke(["decide", "-"], CASE_INPUT, {
     engine: engine({ evaluateCase: () => { throw new Error("PRIVATE_INTERNAL_DETAIL"); } }),
   });
   assert.equal(internal.code, CLI_EXIT.INTERNAL);
@@ -570,7 +777,15 @@ test("CLI error mapping uses stable exit classes and never reflects exception se
 
   const coded = await invoke(["simulate", "not-a-scenario"], "");
   assert.equal(coded.code, CLI_EXIT.INVALID);
-  assert.equal(JSON.parse(coded.stdout).error.code, "ALB_SCENARIO_UNKNOWN");
+  const codedError = JSON.parse(coded.stdout).error;
+  assert.equal(codedError.code, "ALB_SCENARIO_UNKNOWN");
+  assert.equal(
+    codedError.message,
+    "Unknown scenario. Expected one of: all, principal, operator, model_vendor, unresolved, expiry, replay, tamper, conflict, appeal.",
+  );
+  const optionScenario = await invoke(["simulate", "--scenario", "Principal"], "");
+  assert.equal(optionScenario.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(optionScenario.stdout).error.code, "ALB_SCENARIO_UNKNOWN");
 
   const storeCases = [
     [new StoreError("ALB_STORE_DECISION_NOT_FOUND", "secret"), CLI_EXIT.NOT_FOUND],
@@ -587,7 +802,7 @@ test("CLI error mapping uses stable exit classes and never reflects exception se
       verifyChain: async () => ({ valid: true, records: 0, completeness: "unproven", issues: [] }),
       close: async () => {},
     };
-    const result = await invoke(["decide", "-"], "{}", { store });
+    const result = await invoke(["decide", "-"], CASE_INPUT, { store });
     assert.equal(result.code, expected);
     assert.equal(result.stdout.includes("secret"), false);
   }
@@ -598,7 +813,7 @@ test("CLI store diagnostics name the failing JSONL line without reflecting recor
   const file = join(directory, "store.jsonl");
   try {
     await writeFile(file, "{not-json}\n", "utf8");
-    const result = await invoke(["decide", "--store", file, "-"], JSON.stringify({ pins: {} }));
+    const result = await invoke(["decide", "--store", file, "-"], CASE_INPUT);
     assert.equal(result.code, CLI_EXIT.INVALID);
     const error = JSON.parse(result.stdout).error;
     assert.equal(error.code, "ALB_STORE_CORRUPT");
@@ -608,6 +823,86 @@ test("CLI store diagnostics name the failing JSONL line without reflecting recor
     assert.equal(JSON.parse(result.stderr).line, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a held store lock is an availability error with a path-free recovery hint", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-lock-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    await writeFile(`${file}.lock`, "", "utf8");
+    const result = await invoke(["decide", "--store", file, "-"], CASE_INPUT);
+    assert.equal(result.code, CLI_EXIT.UNAVAILABLE);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_STORE_LOCKED");
+    assert.match(error.message, /Store already has a writer/u);
+    assert.match(error.message, /stale \.lock file/u);
+    assert.equal(JSON.parse(result.stderr).code, "ALB_STORE_LOCKED");
+    for (const text of [result.stdout, result.stderr]) {
+      assert.equal(text.includes(directory), false);
+      assert.equal(text.includes("s.jsonl"), false);
+    }
+    assert.equal(existsSync(file), false, "a refused writer must not create the store");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("serve signal handlers close the server once per signal and set the conventional exit code", async () => {
+  for (const [signal, expected] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const signals = new EventEmitter();
+    const codes = [];
+    let closed = 0;
+    closeServerOnSignals({ close: async () => { closed += 1; } }, signals, (code) => codes.push(code));
+    assert.equal(signals.listenerCount("SIGINT"), 1);
+    assert.equal(signals.listenerCount("SIGTERM"), 1);
+    signals.emit(signal);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(codes, [expected]);
+    assert.equal(SIGNAL_EXIT[signal], expected);
+    assert.equal(closed, 1);
+    // `once`: a repeated signal reaches Node's default handler instead.
+    assert.equal(signals.listenerCount(signal), 0);
+  }
+
+  const signals = new EventEmitter();
+  const codes = [];
+  closeServerOnSignals({ close: async () => { throw new Error("close failed"); } }, signals, (code) => codes.push(code));
+  signals.emit("SIGTERM");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(codes, [143, CLI_EXIT.INTERNAL]);
+});
+
+// Windows has no catchable SIGINT for a child: ChildProcess.kill("SIGINT")
+// terminates it outright. The Linux CI legs run this end to end.
+test("serve --store releases its writer lock on SIGINT and SIGTERM", { skip: process.platform === "win32" }, async () => {
+  for (const [signal, expected] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-signal-"));
+    const file = join(directory, "s.jsonl");
+    try {
+      const child = spawn(process.execPath, [CLI_PATH, "serve", "--store", file], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const exited = new Promise((resolve) => child.once("exit", (code, received) => resolve({ code, received })));
+      let stdout = "";
+      await new Promise((resolve, reject) => {
+        child.stdout.on("data", (chunk) => {
+          stdout += chunk;
+          if (stdout.includes('"listening"')) resolve();
+        });
+        child.once("exit", () => reject(new Error(`serve exited before listening: ${stdout}`)));
+      });
+      assert.equal(existsSync(`${file}.lock`), true);
+      child.kill(signal);
+      const { code, received } = await exited;
+      assert.equal(received, null, `${signal} must be handled, not fatal`);
+      assert.equal(code, expected);
+      assert.equal(existsSync(`${file}.lock`), false);
+      const reopened = await JsonlStore.open(file);
+      await reopened.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 });
 
@@ -626,7 +921,7 @@ test("serve reports its loopback address and returns a stable code", async () =>
   }
 });
 
-test("serve closes an owned store when listen fails", async () => {
+test("serve closes an owned store when listen fails and reports the port as unavailable", async () => {
   const blocker = createServer();
   await new Promise((resolve, reject) => {
     blocker.once("error", reject);
@@ -634,11 +929,46 @@ test("serve closes an owned store when listen fails", async () => {
   });
   const address = blocker.address();
   assert.equal(typeof address, "object");
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-busy-"));
+  const file = join(directory, "s.jsonl");
   try {
-    const result = await invoke(["serve", "--port", String(address.port)], "");
-    assert.equal(result.code, CLI_EXIT.INTERNAL);
+    const result = await invoke(["serve", "--store", file, "--port", String(address.port)], "");
+    assert.equal(result.code, CLI_EXIT.UNAVAILABLE);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, "ALB_SERVE_UNAVAILABLE");
+    assert.equal(error.message, "The requested loopback address or port is unavailable.");
+    // The owned store was closed, so its writer lock is gone.
+    assert.equal(existsSync(`${file}.lock`), false);
+    const reopened = await JsonlStore.open(file);
+    await reopened.close();
   } finally {
     await new Promise((resolve) => blocker.close(resolve));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("serve rejects a non-loopback or non-literal host as usage before opening a store", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mandatebound-cli-host-"));
+  const file = join(directory, "s.jsonl");
+  try {
+    for (const host of ["0.0.0.0", "localhost", "192.0.2.1", "::"]) {
+      let started = false;
+      const result = await invoke(["serve", "--store", file, "--host", host], "", {
+        onServer: () => { started = true; },
+      });
+      assert.equal(result.code, CLI_EXIT.USAGE, host);
+      const error = JSON.parse(result.stdout).error;
+      assert.equal(error.code, "ALB_CLI_USAGE", host);
+      assert.match(error.message, /loopback IP literal such as 127\.0\.0\.1 or ::1/u);
+      assert.equal(started, false, host);
+      assert.equal(existsSync(file), false, host);
+      assert.equal(existsSync(`${file}.lock`), false, host);
+    }
+    const badPort = await invoke(["serve", "--store", file, "--port", "70000"], "");
+    assert.equal(badPort.code, CLI_EXIT.USAGE);
+    assert.equal(existsSync(`${file}.lock`), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

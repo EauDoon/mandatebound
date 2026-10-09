@@ -45,6 +45,32 @@ The release gate is:
 npm run verify
 ```
 
+## Releasing
+
+`package.json` `version` is the single source of the package release. The
+lockfile, the `RELEASE_VERSION` literal in `src/version.ts`, the conformance
+declaration for that major.minor, OpenAPI `info.version`, the newest dated
+CHANGELOG section and, at release time, the Git tag must all agree with it.
+`npm run version:check` enforces that agreement and runs inside
+`npm run verify:static`, so CI fails on drift even where npm lifecycle scripts
+were disabled during the bump.
+
+1. Record each change under `## [Unreleased]` in `CHANGELOG.md` as it lands,
+   following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+2. Bump with `npm version X.Y.Z --no-git-tag-version`. npm updates
+   `package.json` and `package-lock.json`, then its `version` lifecycle script
+   runs `node scripts/version.mjs sync`, which edits the other targets in place.
+   If lifecycle scripts are disabled, run that sync command yourself. A new
+   major.minor needs the previous `conformance/vX.Y/` declaration moved first.
+3. Turn `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty
+   `## [Unreleased]` above it, and update the compare links at the bottom.
+4. Run `npm run verify` and `node scripts/version.mjs check --tag vX.Y.Z`.
+5. After merging, write the notes with
+   `node scripts/version.mjs notes X.Y.Z > notes.md` and create the release with
+   `gh release create vX.Y.Z --target <merge commit> --notes-file notes.md`.
+   Publishing the release runs `.github/workflows/release.yml`, which verifies
+   the tag again and attaches the tarball, SBOM and checksums.
+
 ## Public language
 
 Do not describe a policy output as a legal judgment, insurance determination, compliance certification, or proof of causation. Do not imply regulator, standards-body, network, insurer, or vendor endorsement.
