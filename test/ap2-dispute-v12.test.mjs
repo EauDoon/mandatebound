@@ -402,10 +402,22 @@ test("AP2 Evidence Pack runs pack, independent verify, and metadata-only render"
 // made to the helper input: the Checkout Mandate carries iat and exp, which
 // main has required of delegated payloads since fc27d70, after 1.2.0. The data
 // is synthetic and holds public JWKs only. Never regenerate this file: it proves
-// that a Pack retained from 1.2.0 still verifies, unchanged, whatever the
-// package release becomes.
+// that the package release label never invalidates a 1.2.0 Pack whose evidence
+// still passes the current resolution gates.
 const GOLDEN_PACK_URL = new URL("./fixtures/ap2-evidence-pack-1.2.0.json", import.meta.url);
 const GOLDEN_PACK_DIGEST = "sha256:92cc19732acb486ce65af9232d4e328cb2be3d6f2624a296b01f02f8d38a3714";
+
+// Frozen Pack written the same way by the same released 1.2.0 code, from the
+// tag's unmodified helpers: its delegated Checkout Mandate payload has no exp.
+// The 1.2.0 verifier reports it verified. Since fc27d70 the resolution gate
+// requires delegated expiry, so it now verifies as unresolved while its digest
+// and anchor still check out. Never regenerate this file either: it pins the
+// upgrade behavior the CHANGELOG documents for retained 1.2.0 Packs.
+const NO_DELEGATED_EXP_PACK_URL = new URL(
+  "./fixtures/ap2-evidence-pack-1.2.0-no-delegated-exp.json",
+  import.meta.url,
+);
+const NO_DELEGATED_EXP_PACK_DIGEST = "sha256:9c47867b094ec4fb998774dc90ac2a7d59998e8313d6083e3b87309064422f10";
 
 function publishedSchemaValidators() {
   const readSchema = (name) => JSON.parse(readFileSync(
@@ -422,7 +434,7 @@ function publishedSchemaValidators() {
   };
 }
 
-test("a Pack written by the released 1.2.0 code still verifies byte for byte", () => {
+test("a Pack written by the released 1.2.0 code with delegated expiry still verifies byte for byte", () => {
   const pack = JSON.parse(readFileSync(GOLDEN_PACK_URL, "utf8"));
   assert.equal(pack.releaseVersion, "1.2.0");
   assert.equal(pack.packDigest, GOLDEN_PACK_DIGEST);
@@ -448,7 +460,40 @@ test("a Pack written by the released 1.2.0 code still verifies byte for byte", (
   assert.match(renderAp2EvidenceTimelineHtml(pack, options), /Pack format 1\.2\.0/);
 });
 
-test("the golden Pack holds only public key material", () => {
+test("a Pack written by the released 1.2.0 code without delegated expiry keeps its digest but is unresolved", () => {
+  const pack = JSON.parse(readFileSync(NO_DELEGATED_EXP_PACK_URL, "utf8"));
+  assert.equal(pack.releaseVersion, "1.2.0");
+  assert.equal(pack.packDigest, NO_DELEGATED_EXP_PACK_DIGEST);
+  const { packDigest: _packDigest, ...material } = pack;
+  assert.equal(sha256Digest(material), NO_DELEGATED_EXP_PACK_DIGEST);
+
+  const verification = verifyAp2DisputeEvidencePack(pack, {
+    expectedPackDigest: NO_DELEGATED_EXP_PACK_DIGEST,
+  });
+  assert.equal(verification.status, "unresolved");
+  assert.equal(verification.packDigest, NO_DELEGATED_EXP_PACK_DIGEST);
+  assert.equal(verification.digestValid, true);
+  assert.equal(verification.anchorMatched, true);
+  assert.equal(verification.releaseVersion, "1.2.0");
+  assert.deepEqual([...codes(verification)], ["AP2_PACK_RESOLUTION_UNRESOLVED"]);
+  assert.equal(verification.resolution.status, "unresolved");
+  assert.equal(
+    verification.resolution.issues.some((issue) => issue.code === "AP2_EXPIRY_MISSING"
+      && issue.path === "artifacts.checkout_mandate.token.chain[1].delegate_payload.exp"),
+    true,
+    JSON.stringify(verification.resolution.issues),
+  );
+
+  const validators = publishedSchemaValidators();
+  assert.equal(validators.pack(pack), true, JSON.stringify(validators.pack.errors));
+  assert.equal(
+    validators.verification(verification),
+    true,
+    JSON.stringify(validators.verification.errors),
+  );
+});
+
+test("the golden Packs hold only public key material", () => {
   const privateMembers = new Set(["d", "p", "q", "dp", "dq", "qi", "k", "oth"]);
   const found = [];
   const scan = (value, path) => {
@@ -464,6 +509,7 @@ test("the golden Pack holds only public key material", () => {
     }
   };
   scan(JSON.parse(readFileSync(GOLDEN_PACK_URL, "utf8")), "pack");
+  scan(JSON.parse(readFileSync(NO_DELEGATED_EXP_PACK_URL, "utf8")), "noDelegatedExpPack");
   assert.deepEqual(found, []);
 });
 
