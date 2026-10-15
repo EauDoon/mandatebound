@@ -10,6 +10,13 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Canonical JSON now enforces its UTF-8 byte budget during serialization, rather
+  than after allocating the complete output. Repeated shared values cannot
+  expand a small input into an unbounded intermediate string before rejection;
+  accepted canonical bytes and digest values remain unchanged.
+
 ## [2.0.0] - 2026-10-09
 
 ### Upgrading from 1.2.0

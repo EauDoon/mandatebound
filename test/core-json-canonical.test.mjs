@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 import {
   CanonicalizationError,
   canonicalBytes,
@@ -187,4 +188,39 @@ test("strict JSON limit overrides reject unknown limit names", () => {
   assert.equal(parseStrictJson("null", { maxNodes: 1 }), null);
   assert.equal(parseStrictJson("{}", undefined) instanceof Object, false);
   assert.deepEqual({ ...parseStrictJson("{}", undefined) }, {});
+});
+
+
+test("canonicalization enforces its byte budget before accumulating a large output", () => {
+  // A tiny shared input expands to 200 MB if the cap is checked only after
+  // serialization. Run in a constrained child so regressions cannot exhaust
+  // the test runner, and require the ordinary bounded-input error.
+  const source = `
+    import { canonicalize, CanonicalizationError } from ${JSON.stringify(new URL("../dist/canonical.js", import.meta.url).href)};
+    try {
+      canonicalize(Array(20000).fill("x".repeat(10000)));
+      process.exitCode = 1;
+    } catch (error) {
+      if (!(error instanceof CanonicalizationError) || !error.message.includes("byte length")) throw error;
+      console.log("bounded rejection");
+    }
+  `;
+  const result = spawnSync(process.execPath, ["--max-old-space-size=64", "--input-type=module", "-e", source], {
+    encoding: "utf8", timeout: 10_000, maxBuffer: 16_384,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "bounded rejection");
+});
+
+test("canonical byte accounting includes UTF-8, escapes, keys, and all punctuation", () => {
+  for (const value of [null, true, false, -12, -0, "", "雪💡\n\u0000", [], {},
+    [null, true, false, "雪", { "💡": [1, 2] }], { "\n": "\t", a: { b: [] } }]) {
+    const expected = canonicalize(value);
+    const bytes = Buffer.byteLength(expected, "utf8");
+    assert.equal(canonicalize(value, { maxBytes: bytes }), expected);
+    if (bytes > 1) {
+      assert.throws(() => canonicalize(value, { maxBytes: bytes - 1 }),
+        (error) => error instanceof CanonicalizationError && error.message.includes("byte length"));
+    }
+  }
 });

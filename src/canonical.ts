@@ -46,6 +46,26 @@ function ensureUnicodeScalarString(value: string): void {
 
 interface Counter {
   nodes: number;
+  bytes: number;
+}
+
+function reserveBytes(size: number, limits: CanonicalLimits, counter: Counter): void {
+  if (size > limits.maxBytes - counter.bytes) {
+    throw new CanonicalizationError("Maximum canonical JSON byte length exceeded");
+  }
+  counter.bytes += size;
+}
+
+function serializeString(value: string, limits: CanonicalLimits, counter: Counter): string {
+  // Every UTF-16 code unit needs at least one output byte. Reject oversized
+  // strings before allocating their escaped JSON representation.
+  if (value.length > limits.maxBytes - counter.bytes) {
+    throw new CanonicalizationError("Maximum canonical JSON byte length exceeded");
+  }
+  ensureUnicodeScalarString(value);
+  const encoded = JSON.stringify(value);
+  reserveBytes(Buffer.byteLength(encoded, "utf8"), limits, counter);
+  return encoded;
 }
 
 function serialize(value: unknown, depth: number, limits: CanonicalLimits, counter: Counter): string {
@@ -57,18 +77,21 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
     throw new CanonicalizationError("Maximum canonical JSON node count exceeded");
   }
 
-  if (value === null) return "null";
-  if (value === true) return "true";
-  if (value === false) return "false";
+  if (value === null || typeof value === "boolean") {
+    const encoded = value === null ? "null" : value ? "true" : "false";
+    reserveBytes(encoded.length, limits, counter);
+    return encoded;
+  }
   if (typeof value === "string") {
-    ensureUnicodeScalarString(value);
-    return JSON.stringify(value);
+    return serializeString(value, limits, counter);
   }
   if (typeof value === "number") {
     if (!Number.isSafeInteger(value)) {
       throw new CanonicalizationError("Only safe integers are supported by canonical protocol JSON");
     }
-    return Object.is(value, -0) ? "0" : JSON.stringify(value);
+    const encoded = Object.is(value, -0) ? "0" : JSON.stringify(value);
+    reserveBytes(encoded.length, limits, counter);
+    return encoded;
   }
   if (types.isProxy(value)) {
     throw new CanonicalizationError("Proxy values are not canonicalizable");
@@ -83,8 +106,10 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
     ) {
       throw new CanonicalizationError("Only plain dense JSON arrays are canonicalizable");
     }
+    reserveBytes(2, limits, counter); // Opening and closing brackets.
     const parts: string[] = [];
     for (let index = 0; index < value.length; index += 1) {
+      if (index > 0) reserveBytes(1, limits, counter);
       const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
       if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
         throw new CanonicalizationError("Sparse and accessor-backed arrays are not canonicalizable");
@@ -106,9 +131,10 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
     if (Object.getOwnPropertyNames(record).length !== keys.length) {
       throw new CanonicalizationError("Non-enumerable properties are not canonicalizable");
     }
+    reserveBytes(2, limits, counter); // Opening and closing braces.
     const parts: string[] = [];
     for (const key of keys) {
-      ensureUnicodeScalarString(key);
+      if (parts.length > 0) reserveBytes(1, limits, counter);
       if (UNSAFE_KEYS.has(key)) {
         throw new CanonicalizationError("Unsafe object key is not canonicalizable");
       }
@@ -116,7 +142,9 @@ function serialize(value: unknown, depth: number, limits: CanonicalLimits, count
       if (descriptor === undefined || !descriptor.enumerable || descriptor.get !== undefined || descriptor.set !== undefined) {
         throw new CanonicalizationError("Accessor and non-enumerable properties are not canonicalizable");
       }
-      parts.push(`${JSON.stringify(key)}:${serialize(record[key], depth + 1, limits, counter)}`);
+      const encodedKey = serializeString(key, limits, counter);
+      reserveBytes(1, limits, counter); // Key/value colon.
+      parts.push(`${encodedKey}:${serialize(record[key], depth + 1, limits, counter)}`);
     }
     return `{${parts.join(",")}}`;
   }
@@ -143,11 +171,7 @@ function resolveLimits(overrides?: Partial<CanonicalLimits>): CanonicalLimits {
 /** RFC 8785-compatible canonical JSON for the protocol's safe-integer I-JSON subset. */
 export function canonicalize(value: unknown, overrides?: Partial<CanonicalLimits>): string {
   const limits = resolveLimits(overrides);
-  const result = serialize(value, 0, limits, { nodes: 0 });
-  if (Buffer.byteLength(result, "utf8") > limits.maxBytes) {
-    throw new CanonicalizationError("Maximum canonical JSON byte length exceeded");
-  }
-  return result;
+  return serialize(value, 0, limits, { nodes: 0, bytes: 0 });
 }
 
 export function canonicalBytes(value: unknown, overrides?: Partial<CanonicalLimits>): Uint8Array {
