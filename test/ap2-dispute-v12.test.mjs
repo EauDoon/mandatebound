@@ -1291,6 +1291,39 @@ test("invalid identifiers, duplicated retrievers, and oversized inputs are rejec
   assert.throws(() => packAp2DisputeEvidence(unsafeKey), TypeError);
 });
 
+test("the dispute RFC 3339 guard keeps the full RFC 3339 grammar", () => {
+  const fixture = makeFixture();
+  const baseline = assembleAp2DisputeEvidence(fixture.input);
+  const withoutAsOf = ({ asOf, resolutionDigest, ...rest }) => rest;
+  // A whole second, a sub-second precision other than milliseconds, and a
+  // UTC offset all name the evaluation instant the fixture uses.
+  for (const value of [
+    "2026-07-23T00:00:00Z",
+    "2026-07-23T00:00:00.000000001Z",
+    "2026-07-23T02:00:00+02:00",
+    "2026-07-22T19:00:00-05:00",
+  ]) {
+    const assembled = assembleAp2DisputeEvidence({ ...fixture.input, asOf: value });
+    assert.equal(assembled.asOf, value);
+    assert.equal(assembled.status, baseline.status);
+    assert.deepEqual(withoutAsOf(assembled), withoutAsOf(baseline));
+  }
+  // A calendar date that does not exist, a leap second, an out-of-range
+  // offset, and a missing offset are rejected.
+  for (const value of [
+    "2026-02-31T00:00:00Z",
+    "2026-07-23T23:59:60Z",
+    "2026-07-23T00:00:00+24:00",
+    "2026-07-23T00:00:00+00:60",
+    "2026-07-23T00:00:00",
+  ]) {
+    assert.throws(() => assembleAp2DisputeEvidence({
+      ...fixture.input,
+      asOf: value,
+    }), TypeError);
+  }
+});
+
 test("required autonomous constraints, nested Payment fields, and caller trust IDs fail closed", () => {
   const fixture = makeFixture();
   const underfilled = createMandate({
