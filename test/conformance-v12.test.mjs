@@ -72,7 +72,10 @@ test("published capability declaration for this release matches the runtime stat
     published.disputeProfile.mandateProfileId,
     "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
   );
-  assert.deepEqual(published.disputeProfile.operations, ["resolve", "pack", "verify", "render"]);
+  assert.deepEqual(
+    published.disputeProfile.operations,
+    ["resolve", "pack", "verify", "render", "reconcile"],
+  );
   // The constraint types the resolver evaluates, and the pinned types it
   // still rejects, exactly as the library exports them.
   assert.deepEqual(published.disputeProfile.evaluatedConstraints, AP2_DISPUTE_CONSTRAINT_SUPPORT.evaluated);

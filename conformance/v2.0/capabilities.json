@@ -16,7 +16,8 @@
       "resolve",
       "pack",
       "verify",
-      "render"
+      "render",
+      "reconcile"
     ],
     "evaluatedConstraints": [
       "checkout.allowed_merchants",

@@ -56,6 +56,17 @@ so a retained Pack's verdict moves only where the gates below changed, and its
   declaration publishes them as the optional
   `disputeProfile.evaluatedConstraints` and
   `disputeProfile.failClosedConstraints`.
+- `ap2-dispute reconcile` and `reconcileAp2DisputeEvidencePack` compare the
+  closed Payment Mandate's payee, currency and amount with the merchant-signed
+  Checkout it is bound to. The resolver binds the two only through
+  `transaction_id`, so a payment of 999999 against a signed Checkout total of
+  2500, in another currency, or to another payee resolved `evidence_verified`
+  and nothing in the resolution, the Pack verification or the timeline showed
+  the difference. The `MandateBoundAp2PaymentReconciliation/v1` output carries
+  only `matched`, `mismatched` or `not_comparable` per check, never amounts or
+  identifiers, and reads only claims verified inside an anchored,
+  `evidence_verified` Pack. It is a review signal: it never changes the
+  resolution or `verify`.
 
 ### Changed
 

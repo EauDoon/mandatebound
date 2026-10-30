@@ -29,6 +29,7 @@ import {
   assembleAp2DisputeEvidence,
   createAp2EvidenceTimeline,
   packAp2DisputeEvidence,
+  reconcileAp2DisputeEvidencePack,
   renderAp2EvidenceTimelineHtml,
   verifyAp2DisputeEvidencePack,
   type AssembleAp2DisputeEvidenceInput,
@@ -186,7 +187,9 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 // --help prints it, so the two cannot drift apart.
 const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
 const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
-const AP2_DISPUTE_ACTIONS = Object.freeze(["resolve", "pack", "verify", "render"] as const);
+const AP2_DISPUTE_ACTIONS = Object.freeze([
+  "resolve", "pack", "verify", "render", "reconcile",
+] as const);
 const OPERATOR_ACTIONS = Object.freeze([
   "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
   "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect",
@@ -206,7 +209,11 @@ const CLI_COMMANDS = Object.freeze([
   { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack", actions: CASEPACK_ACTIONS },
   { name: "policy", summary: "Validate, test, or diff a policy pack", actions: POLICY_ACTIONS },
   { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
-  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence", actions: AP2_DISPUTE_ACTIONS },
+  {
+    name: "ap2-dispute",
+    summary: "Resolve, pack, verify, render or reconcile AP2 dispute evidence",
+    actions: AP2_DISPUTE_ACTIONS,
+  },
   { name: "conformance", summary: "Print the bounded capability statement" },
   {
     name: "operator",
@@ -925,7 +932,9 @@ export async function runCli(
       }
       case "ap2-dispute": {
         const invocation = requireSubcommandInput(args, AP2_DISPUTE_ACTIONS);
-        const needsPackAnchor = invocation.action === "verify" || invocation.action === "render";
+        const needsPackAnchor = invocation.action === "verify" ||
+          invocation.action === "render" ||
+          invocation.action === "reconcile";
         assertAllowedOptions(
           args,
           needsPackAnchor ? ["input", "expected-pack-digest"] : ["input"],
@@ -979,6 +988,16 @@ export async function runCli(
         const packInput = hasExactKeys(input, ["ok", "result"]) && input["ok"] === true
           ? input["result"]
           : input;
+        if (invocation.action === "reconcile") {
+          const reconciliation = reconcileAp2DisputeEvidencePack(packInput, verificationOptions);
+          const exit = reconciliation.packDigest === null
+            ? CLI_EXIT.INVALID
+            : reconciliation.verificationStatus === "verified" && reconciliation.summary === "consistent"
+              ? CLI_EXIT.SUCCESS
+              : CLI_EXIT.CONFLICT;
+          writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: reconciliation });
+          return exit;
+        }
         const verification = verifyAp2DisputeEvidencePack(packInput, verificationOptions);
         if (invocation.action === "verify") {
           writeJson(stdout, { ok: verification.status === "verified", result: verification });

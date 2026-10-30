@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { isSha256Digest, sha256Digest } from "./canonical.js";
-import type { Sha256Digest } from "./domain.js";
+import type { JsonObject, Sha256Digest } from "./domain.js";
 import { parseStrictJson } from "./strict-json.js";
 import {
   AP2_V020_MANDATE_CHAIN_PROFILE,
@@ -12,6 +12,7 @@ import {
   type EvidenceCoverageItem,
   type InteropIssue,
   type InteropVerification,
+  type VerifiedAp2CheckoutJwt,
   type VerifiedAp2Mandate,
   type VerifiedAp2Receipt,
   type VerifyAp2MandateOptions,
@@ -546,10 +547,10 @@ function verifyEmbeddedCheckoutJwt(
   checkoutMandate: SelectedInternal | null,
   input: AssembleAp2DisputeEvidenceInput,
   issues: Ap2DisputeIssue[],
-): boolean {
-  if (checkoutMandate?.verifiedMandate === undefined) return false;
+): VerifiedAp2CheckoutJwt | null {
+  if (checkoutMandate?.verifiedMandate === undefined) return null;
   const token = checkoutMandate.verifiedMandate.claims.checkout_jwt;
-  if (typeof token !== "string") return false;
+  if (typeof token !== "string") return null;
   try {
     const report = verifyAp2CheckoutJwt({
       ...input.verificationPlan.checkoutJwt,
@@ -565,7 +566,7 @@ function verifyEmbeddedCheckoutJwt(
         checkoutMandate.output.sourceRefs,
       ));
     }
-    return report.upstreamValid && report.evidenceEligible && report.value !== null;
+    return report.upstreamValid && report.evidenceEligible ? report.value : null;
   } catch {
     issues.push(makeIssue(
       "AP2_DISPUTE_VERIFICATION_PLAN_INVALID",
@@ -574,7 +575,7 @@ function verifyEmbeddedCheckoutJwt(
       "invalid",
       checkoutMandate.output.sourceRefs,
     ));
-    return false;
+    return null;
   }
 }
 
@@ -748,10 +749,29 @@ function materializedAttempts(
     })));
 }
 
+/**
+ * The resolution plus the verified claims it was derived from. The claims
+ * never leave this module except as the reconciliation's match states.
+ */
+interface AssembledInternal {
+  readonly resolution: Ap2DisputeEvidenceResolution;
+  /** Claims of the merchant-signed Checkout JWT, when its signature verified. */
+  readonly checkoutClaims: JsonObject | null;
+  /** Claims of the closed Payment Mandate, when the Mandate was selected. */
+  readonly paymentClaims: JsonObject | null;
+}
+
 function assemble(
   input: AssembleAp2DisputeEvidenceInput,
   attempts: readonly Ap2DisputeRetrievalAttempt[],
 ): Ap2DisputeEvidenceResolution {
+  return assembleInternal(input, attempts).resolution;
+}
+
+function assembleInternal(
+  input: AssembleAp2DisputeEvidenceInput,
+  attempts: readonly Ap2DisputeRetrievalAttempt[],
+): AssembledInternal {
   const issues: Ap2DisputeIssue[] = [];
   const candidates = validateAndCollect(input, issues);
   for (const attempt of attempts) {
@@ -799,7 +819,8 @@ function assemble(
     issues,
     openCheckoutHash,
   );
-  const checkoutJwtVerified = verifyEmbeddedCheckoutJwt(checkoutMandate, input, issues);
+  const verifiedCheckoutJwt = verifyEmbeddedCheckoutJwt(checkoutMandate, input, issues);
+  const checkoutJwtVerified = verifiedCheckoutJwt !== null;
   const checkoutReceipt = selectReceipt(
     "checkout_receipt",
     uniqueCandidate("checkout_receipt", candidates, issues),
@@ -895,10 +916,14 @@ function assemble(
     legalEffect: LEGAL_EFFECT,
     disputeOutcome: "not-determined" as const,
   });
-  return Object.freeze({
-    ...material,
-    resolutionDigest: sha256Digest(material),
-  });
+  return {
+    resolution: Object.freeze({
+      ...material,
+      resolutionDigest: sha256Digest(material),
+    }),
+    checkoutClaims: verifiedCheckoutJwt?.claims ?? null,
+    paymentClaims: paymentMandate?.verifiedMandate?.claims ?? null,
+  };
 }
 
 /** Assemble and verify caller-supplied AP2 dispute evidence without network access. */
@@ -1846,4 +1871,128 @@ export function renderAp2EvidenceTimelineHtml(
     ? "<li>None</li>"
     : verification.issues.map((issue) => `<li><code>${escapeHtml(issue.code)}</code>: ${escapeHtml(issue.message)}</li>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>MandateBound AP2 Evidence Timeline</title><style>body{font:15px/1.45 system-ui,sans-serif;margin:2rem;color:#17202a;background:#fff}h1{margin-bottom:.25rem}.meta{color:#52606d;margin-bottom:1.5rem}.notice{padding:.8rem 1rem;background:#fff7d6;border-left:4px solid #d6a800}table{border-collapse:collapse;width:100%;margin-top:1rem}th,td{border:1px solid #d9e2ec;padding:.55rem;text-align:left;vertical-align:top}th{background:#f5f7fa}code{overflow-wrap:anywhere}.verified{color:#176b35}.unresolved{color:#9b1c1c}:focus-visible{outline:3px solid #1675dc;outline-offset:4px}.table-scroll{overflow-x:auto}.table-scroll table{min-width:36rem}caption{text-align:left;font-weight:650;padding:.5rem 0}@media print{body{margin:.5in}thead{display:table-header-group}tr{break-inside:avoid}.table-scroll{overflow:visible}.table-scroll table{min-width:0}}</style></head><body><h1>AP2 Evidence Timeline</h1><p class="meta">Pack format ${escapeHtml(pack.releaseVersion)} | transaction <code>${escapeHtml(pack.transactionId)}</code> | <strong class="${escapeHtml(verification.status)}">${escapeHtml(verification.status)}</strong></p><p class="notice">Non-binding technical evidence report. Revocation states are imported reports, not authenticated facts. Raw Mandates, Receipt JWTs, Checkout JWTs, and revocation snapshot bytes are intentionally omitted from this rendering.</p><h2>Timeline</h2><div class="table-scroll" role="region" aria-label="Evidence timeline" tabindex="0"><table><caption>Metadata only; raw artifacts are omitted</caption><thead><tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Label</th><th scope="col">State</th><th scope="col">Digest</th><th scope="col">Sources</th></tr></thead><tbody>${rows}</tbody></table></div><h2>Verification issues</h2><ul>${issueRows}</ul><p>Pack digest: <code>${escapeHtml(pack.packDigest)}</code><br>Report digest: <code>${escapeHtml(verification.reportDigest)}</code><br>Legal effect: ${escapeHtml(verification.legalEffect)}</p></body></html>`;
+}
+
+export type Ap2PaymentReconciliationCheckName =
+  | "payee_matches_checkout_merchant"
+  | "currency_matches_checkout"
+  | "amount_matches_checkout_total";
+export type Ap2PaymentReconciliationState = "matched" | "mismatched" | "not_comparable";
+
+export interface Ap2PaymentReconciliationCheck {
+  readonly check: Ap2PaymentReconciliationCheckName;
+  readonly state: Ap2PaymentReconciliationState;
+}
+
+/**
+ * A non-gating review signal: whether the closed Payment Mandate's payee,
+ * currency and amount match the merchant-signed Checkout it is bound to. It
+ * carries match states only, never amounts, identifiers or tokens, and it
+ * never changes the resolution or the Pack verification.
+ */
+export interface Ap2PaymentReconciliation {
+  readonly schemaId: "MandateBoundAp2PaymentReconciliation/v1";
+  readonly transactionId: string | null;
+  readonly packDigest: Sha256Digest | null;
+  readonly verificationStatus: "verified" | "unresolved";
+  readonly verificationReportDigest: Sha256Digest;
+  readonly checks: readonly Ap2PaymentReconciliationCheck[];
+  readonly summary: "consistent" | "inconsistent" | "not_comparable";
+  readonly legalEffect: typeof LEGAL_EFFECT;
+  readonly reconciliationDigest: Sha256Digest;
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function compareState(left: unknown, right: unknown): Ap2PaymentReconciliationState {
+  if (!nonEmptyString(left) || !nonEmptyString(right)) return "not_comparable";
+  return left === right ? "matched" : "mismatched";
+}
+
+function reconcileVerifiedClaims(
+  checkout: JsonObject | null,
+  payment: JsonObject | null,
+): readonly Ap2PaymentReconciliationCheck[] {
+  const merchant = isRecord(checkout?.merchant) ? checkout.merchant : null;
+  const payee = isRecord(payment?.payee) ? payment.payee : null;
+  const paid = isRecord(payment?.payment_amount) ? payment.payment_amount : null;
+  const payeeState = checkout === null || payment === null
+    ? "not_comparable"
+    : compareState(payee?.id, merchant?.id);
+  const currencyState = checkout === null || payment === null
+    ? "not_comparable"
+    : compareState(paid?.currency, checkout.currency);
+  let amountState: Ap2PaymentReconciliationState = "not_comparable";
+  if (currencyState === "matched" && checkout !== null && Array.isArray(checkout.totals)) {
+    const totals = checkout.totals.filter((entry) => isRecord(entry) && entry.type === "total");
+    const total = totals.length === 1 && isRecord(totals[0]) ? totals[0].amount : undefined;
+    if (Number.isSafeInteger(total) && Number.isSafeInteger(paid?.amount)) {
+      amountState = total === paid?.amount ? "matched" : "mismatched";
+    }
+  }
+  return Object.freeze([
+    Object.freeze({ check: "payee_matches_checkout_merchant" as const, state: payeeState }),
+    Object.freeze({ check: "currency_matches_checkout" as const, state: currencyState }),
+    Object.freeze({ check: "amount_matches_checkout_total" as const, state: amountState }),
+  ]);
+}
+
+/**
+ * Compare the closed Payment Mandate with the merchant-signed Checkout it is
+ * bound to: payee against merchant, currency, and amount against the single
+ * `total` entry. The checks read only claims verified inside this Pack, and
+ * only when its digest and retained anchor match and its resolution is
+ * evidence_verified; otherwise every check is not_comparable. This is a review
+ * signal, not a gate and not a dispute outcome.
+ */
+export function reconcileAp2DisputeEvidencePack(
+  value: unknown,
+  options: VerifyAp2DisputeEvidencePackOptions,
+): Ap2PaymentReconciliation {
+  const verification = verifyAp2DisputeEvidencePack(value, options);
+  let checkout: JsonObject | null = null;
+  let payment: JsonObject | null = null;
+  const resolution = verification.resolution;
+  if (
+    verification.digestValid &&
+    verification.anchorMatched &&
+    resolution !== null &&
+    resolution.status === "evidence_verified"
+  ) {
+    const pack = value as Ap2DisputeEvidencePack;
+    try {
+      const assembled = assembleInternal({
+        transactionId: pack.transactionId,
+        asOf: pack.asOf,
+        verificationPlan: pack.verificationPlan,
+        sources: pack.sources,
+      }, materializedAttempts(pack.sources));
+      if (assembled.resolution.resolutionDigest === resolution.resolutionDigest) {
+        checkout = assembled.checkoutClaims;
+        payment = assembled.paymentClaims;
+      }
+    } catch {
+      // The verified resolution already proved the embedded evidence; a
+      // failure here leaves every check not_comparable.
+    }
+  }
+  const checks = reconcileVerifiedClaims(checkout, payment);
+  const summary = checks.some((entry) => entry.state === "mismatched")
+    ? "inconsistent" as const
+    : checks.every((entry) => entry.state === "matched")
+      ? "consistent" as const
+      : "not_comparable" as const;
+  const material = Object.freeze({
+    schemaId: "MandateBoundAp2PaymentReconciliation/v1" as const,
+    transactionId: resolution?.transactionId ?? null,
+    packDigest: verification.packDigest,
+    verificationStatus: verification.status,
+    verificationReportDigest: verification.reportDigest,
+    checks,
+    summary,
+    legalEffect: LEGAL_EFFECT,
+  });
+  return Object.freeze({ ...material, reconciliationDigest: sha256Digest(material) });
 }

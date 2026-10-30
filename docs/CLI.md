@@ -194,15 +194,22 @@ when valid, 3 when invalid, and 5 when `test` runs but an expectation fails.
 
 ## ap2-dispute
 
-Actions: `resolve`, `pack`, `verify`, `render`. `resolve` reads
-`{transactionId, asOf, verificationPlan, sources}`; `pack` adds `createdAt`,
-`checkoutVersions` and `revocations`. `verify` and `render` read a Pack, or the
-`{ok: true, result}` envelope that `pack` printed, and require an independently
-retained `--expected-pack-digest`, without which they exit 2. `render` accepts
-`--format json` or `html`.
+Actions: `resolve`, `pack`, `verify`, `render`, `reconcile`.
+`resolve` reads `{transactionId, asOf, verificationPlan, sources}`; `pack` adds
+`createdAt`, `checkoutVersions` and `revocations`. `verify`, `render` and
+`reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
+printed, and require an independently retained `--expected-pack-digest`, without
+which they exit 2. `render` accepts `--format json` or `html`.
 
 Exit 0 for `evidence_verified` or `verified`, 5 for `unresolved`, and 3 for
-invalid input or a Pack that is not even well formed. `pack` exits 0 or 3. See
+invalid input or a Pack that is not even well formed. `pack` exits 0 or 3.
+
+`reconcile` compares the closed Payment Mandate with the merchant-signed
+Checkout it is bound to and prints `matched`, `mismatched` or `not_comparable`
+for the payee, the currency and the amount against the Checkout `total`. It is
+a review signal and never changes `verify`. It exits 0 when the Pack verifies
+and every check matches, 5 for an unverified Pack or any mismatched or
+noncomparable check, and 3 for a Pack that is not well formed. See
 [V1.2 profile](V1_2.md).
 
 ## operator
