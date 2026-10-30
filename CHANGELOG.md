@@ -80,8 +80,10 @@ below for direct callers too.
   2500, in another currency, or to another payee resolved `evidence_verified`
   and nothing in the resolution, the Pack verification or the timeline showed
   the difference. The `MandateBoundAp2PaymentReconciliation/v1` output carries
-  only `matched`, `mismatched` or `not_comparable` per check, never amounts or
-  identifiers, and reads only claims verified inside an anchored,
+  only `matched`, `mismatched` or `not_comparable` per check. Besides the AP2
+  `transactionId` and the `packDigest` that name the reviewed Pack, it never
+  carries amounts, party identifiers, items, instruments or tokens, and it
+  reads only claims verified inside an anchored,
   `evidence_verified` Pack. It is a review signal: it never changes the
   resolution or `verify`.
 - `ap2-dispute render --format markdown|csv`, with

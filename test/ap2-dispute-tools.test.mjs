@@ -149,7 +149,7 @@ test("reconcile compares nothing for a tampered, mis-anchored or unresolved Pack
   assert.equal(invalid.summary, "not_comparable");
 });
 
-test("reconcile emits match states only, never amounts, identifiers or tokens", () => {
+test("reconcile names the Pack by transactionId and packDigest but never echoes amounts, party ids or tokens", () => {
   const fixture = makeFixture({
     checkoutMerchantId: "merchant-secret-41",
     allowedMerchantId: "merchant-secret-41",
@@ -165,6 +165,9 @@ test("reconcile emits match states only, never amounts, identifiers or tokens", 
     "schemaId", "transactionId", "packDigest", "verificationStatus", "verificationReportDigest",
     "checks", "summary", "legalEffect", "reconciliationDigest",
   ]);
+  // The only identifiers are the ones that name the reviewed Pack.
+  assert.equal(result.transactionId, fixture.transactionId);
+  assert.equal(result.packDigest, pack.packDigest);
   for (const entry of result.checks) assert.deepEqual(Object.keys(entry), ["check", "state"]);
   const rendered = JSON.stringify(result);
   for (const secret of [

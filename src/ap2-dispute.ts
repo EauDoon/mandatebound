@@ -1970,9 +1970,11 @@ export interface Ap2PaymentReconciliationCheck {
 
 /**
  * A non-gating review signal: whether the closed Payment Mandate's payee,
- * currency and amount match the merchant-signed Checkout it is bound to. It
- * carries match states only, never amounts, identifiers or tokens, and it
- * never changes the resolution or the Pack verification.
+ * currency and amount match the merchant-signed Checkout it is bound to. Per
+ * check it carries a match state only. Besides the AP2 transaction ID and the
+ * Pack digest that name the reviewed Pack, it never carries amounts, party
+ * identifiers, items, instruments or tokens, and it never changes the
+ * resolution or the Pack verification.
  */
 export interface Ap2PaymentReconciliation {
   readonly schemaId: "MandateBoundAp2PaymentReconciliation/v1";
