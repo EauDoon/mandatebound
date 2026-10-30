@@ -21,6 +21,7 @@ import {
 } from "./ucp-ap2.js";
 import { AP2_PINNED_CONSTRAINT_SUPPORT } from "./ucp-ap2/mandate-verify.js";
 import { parseTimestampMillis } from "./ucp-ap2/primitives.js";
+import { csvCell, markdownText } from "./text-export.js";
 import { AP2_DISPUTE_FORMAT_RELEASE, LEGAL_EFFECT } from "./version.js";
 
 export const AP2_DISPUTE_EVIDENCE_PROFILE = Object.freeze({
@@ -1871,6 +1872,89 @@ export function renderAp2EvidenceTimelineHtml(
     ? "<li>None</li>"
     : verification.issues.map((issue) => `<li><code>${escapeHtml(issue.code)}</code>: ${escapeHtml(issue.message)}</li>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>MandateBound AP2 Evidence Timeline</title><style>body{font:15px/1.45 system-ui,sans-serif;margin:2rem;color:#17202a;background:#fff}h1{margin-bottom:.25rem}.meta{color:#52606d;margin-bottom:1.5rem}.notice{padding:.8rem 1rem;background:#fff7d6;border-left:4px solid #d6a800}table{border-collapse:collapse;width:100%;margin-top:1rem}th,td{border:1px solid #d9e2ec;padding:.55rem;text-align:left;vertical-align:top}th{background:#f5f7fa}code{overflow-wrap:anywhere}.verified{color:#176b35}.unresolved{color:#9b1c1c}:focus-visible{outline:3px solid #1675dc;outline-offset:4px}.table-scroll{overflow-x:auto}.table-scroll table{min-width:36rem}caption{text-align:left;font-weight:650;padding:.5rem 0}@media print{body{margin:.5in}thead{display:table-header-group}tr{break-inside:avoid}.table-scroll{overflow:visible}.table-scroll table{min-width:0}}</style></head><body><h1>AP2 Evidence Timeline</h1><p class="meta">Pack format ${escapeHtml(pack.releaseVersion)} | transaction <code>${escapeHtml(pack.transactionId)}</code> | <strong class="${escapeHtml(verification.status)}">${escapeHtml(verification.status)}</strong></p><p class="notice">Non-binding technical evidence report. Revocation states are imported reports, not authenticated facts. Raw Mandates, Receipt JWTs, Checkout JWTs, and revocation snapshot bytes are intentionally omitted from this rendering.</p><h2>Timeline</h2><div class="table-scroll" role="region" aria-label="Evidence timeline" tabindex="0"><table><caption>Metadata only; raw artifacts are omitted</caption><thead><tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Label</th><th scope="col">State</th><th scope="col">Digest</th><th scope="col">Sources</th></tr></thead><tbody>${rows}</tbody></table></div><h2>Verification issues</h2><ul>${issueRows}</ul><p>Pack digest: <code>${escapeHtml(pack.packDigest)}</code><br>Report digest: <code>${escapeHtml(verification.reportDigest)}</code><br>Legal effect: ${escapeHtml(verification.legalEffect)}</p></body></html>`;
+}
+
+const TIMELINE_NOTICE =
+  "Non-binding technical evidence report. Revocation states are imported reports, not authenticated facts. Raw Mandates, Receipt JWTs, Checkout JWTs, and revocation snapshot bytes are intentionally omitted from this rendering.";
+
+/**
+ * Render the metadata-only AP2 evidence timeline as Markdown for a ticket or
+ * case file. Like the HTML rendering, it verifies the Pack against the
+ * independently retained digest itself and never accepts a supplied report.
+ */
+export function renderAp2EvidenceTimelineMarkdown(
+  pack: Ap2DisputeEvidencePack,
+  options: VerifyAp2DisputeEvidencePackOptions,
+): string {
+  assertPackShape(pack);
+  const verification = verifyAp2DisputeEvidencePack(pack, options);
+  const timeline = buildAp2EvidenceTimeline(pack, verification);
+  const lines = [
+    "# AP2 Evidence Timeline",
+    "",
+    `- Pack format: ${markdownText(pack.releaseVersion)}`,
+    `- Transaction: ${markdownText(pack.transactionId)}`,
+    `- Status: ${markdownText(verification.status)}`,
+    "",
+    markdownText(TIMELINE_NOTICE),
+    "",
+    "## Timeline",
+    "",
+    "| Time | Event | Label | State | Digest | Sources |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...timeline.map((event) => `| ${[
+      event.occurredAt,
+      event.eventType,
+      event.label,
+      event.state,
+      event.digest ?? "-",
+      event.sourceRefs.join(", ") || "-",
+    ].map(markdownText).join(" | ")} |`),
+    "",
+    "## Verification issues",
+    "",
+    ...(verification.issues.length === 0
+      ? ["None."]
+      : verification.issues.map((issue) =>
+        `- ${markdownText(issue.code)}: ${markdownText(issue.message)}`)),
+    "",
+    "## Digests",
+    "",
+    `- Pack digest: ${markdownText(pack.packDigest)}`,
+    `- Retained anchor: ${markdownText(verification.expectedPackDigest ?? "missing")}`,
+    `- Report digest: ${markdownText(verification.reportDigest)}`,
+    `- Legal effect: ${markdownText(verification.legalEffect)}`,
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Render the metadata-only AP2 evidence timeline as RFC 4180 CSV, one row per
+ * event, with formula-neutralized cells and CRLF line endings. It verifies the
+ * Pack against the independently retained digest itself.
+ */
+export function renderAp2EvidenceTimelineCsv(
+  pack: Ap2DisputeEvidencePack,
+  options: VerifyAp2DisputeEvidencePackOptions,
+): string {
+  assertPackShape(pack);
+  const verification = verifyAp2DisputeEvidencePack(pack, options);
+  const timeline = buildAp2EvidenceTimeline(pack, verification);
+  const rows: string[][] = [[
+    "transactionId", "verificationStatus", "occurredAt", "eventType", "label", "state", "digest",
+    "sourceRefs", "legalEffect",
+  ], ...timeline.map((event) => [
+    pack.transactionId,
+    verification.status,
+    event.occurredAt,
+    event.eventType,
+    event.label,
+    event.state,
+    event.digest ?? "",
+    event.sourceRefs.join(";"),
+    verification.legalEffect,
+  ])];
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
 
 export type Ap2PaymentReconciliationCheckName =

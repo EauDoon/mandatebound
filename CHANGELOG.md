@@ -67,6 +67,13 @@ so a retained Pack's verdict moves only where the gates below changed, and its
   identifiers, and reads only claims verified inside an anchored,
   `evidence_verified` Pack. It is a review signal: it never changes the
   resolution or `verify`.
+- `ap2-dispute render --format markdown|csv`, with
+  `renderAp2EvidenceTimelineMarkdown` and `renderAp2EvidenceTimelineCsv`, export
+  the metadata-only AP2 evidence timeline for tickets and spreadsheets, as
+  `case-report` already does for CasePacks. Like the HTML rendering, both verify
+  the Pack against the retained digest themselves. The Markdown uses the
+  CasePack report escaper, and the CSV quotes every cell, neutralizes formulas
+  and ends lines with CRLF. JSON and HTML output are unchanged.
 
 ### Changed
 

@@ -199,7 +199,8 @@ Actions: `resolve`, `pack`, `verify`, `render`, `reconcile`.
 `createdAt`, `checkoutVersions` and `revocations`. `verify`, `render` and
 `reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
 printed, and require an independently retained `--expected-pack-digest`, without
-which they exit 2. `render` accepts `--format json` or `html`.
+which they exit 2. `render` accepts `--format json`, `html`, `markdown` or
+`csv`; the CSV has one row per timeline event and CRLF line endings.
 
 Exit 0 for `evidence_verified` or `verified`, 5 for `unresolved`, and 3 for
 invalid input or a Pack that is not even well formed. `pack` exits 0 or 3.

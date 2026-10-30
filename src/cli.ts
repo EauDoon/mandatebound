@@ -30,7 +30,9 @@ import {
   createAp2EvidenceTimeline,
   packAp2DisputeEvidence,
   reconcileAp2DisputeEvidencePack,
+  renderAp2EvidenceTimelineCsv,
   renderAp2EvidenceTimelineHtml,
+  renderAp2EvidenceTimelineMarkdown,
   verifyAp2DisputeEvidencePack,
   type AssembleAp2DisputeEvidenceInput,
   type PackAp2DisputeEvidenceInput,
@@ -944,7 +946,7 @@ export async function runCli(
           : null;
         const format = assertOutputFormat(
           args,
-          invocation.action === "render" ? ["json", "html"] : ["json"],
+          invocation.action === "render" ? ["json", "html", "markdown", "csv"] : ["json"],
         );
         const input = asObject(await readInput(invocation.path, stdin, MAX_AP2_CLI_INPUT_BYTES));
         if (invocation.action === "resolve") {
@@ -1004,11 +1006,14 @@ export async function runCli(
           if (verification.packDigest === null) return CLI_EXIT.INVALID;
           return verification.status === "verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
         }
-        if (format === "html") {
+        if (format !== "json") {
           if (verification.packDigest === null) {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Evidence Pack input is invalid.");
           }
-          stdout.write(renderAp2EvidenceTimelineHtml(
+          const render = format === "html"
+            ? renderAp2EvidenceTimelineHtml
+            : format === "markdown" ? renderAp2EvidenceTimelineMarkdown : renderAp2EvidenceTimelineCsv;
+          stdout.write(render(
             packInput as Parameters<typeof renderAp2EvidenceTimelineHtml>[0],
             verificationOptions,
           ));
