@@ -64,7 +64,7 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function hasOwn(value: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
+  return Object.hasOwn(value, key);
 }
 
 export function strictUtf8(bytes: Uint8Array): string {

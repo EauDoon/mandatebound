@@ -10,6 +10,15 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+### Changed
+
+- The AP2 dispute module now shares the UCP/AP2 RFC 3339 timestamp guard
+  instead of carrying a second copy of the same grammar, calendar bounds and
+  instant parse. The accepted values, the parsed instants and the
+  dispute-facing error type and message are unchanged.
+- Own-property checks use the platform `Object.hasOwn`, and the memory store
+  calls `structuredClone` directly. Behavior is unchanged.
+
 ### Fixed
 
 - Canonical JSON now enforces its UTF-8 byte budget during serialization, rather

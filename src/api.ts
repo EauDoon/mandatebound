@@ -187,7 +187,7 @@ function loggerEvent(
 function resolveLimits(overrides: Partial<ApiLimits> | undefined): ApiLimits {
   if (overrides !== undefined) {
     for (const name of Object.keys(overrides)) {
-      if (!Object.prototype.hasOwnProperty.call(DEFAULT_API_LIMITS, name)) {
+      if (!Object.hasOwn(DEFAULT_API_LIMITS, name)) {
         throw new TypeError(`Unknown API limit: ${name}`);
       }
     }

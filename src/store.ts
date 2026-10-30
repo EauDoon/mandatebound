@@ -86,10 +86,6 @@ export function storeRecordHash(body: RecordBody): Sha256Digest {
   return sha256Digest(canonicalize(body));
 }
 
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
-
 function isRecord(value: unknown): value is StoreRecord {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<StoreRecord>;
@@ -316,17 +312,17 @@ export class MemoryStore implements DecisionAppealStore {
       if (!verification.valid) {
         throw new StoreError("ALB_STORE_CORRUPT", "Store history is invalid.");
       }
-      for (const record of options.records) this.indexRecord(clone(record));
+      for (const record of options.records) this.indexRecord(structuredClone(record));
     }
   }
 
   private indexRecord(record: StoreRecord): void {
     this.records.push(record);
     if (record.recordType === "decision") {
-      this.decisions.set(record.entityId, clone(record.payload as LiabilityDecision));
+      this.decisions.set(record.entityId, structuredClone(record.payload as LiabilityDecision));
       return;
     }
-    const event = clone(record.payload as AppealEvent);
+    const event = structuredClone(record.payload as AppealEvent);
     const existing = this.appeals.get(event.appealId) ?? [];
     existing.push(event);
     this.appeals.set(event.appealId, existing);
@@ -364,7 +360,7 @@ export class MemoryStore implements DecisionAppealStore {
       recordType,
       recordId,
       entityId,
-      payload: clone(payload),
+      payload: structuredClone(payload),
     };
     return { ...body, recordHash: storeRecordHash(body) };
   }
@@ -375,7 +371,7 @@ export class MemoryStore implements DecisionAppealStore {
       assertPayloadValid("decision", decision);
       const existing = this.decisions.get(decision.artifactId);
       if (existing !== undefined) {
-        if (canonicalize(existing) === canonicalize(decision)) return clone(existing);
+        if (canonicalize(existing) === canonicalize(decision)) return structuredClone(existing);
         throw new StoreError("ALB_STORE_CONFLICT", "Decision identifier already exists.");
       }
       if (decision.supersedesDecisionId !== undefined) {
@@ -399,14 +395,14 @@ export class MemoryStore implements DecisionAppealStore {
       const record = this.nextRecord("decision", `decision:${decision.artifactId}`, decision.artifactId, decision);
       await this.persist([record]);
       this.indexRecord(record);
-      return clone(decision);
+      return structuredClone(decision);
     });
   }
 
   public async getDecision(decisionId: string): Promise<LiabilityDecision | undefined> {
     this.ensureOpen();
     const decision = this.decisions.get(decisionId);
-    return decision === undefined ? undefined : clone(decision);
+    return decision === undefined ? undefined : structuredClone(decision);
   }
 
   public async appendAppeal(event: AppealEvent): Promise<AppealHistory> {
@@ -489,7 +485,7 @@ export interface JsonlStoreOptions {
 
 export function assertKnownJsonlStoreLimits(options: JsonlStoreOptions): void {
   for (const name of Object.keys(options)) {
-    if (!Object.prototype.hasOwnProperty.call(DEFAULT_JSONL_STORE_LIMITS, name)) {
+    if (!Object.hasOwn(DEFAULT_JSONL_STORE_LIMITS, name)) {
       throw new TypeError(`Unknown store limit: ${name}`);
     }
   }

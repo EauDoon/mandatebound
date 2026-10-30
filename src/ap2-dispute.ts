@@ -18,6 +18,7 @@ import {
   type VerifyAp2ReceiptOptions,
   type VerifyAp2CheckoutJwtOptions,
 } from "./ucp-ap2.js";
+import { parseTimestampMillis } from "./ucp-ap2/primitives.js";
 import { AP2_DISPUTE_FORMAT_RELEASE, LEGAL_EFFECT } from "./version.js";
 
 export const AP2_DISPUTE_EVIDENCE_PROFILE = Object.freeze({
@@ -286,10 +287,6 @@ interface SelectedInternal {
 
 const SOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
-const RFC3339_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
-const RFC3339_PARTS_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const MAX_SOURCES = 16;
 const MAX_ARTIFACTS = 64;
 const MAX_ARTIFACT_TOKEN_BYTES = 1_048_576;
@@ -325,34 +322,13 @@ const ALLOWED_SOURCE_ROLES: Readonly<Record<
 });
 
 function parseTimestamp(value: string, path: string): number {
-  const match = RFC3339_PATTERN.test(value) ? RFC3339_PARTS_PATTERN.exec(value) : null;
-  if (match === null) throw new TypeError(`Invalid timestamp at ${path}`);
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
-  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > (daysInMonth[month - 1] ?? 0) ||
-    hour > 23 ||
-    minute > 59 ||
-    second > 59 ||
-    offsetHour > 23 ||
-    offsetMinute > 59
-  ) {
+  // The RFC 3339 grammar, the calendar bounds and the instant parse live in
+  // one place. This wrapper keeps the dispute-facing error contract.
+  try {
+    return parseTimestampMillis(value, path);
+  } catch {
     throw new TypeError(`Invalid timestamp at ${path}`);
   }
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) throw new TypeError(`Invalid timestamp at ${path}`);
-  return parsed;
 }
 
 function validateTransactionId(value: string): void {
