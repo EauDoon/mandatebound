@@ -56,7 +56,7 @@ Loss-allocation policy remains a bounded downstream use of the evidence, not the
 
 ### AP2 dispute evidence resolution
 
-The v1.2 resolver uses AP2 `transaction_id` only as a correlation key. It does not treat that identifier as retrieval authority. Materialized sources or caller-supplied adapters provide exact tokens; MandateBound verifies direct and delegated Mandates, required autonomous constraints, issuer and merchant signatures, Checkout bindings, both terminal-Mandate Receipt references, and cross-source consistency.
+The v1.2 resolver uses AP2 `transaction_id` only as a correlation key. It does not treat that identifier as retrieval authority. Materialized sources or caller-supplied adapters provide exact tokens; MandateBound verifies direct and delegated Mandates, required autonomous constraints, the payment amount-range, payee, instrument and PISP constraints, issuer and merchant signatures, Checkout bindings, both terminal-Mandate Receipt references, and cross-source consistency.
 
 The positive `evidence_verified` status is an integrity statement under the named AP2 v0.2.0 profile. It is not a claim result, proof of complete history, or legal finding.
 

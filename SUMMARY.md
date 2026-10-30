@@ -6,7 +6,7 @@ MandateBound is an open-source evidence-readiness and deterministic dispute-repl
 
 ## v1.2 addition
 
-MandateBound v1.2 retrieves through caller-supplied adapters or assembles materialized responses for the four AP2 v0.2.0 dispute artifacts. It verifies direct and delegated Mandates, required autonomous constraints, the merchant Checkout JWT, Receipt signatures and terminal-Mandate references, historical key pins, and cross-source consistency.
+MandateBound v1.2 retrieves through caller-supplied adapters or assembles materialized responses for the four AP2 v0.2.0 dispute artifacts. It verifies direct and delegated Mandates, required autonomous constraints, the payment amount-range, payee, instrument and PISP constraints, the merchant Checkout JWT, Receipt signatures and terminal-Mandate references, historical key pins, and cross-source consistency.
 
 The Evidence Pack workflow is `pack -> verify -> render`. The sensitive Pack preserves exact Mandates, Checkout versions, Receipts, caller pins, and imported revocation snapshot bytes. Independent verification requires an expected Pack digest retained outside the Pack and recomputes every digest and evidence gate. The metadata-only HTML timeline omits the raw artifacts and recomputes verification instead of trusting a supplied report.
 

@@ -34,7 +34,7 @@ package's shipped schemas. A failure names the install, export, CLI, or evidence
 assertion that failed. The temporary consumer is removed on completion.
 
 `npm pack` prints the archive name, `oonyl-mandatebound-<version>.tgz`. The
-commands below use 2.0.0; substitute the filename `npm pack` printed. A GitHub
+commands below use 2.1.0; substitute the filename `npm pack` printed. A GitHub
 Release asset, `mandatebound-<version>.tgz`, installs the same way. This guide
 uses a local tarball so it exercises a checkout without assuming a registry
 release.
@@ -47,7 +47,7 @@ In a new directory next to the archive:
 mkdir mandatebound-consumer
 cd mandatebound-consumer
 npm init -y
-npm install --ignore-scripts --omit=dev ../oonyl-mandatebound-2.0.0.tgz
+npm install --ignore-scripts --omit=dev ../oonyl-mandatebound-2.1.0.tgz
 cp node_modules/@oonyl/mandatebound/docs/examples/adopter-workflow.mjs workflow.mjs
 node workflow.mjs create synthetic-case > accepted.json
 ```

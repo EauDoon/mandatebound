@@ -58,6 +58,127 @@ const AP2_INHERITANCE_EXCLUSIONS = new Set([
 
 export { AP2_TERMINAL_TYPES, AP2_INTERMEDIATE_TYPES, AP2_ROOT_TYPES, AP2_INHERITANCE_EXCLUSIONS };
 
+/**
+ * Resolved SD-JWT arrays that dropped issuer-signed `{"...": digest}`
+ * placeholders, and resolved objects that dropped `_sd` digests, because the
+ * presenter did not disclose them. Keyed by the exact resolved array or
+ * object, with the number dropped. Produced by the AP2 v0.2.0 chain resolver.
+ */
+export type WithheldDisclosures = ReadonlyMap<object, number>;
+
+const AP2_CONSTRAINT_DISCLOSURE_WITHHELD = "AP2_CONSTRAINT_DISCLOSURE_WITHHELD";
+
+/**
+ * Open-Mandate constraint types the pinned AP2 v0.2.0 dispute profile
+ * evaluates, and the pinned types it still rejects as unsupported. Budget and
+ * agent recurrence need cumulative spend history the evidence does not carry,
+ * and execution_date has no fixed format at the pinned commit.
+ */
+export const AP2_PINNED_CONSTRAINT_SUPPORT: Readonly<{
+  readonly evaluated: readonly string[];
+  readonly failClosed: readonly string[];
+}> = Object.freeze({
+  evaluated: Object.freeze([
+    "checkout.allowed_merchants",
+    "checkout.line_items",
+    "payment.allowed_payees",
+    "payment.allowed_payment_instruments",
+    "payment.allowed_pisps",
+    "payment.amount_range",
+    "payment.reference",
+  ]),
+  failClosed: Object.freeze([
+    "payment.agent_recurrence",
+    "payment.budget",
+    "payment.execution_date",
+  ]),
+});
+
+interface ConstraintOutcome {
+  readonly code: "AP2_CONSTRAINT_FAILED" | "AP2_CONSTRAINT_INVALID";
+  readonly message: string;
+}
+
+function constraintFailed(message: string): ConstraintOutcome {
+  return { code: "AP2_CONSTRAINT_FAILED", message };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+/** True when a revealed allowed entry carries exactly this string id. */
+function allowedById(allowed: unknown, id: unknown): boolean {
+  return nonEmptyString(id) &&
+    Array.isArray(allowed) &&
+    allowed.some((candidate) => isObject(candidate) && candidate.id === id);
+}
+
+/**
+ * Evaluate one payment.* constraint of an open Payment Mandate against the
+ * closed Payment Mandate, following the pinned SDK evaluators. These run
+ * before the closed Mandate's own schema check, so a malformed closed field
+ * fails the constraint instead of throwing. Messages never echo values.
+ * Returns null when the constraint holds, or undefined for a type this
+ * evaluator does not handle.
+ */
+function evaluatePaymentConstraint(
+  constraint: JsonObject,
+  closedClaims: JsonObject | undefined,
+): ConstraintOutcome | null | undefined {
+  const closed = closedClaims ?? {};
+  switch (constraint.type) {
+    case "payment.amount_range": {
+      const { currency, min, max } = constraint;
+      if (
+        !nonEmptyString(currency) ||
+        !Number.isSafeInteger(max) ||
+        (min !== undefined && (!Number.isSafeInteger(min) || (min as number) > (max as number)))
+      ) {
+        return { code: "AP2_CONSTRAINT_INVALID", message: "Amount-range constraint is malformed" };
+      }
+      const paid = closed.payment_amount;
+      const satisfied = isObject(paid) &&
+        paid.currency === currency &&
+        Number.isSafeInteger(paid.amount) &&
+        (min === undefined || (paid.amount as number) >= (min as number)) &&
+        (paid.amount as number) <= (max as number);
+      return satisfied
+        ? null
+        : constraintFailed("Amount-range constraint could not be satisfied by the closed Payment Mandate");
+    }
+    case "payment.allowed_payees":
+      return isObject(closed.payee) && allowedById(constraint.allowed, closed.payee.id)
+        ? null
+        : constraintFailed("Allowed-payee constraint could not be satisfied by the closed Payment Mandate");
+    case "payment.allowed_payment_instruments":
+      return isObject(closed.payment_instrument) &&
+          allowedById(constraint.allowed, closed.payment_instrument.id)
+        ? null
+        : constraintFailed(
+          "Allowed-payment-instrument constraint could not be satisfied by the closed Payment Mandate",
+        );
+    case "payment.allowed_pisps": {
+      const pisp = closed.pisp;
+      const satisfied = isObject(pisp) &&
+        nonEmptyString(pisp.legal_name) &&
+        nonEmptyString(pisp.brand_name) &&
+        nonEmptyString(pisp.domain_name) &&
+        Array.isArray(constraint.allowed) &&
+        constraint.allowed.some((candidate) =>
+          isObject(candidate) &&
+          candidate.legal_name === pisp.legal_name &&
+          candidate.brand_name === pisp.brand_name &&
+          candidate.domain_name === pisp.domain_name);
+      return satisfied
+        ? null
+        : constraintFailed("Allowed-PISP constraint could not be satisfied by the closed Payment Mandate");
+    }
+    default:
+      return undefined;
+  }
+}
+
 export function materializeTopLevelDisclosures(
   parsed: ParsedCompactAp2Token,
   issues: InteropIssue[],
@@ -389,13 +510,38 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
     && boundedMaxFlow(graph, source, sink) === requiredQuantity;
 }
 
+/**
+ * A line-item constraint cannot be evaluated when the presenter withheld one
+ * of its requirement entries, or every element of an issuer-signed
+ * acceptable_items list that had elements. An issuer-signed literal empty
+ * list is not withheld and keeps its wildcard meaning.
+ */
+function lineItemsDisclosureWithheld(
+  constraint: JsonObject,
+  withheldCount: (value: unknown) => number,
+): boolean {
+  if (!Array.isArray(constraint.items)) return false;
+  if (withheldCount(constraint.items) > 0) return true;
+  return constraint.items.some((requirement) =>
+    isObject(requirement) &&
+    Array.isArray(requirement.acceptable_items) &&
+    requirement.acceptable_items.length === 0 &&
+    withheldCount(requirement.acceptable_items) > 0);
+}
+
 export function verifyConstraints(
   claims: JsonObject,
   options: VerifyAp2MandateOptions,
   issues: InteropIssue[],
   closedClaims?: JsonObject,
   requirePinnedSchema = false,
+  withheld?: WithheldDisclosures,
 ): void {
+  // Only the pinned AP2 v0.2.0 chain profile resolves SD-JWT disclosures.
+  const withheldCount = (value: unknown): number =>
+    requirePinnedSchema && withheld !== undefined && typeof value === "object" && value !== null
+      ? withheld.get(value) ?? 0
+      : 0;
   if (claims.constraints === undefined) {
     if (requirePinnedSchema) {
       issues.push(upstreamIssue(
@@ -414,6 +560,13 @@ export function verifyConstraints(
     ));
     return;
   }
+  if (withheldCount(claims.constraints) > 0) {
+    issues.push(upstreamIssue(
+      AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+      "token.claims.constraints",
+      "Open Mandate withholds an issuer-signed constraint disclosure",
+    ));
+  }
   let hasRequiredConstraint = false;
   for (let index = 0; index < claims.constraints.length; index += 1) {
     const candidate = claims.constraints[index];
@@ -422,6 +575,19 @@ export function verifyConstraints(
         "AP2_CONSTRAINT_INVALID",
         `token.claims.constraints[${String(index)}]`,
         "Constraint is missing a string type",
+      ));
+      continue;
+    }
+    if (withheldCount(candidate) > 0) {
+      // A constraint entry that hides one of its own fields, such as the
+      // optional min of an amount range, cannot be evaluated as signed.
+      if (candidate.type === "checkout.line_items" || candidate.type === "payment.reference") {
+        hasRequiredConstraint = true;
+      }
+      issues.push(upstreamIssue(
+        AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+        `token.claims.constraints[${String(index)}]`,
+        "Constraint withholds an issuer-signed disclosure needed to evaluate it",
       ));
       continue;
     }
@@ -451,6 +617,17 @@ export function verifyConstraints(
     if (candidate.type === "checkout.line_items") {
       hasRequiredConstraint = true;
       if (
+        options.expectedVct === "mandate.checkout.1" &&
+        lineItemsDisclosureWithheld(candidate as JsonObject, withheldCount)
+      ) {
+        issues.push(upstreamIssue(
+          AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+          `token.claims.constraints[${String(index)}]`,
+          "Constraint withholds an issuer-signed disclosure needed to evaluate it",
+        ));
+        continue;
+      }
+      if (
         options.expectedVct !== "mandate.checkout.1" ||
         !verifyLineItemsConstraint(candidate as JsonObject, closedClaims?.checkout_jwt)
       ) {
@@ -478,6 +655,19 @@ export function verifyConstraints(
         ));
       }
       continue;
+    }
+    if (requirePinnedSchema && options.expectedVct === "mandate.payment.1") {
+      const outcome = evaluatePaymentConstraint(candidate as JsonObject, closedClaims);
+      if (outcome !== undefined) {
+        if (outcome !== null) {
+          issues.push(upstreamIssue(
+            outcome.code,
+            `token.claims.constraints[${String(index)}]`,
+            outcome.message,
+          ));
+        }
+        continue;
+      }
     }
     issues.push(upstreamIssue(
       "AP2_CONSTRAINT_UNSUPPORTED",

@@ -34,8 +34,9 @@ guides with worked examples are linked from each section.
 | `ap2-dispute` | 17 MiB | 32 | 100,000 |
 | Canonical CasePack input bound into an operator receipt | 16 MiB | 48 | 250,000 |
 
-The 17 MiB documents leave room for a CasePack or Pack inside its 16 MiB
-canonical bound plus the surrounding JSON. External evidence for `review` is
+The 17 MiB documents leave room for one CasePack or Pack inside its 16 MiB
+canonical bound plus the surrounding JSON. An `ap2-dispute batch` document
+holds every Pack it re-verifies, so the cap applies to their total size. External evidence for `review` is
 also capped at 1 MiB of decoded bytes. `operator audit` reads a store snapshot
 of at most 32 MiB, 100,000 records and 1 MiB per record.
 
@@ -194,15 +195,39 @@ when valid, 3 when invalid, and 5 when `test` runs but an expectation fails.
 
 ## ap2-dispute
 
-Actions: `resolve`, `pack`, `verify`, `render`. `resolve` reads
-`{transactionId, asOf, verificationPlan, sources}`; `pack` adds `createdAt`,
-`checkoutVersions` and `revocations`. `verify` and `render` read a Pack, or the
-`{ok: true, result}` envelope that `pack` printed, and require an independently
-retained `--expected-pack-digest`, without which they exit 2. `render` accepts
-`--format json` or `html`.
+Actions: `resolve`, `pack`, `verify`, `render`, `batch`, `reconcile`.
+`resolve` reads `{transactionId, asOf, verificationPlan, sources}`; `pack` adds
+`createdAt`, `checkoutVersions` and `revocations`. `verify`, `render` and
+`reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
+printed, and require an independently retained `--expected-pack-digest`, without
+which they exit 2. `render` accepts `--format json`, `html`, `markdown` or
+`csv`; the CSV has one row per timeline event and CRLF line endings. A CSV
+cell that would start a spreadsheet formula gets a leading `'`, and that
+includes the roughly 1 in 64 base64url transaction IDs that begin with `-`, so
+strip one leading `'` from `transactionId` before joining it to other records.
 
 Exit 0 for `evidence_verified` or `verified`, 5 for `unresolved`, and 3 for
-invalid input or a Pack that is not even well formed. `pack` exits 0 or 3. See
+invalid input or a Pack that is not even well formed. `pack` exits 0 or 3.
+
+`batch` re-verifies retained Packs and reads exactly `{packs: [...]}`: 1 to 100
+items of `{id, pack, expectedPackDigest, previousStatus?}`, where `id` is unique
+and matches `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, `pack` is a Pack or its
+`{ok: true, result}` envelope, and the optional `previousStatus` is `verified`
+or `unresolved`. Each item is verified against its own digest, so `batch` takes
+no `--expected-pack-digest`. The whole batch document counts against the
+`ap2-dispute` input limits, so 100 Packs fit in one run only when they average
+under about 170 KiB each; an oversized batch exits 3 like any oversized input.
+Split a larger set across several runs, or call
+`verifyAp2DisputeEvidencePacks`, which has no document cap. It exits 3 for a
+malformed batch or any Pack that is not well formed, otherwise 5 when any Pack
+is `unresolved` or differs from its `previousStatus`, and otherwise 0.
+
+`reconcile` compares the closed Payment Mandate with the merchant-signed
+Checkout it is bound to and prints `matched`, `mismatched` or `not_comparable`
+for the payee, the currency and the amount against the Checkout `total`. It is
+a review signal and never changes `verify`. It exits 0 when the Pack verifies
+and every check matches, 5 for an unverified Pack or any mismatched or
+noncomparable check, and 3 for a Pack that is not well formed. See
 [V1.2 profile](V1_2.md).
 
 ## operator
@@ -224,7 +249,7 @@ requires `--expected-receipt-digest`.
 
 `conformance` takes no input and prints the runtime capability statement. The
 published declaration for this release, which a test keeps equal to it, is
-described in [the conformance README](../conformance/v2.0/README.md).
+described in [the conformance README](../conformance/v2.1/README.md).
 
 `help` (or `--help`) and `version` (or `--version`) take no input and exit 0.
 Both print `name`, `version`, `protocolVersion`, `releaseVersion`,

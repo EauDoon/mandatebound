@@ -29,8 +29,13 @@ import {
   assembleAp2DisputeEvidence,
   createAp2EvidenceTimeline,
   packAp2DisputeEvidence,
+  reconcileAp2DisputeEvidencePack,
+  renderAp2EvidenceTimelineCsv,
   renderAp2EvidenceTimelineHtml,
+  renderAp2EvidenceTimelineMarkdown,
   verifyAp2DisputeEvidencePack,
+  verifyAp2DisputeEvidencePacks,
+  type Ap2EvidencePackBatchInputItem,
   type AssembleAp2DisputeEvidenceInput,
   type PackAp2DisputeEvidenceInput,
 } from "./ap2-dispute.js";
@@ -186,7 +191,9 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 // --help prints it, so the two cannot drift apart.
 const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
 const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
-const AP2_DISPUTE_ACTIONS = Object.freeze(["resolve", "pack", "verify", "render"] as const);
+const AP2_DISPUTE_ACTIONS = Object.freeze([
+  "resolve", "pack", "verify", "render", "batch", "reconcile",
+] as const);
 const OPERATOR_ACTIONS = Object.freeze([
   "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
   "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect",
@@ -206,7 +213,11 @@ const CLI_COMMANDS = Object.freeze([
   { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack", actions: CASEPACK_ACTIONS },
   { name: "policy", summary: "Validate, test, or diff a policy pack", actions: POLICY_ACTIONS },
   { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
-  { name: "ap2-dispute", summary: "Resolve, pack, verify, or render AP2 dispute evidence", actions: AP2_DISPUTE_ACTIONS },
+  {
+    name: "ap2-dispute",
+    summary: "Resolve, pack, verify, render, batch-verify or reconcile AP2 dispute evidence",
+    actions: AP2_DISPUTE_ACTIONS,
+  },
   { name: "conformance", summary: "Print the bounded capability statement" },
   {
     name: "operator",
@@ -925,7 +936,9 @@ export async function runCli(
       }
       case "ap2-dispute": {
         const invocation = requireSubcommandInput(args, AP2_DISPUTE_ACTIONS);
-        const needsPackAnchor = invocation.action === "verify" || invocation.action === "render";
+        const needsPackAnchor = invocation.action === "verify" ||
+          invocation.action === "render" ||
+          invocation.action === "reconcile";
         assertAllowedOptions(
           args,
           needsPackAnchor ? ["input", "expected-pack-digest"] : ["input"],
@@ -935,9 +948,31 @@ export async function runCli(
           : null;
         const format = assertOutputFormat(
           args,
-          invocation.action === "render" ? ["json", "html"] : ["json"],
+          invocation.action === "render" ? ["json", "html", "markdown", "csv"] : ["json"],
         );
         const input = asObject(await readInput(invocation.path, stdin, MAX_AP2_CLI_INPUT_BYTES));
+        if (invocation.action === "batch") {
+          if (!hasExactKeys(input, ["packs"]) || !Array.isArray(input["packs"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Pack batch input must be exactly { packs: [...] }.");
+          }
+          let batch;
+          try {
+            batch = verifyAp2DisputeEvidencePacks(input["packs"] as Ap2EvidencePackBatchInputItem[]);
+          } catch (error) {
+            // The library's batch messages are fixed and never echo input.
+            if (error instanceof TypeError) {
+              throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, `${error.message}.`, { cause: error });
+            }
+            throw error;
+          }
+          const exit = batch.summary.invalid > 0
+            ? CLI_EXIT.INVALID
+            : batch.summary.unresolved > 0 || batch.summary.changed > 0
+              ? CLI_EXIT.CONFLICT
+              : CLI_EXIT.SUCCESS;
+          writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: batch });
+          return exit;
+        }
         if (invocation.action === "resolve") {
           if (
             !hasExactKeys(input, ["transactionId", "asOf", "verificationPlan", "sources"])
@@ -979,17 +1014,30 @@ export async function runCli(
         const packInput = hasExactKeys(input, ["ok", "result"]) && input["ok"] === true
           ? input["result"]
           : input;
+        if (invocation.action === "reconcile") {
+          const reconciliation = reconcileAp2DisputeEvidencePack(packInput, verificationOptions);
+          const exit = reconciliation.packDigest === null
+            ? CLI_EXIT.INVALID
+            : reconciliation.verificationStatus === "verified" && reconciliation.summary === "consistent"
+              ? CLI_EXIT.SUCCESS
+              : CLI_EXIT.CONFLICT;
+          writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: reconciliation });
+          return exit;
+        }
         const verification = verifyAp2DisputeEvidencePack(packInput, verificationOptions);
         if (invocation.action === "verify") {
           writeJson(stdout, { ok: verification.status === "verified", result: verification });
           if (verification.packDigest === null) return CLI_EXIT.INVALID;
           return verification.status === "verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
         }
-        if (format === "html") {
+        if (format !== "json") {
           if (verification.packDigest === null) {
             throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Evidence Pack input is invalid.");
           }
-          stdout.write(renderAp2EvidenceTimelineHtml(
+          const render = format === "html"
+            ? renderAp2EvidenceTimelineHtml
+            : format === "markdown" ? renderAp2EvidenceTimelineMarkdown : renderAp2EvidenceTimelineCsv;
+          stdout.write(render(
             packInput as Parameters<typeof renderAp2EvidenceTimelineHtml>[0],
             verificationOptions,
           ));

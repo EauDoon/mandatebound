@@ -1,5 +1,5 @@
 {
-  "release": "2.0.0",
+  "release": "2.1.0",
   "claim": "bounded-evidence-profile",
   "evidenceProfile": {
     "id": "ucp-2026-04-08-rest+ap2-mandates-0.2.0",
@@ -16,7 +16,23 @@
       "resolve",
       "pack",
       "verify",
-      "render"
+      "render",
+      "batch",
+      "reconcile"
+    ],
+    "evaluatedConstraints": [
+      "checkout.allowed_merchants",
+      "checkout.line_items",
+      "payment.allowed_payees",
+      "payment.allowed_payment_instruments",
+      "payment.allowed_pisps",
+      "payment.amount_range",
+      "payment.reference"
+    ],
+    "failClosedConstraints": [
+      "payment.agent_recurrence",
+      "payment.budget",
+      "payment.execution_date"
     ],
     "revocationEvidence": "imported-reported-state",
     "builtInNetworkAccess": false,
@@ -81,6 +97,8 @@
     "test/casepack-v11.test.mjs",
     "test/ucp-ap2.test.mjs",
     "test/ap2-dispute-v12.test.mjs",
+    "test/ap2-dispute-constraints.test.mjs",
+    "test/ap2-dispute-tools.test.mjs",
     "test/policy-tools-v11.test.mjs",
     "test/conformance-v12.test.mjs",
     "test/review-external.test.mjs"

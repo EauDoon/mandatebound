@@ -35,6 +35,7 @@ import {
   AP2_TERMINAL_TYPES,
   verifyConstraints,
   verifyExpiryClaims,
+  type WithheldDisclosures,
 } from "./mandate-verify.js";
 import { verifyParsedJwtSignature } from "./jwk.js";
 
@@ -92,7 +93,19 @@ export function parseAp2MandateChainSegments(token: string): readonly ParsedAp2M
   }));
 }
 
-function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObject {
+interface ResolvedAp2SegmentClaims {
+  readonly claims: JsonObject;
+  /**
+   * Every resolved array that dropped an issuer-signed `{"...": digest}`
+   * placeholder, and every resolved object that dropped an `_sd` digest,
+   * because its disclosure was not presented, with the number it dropped.
+   * Keys are the exact arrays and objects inside `claims`.
+   */
+  readonly withheld: WithheldDisclosures;
+}
+
+function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): ResolvedAp2SegmentClaims {
+  const withheld = new Map<object, number>();
   const byDigest = new Map<string, ParsedSdJwtDisclosure>();
   const byExact = new Map<string, ParsedSdJwtDisclosure>();
   for (const disclosure of segment.disclosures) {
@@ -121,6 +134,7 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
   const walk = (value: JsonValue, inDelegatePayload = false): JsonValue | undefined => {
     if (Array.isArray(value)) {
       const result: JsonValue[] = [];
+      let undisclosed = 0;
       for (const item of value) {
         if (
           isObject(item) &&
@@ -128,7 +142,10 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
           typeof item["..."] === "string"
         ) {
           const disclosure = byDigest.get(item["..."]);
-          if (disclosure === undefined) continue;
+          if (disclosure === undefined) {
+            undisclosed += 1;
+            continue;
+          }
           const resolved = walk(resolveDisclosure(disclosure, 2));
           if (resolved !== undefined) result.push(resolved);
           continue;
@@ -151,6 +168,9 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
         const resolved = walk(item, false);
         if (resolved !== undefined) result.push(resolved);
       }
+      // Undisclosed alternative delegate payloads are legitimate; any other
+      // dropped element is recorded so constraint checks can fail closed.
+      if (undisclosed > 0 && !inDelegatePayload) withheld.set(result, undisclosed);
       return result;
     }
     if (!isObject(value)) return value;
@@ -171,9 +191,13 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
       if (new Set(digests).size !== digests.length) {
         throw new UcpAp2ParseError("AP2 SD-JWT _sd contains duplicate digests");
       }
+      let undisclosed = 0;
       for (const digest of digests as string[]) {
         const disclosure = byDigest.get(digest);
-        if (disclosure === undefined) continue;
+        if (disclosure === undefined) {
+          undisclosed += 1;
+          continue;
+        }
         if (
           !Array.isArray(disclosure.decoded) ||
           disclosure.decoded.length !== 3 ||
@@ -188,6 +212,9 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
         const resolved = walk(resolveDisclosure(disclosure, 3), name === "delegate_payload");
         if (resolved !== undefined) result[name] = resolved;
       }
+      // An undisclosed digest may be a decoy or a withheld claim; constraint
+      // checks read this record and fail closed where that matters.
+      if (undisclosed > 0) withheld.set(result, undisclosed);
     }
     return result;
   };
@@ -199,7 +226,7 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): JsonObj
   if (used.size !== segment.disclosures.length) {
     throw new UcpAp2ParseError("AP2 SD-JWT contains an unbound disclosure");
   }
-  return resolved as JsonObject;
+  return { claims: resolved as JsonObject, withheld };
 }
 
 function effectiveDelegatePayload(claims: JsonObject): JsonObject {
@@ -253,6 +280,7 @@ function verifyAp2OpenInheritance(
   closed: JsonObject,
   options: VerifyAp2MandateOptions,
   issues: InteropIssue[],
+  withheld: WithheldDisclosures,
 ): void {
   const expectedOpenVct: Ap2MandateVct = options.expectedVct === "mandate.checkout.1"
     ? "mandate.checkout.open.1"
@@ -266,7 +294,7 @@ function verifyAp2OpenInheritance(
         "Open Mandate type does not lead to the expected closed Mandate type",
       ));
     }
-    verifyConstraints(open, options, issues, closed, true);
+    verifyConstraints(open, options, issues, closed, true, withheld);
     for (const [name, value] of Object.entries(open)) {
       if (AP2_INHERITANCE_EXCLUSIONS.has(name)) continue;
       if (!hasOwn(closed, name) || canonicalize(closed[name] as JsonValue) !== canonicalize(value)) {
@@ -418,7 +446,10 @@ export function verifyAp2MandateChain(
       options.issuerKeySnapshot.kid,
       "issuer",
     );
-    const rootClaims = resolveAp2SegmentClaims(root);
+    const rootResolution = resolveAp2SegmentClaims(root);
+    const rootClaims = rootResolution.claims;
+    // One record for the whole chain: its keys are distinct resolved values.
+    const withheld = new Map<object, number>(rootResolution.withheld);
     if (rootClaims.iss !== undefined && rootClaims.iss !== options.expectedIssuer) {
       issues.push(upstreamIssue(
         "AP2_ISSUER_MISMATCH",
@@ -466,7 +497,9 @@ export function verifyAp2MandateChain(
           signingJwk.kid ?? null,
           "key-binding",
         );
-        const claims = resolveAp2SegmentClaims(current);
+        const hopResolution = resolveAp2SegmentClaims(current);
+        const claims = hopResolution.claims;
+        for (const [value, count] of hopResolution.withheld) withheld.set(value, count);
         const hasSdHash = hasOwn(claims, "sd_hash");
         const hasIssuerHash = hasOwn(claims, "issuer_jwt_hash");
         if (hasSdHash === hasIssuerHash) {
@@ -517,7 +550,7 @@ export function verifyAp2MandateChain(
 
     const closed = payloads[payloads.length - 1] as JsonObject;
     if (segments.length > 1) {
-      verifyAp2OpenInheritance(payloads.slice(0, -1), closed, options, issues);
+      verifyAp2OpenInheritance(payloads.slice(0, -1), closed, options, issues, withheld);
     }
     const checkoutHash = verifyAp2ClosedMandateClaims(closed, options, issues);
     const result: VerifiedAp2MandateChain = Object.freeze({

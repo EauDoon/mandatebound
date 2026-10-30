@@ -10,6 +10,102 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-30
+
+### Upgrading from 2.0.0
+
+2.1.0 is a minor release: no public interface, CLI flag, input or output format
+is removed or renamed, and every new output field is optional. Protocol
+`1.0.0`, engine `1.0.0`, the AP2 Pack format `1.2.0`, the `schemas/v1.2`
+documents, the dispute profile and every Pack digest are unchanged. Pack
+verification re-derives the resolution under the current gates, so a retained
+Pack's verdict moves only where the gates below changed, and its `digestValid`
+and `anchorMatched` stay true. `verifyAp2MandateChain` from
+`@oonyl/mandatebound/ucp-ap2`, which the resolver runs on each Mandate chain,
+changes in the same cases: its `upstreamValid` and issues move as described
+below for direct callers too.
+
+- AP2 evidence whose open Mandate withholds a constraint disclosure now resolves
+  `unresolved` with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD` where it used to
+  resolve `evidence_verified`. That includes honest evidence redacted with the
+  official SDK's `MandateClient.present(claims_to_disclose=...)`, which drops
+  every acceptable-item disclosure of a `checkout.line_items` constraint; the
+  pinned AP2 rules match line items only against the revealed acceptable items,
+  so such evidence never established the constraint. Present the open Mandate
+  with its constraint disclosures, as the SDK's default presentation does. An
+  RFC 9901 decoy digest in a constraint list, a constraint entry or a line-item
+  requirement list has the same effect, because a decoy cannot be told apart
+  from a withheld disclosure. Packs whose Mandates reveal their constraints produce byte-identical
+  verification reports.
+- AP2 evidence whose open Payment Mandate carries `payment.amount_range`,
+  `payment.allowed_payees`, `payment.allowed_payment_instruments` or
+  `payment.allowed_pisps` used to resolve `unresolved` with
+  `AP2_CONSTRAINT_UNSUPPORTED`. It now resolves `evidence_verified` when the
+  closed Payment Mandate satisfies them, or `unresolved` with a precise
+  `AP2_CONSTRAINT_FAILED` or `AP2_CONSTRAINT_INVALID` when it does not. Payees
+  match by `id` only, so evidence an SDK verifier accepts through its
+  name-and-website fallback stays `unresolved` here. `payment.budget`,
+  `payment.agent_recurrence` and `payment.execution_date` keep their code and
+  message.
+- Operator assessment receipts embed the package release, so a receipt made by
+  2.0.0 reports a `releaseVersion` difference (exit 5 from `receipt-verify`)
+  under 2.1.0, as every release bump does. Review and re-issue it; this is not
+  evidence of tampering.
+- The conformance declaration moves to `conformance/v2.1/capabilities.json`.
+  The 2.0.0 declaration remains retrievable from the `v2.0.0` tag and release
+  tarball.
+
+### Added
+
+- The AP2 v0.2.0 dispute resolver evaluates the open Payment Mandate
+  constraints the pinned reference shopping agent emits:
+  `payment.amount_range` (same currency, inclusive integer minor-unit bounds),
+  `payment.allowed_payees` and `payment.allowed_payment_instruments` (the
+  closed `payee.id` or `payment_instrument.id` equals a revealed allowed `id`)
+  and `payment.allowed_pisps` (all three PISP names equal one allowed entry).
+  The agent builds every open Payment Mandate as `[payment.amount_range,
+  payment.allowed_payees, payment.reference]`, so each of its
+  human-not-present payment chains resolved `unresolved`, and a purchase that
+  broke the user's cap looked the same as one that respected it.
+  `AP2_DISPUTE_CONSTRAINT_SUPPORT` from `@oonyl/mandatebound/ap2-dispute` lists
+  the evaluated and the still fail-closed types, and the conformance
+  declaration publishes them as the optional
+  `disputeProfile.evaluatedConstraints` and
+  `disputeProfile.failClosedConstraints`.
+- `ap2-dispute batch` and `verifyAp2DisputeEvidencePacks` re-verify up to 100
+  retained AP2 Evidence Packs at once, each against its own independently
+  retained digest, and flag every Pack whose status differs from the
+  `previousStatus` the caller recorded. Package upgrades change verdicts for
+  retained Packs, as 2.0.0 did for delegated `exp` and this release does again,
+  and Packs could only be checked one at a time. The
+  `MandateBoundAp2EvidencePackBatch/v1` output reports each Pack's status,
+  anchor and digest fields, sorted issue codes and full verification report in
+  input order, with summary counts and a `batchDigest`. It exits 3 for a
+  malformed batch or Pack, 5 when any Pack is unresolved or changed, and 0
+  otherwise.
+- `ap2-dispute reconcile` and `reconcileAp2DisputeEvidencePack` compare the
+  closed Payment Mandate's payee, currency and amount with the merchant-signed
+  Checkout it is bound to. The resolver binds the two only through
+  `transaction_id`, so a payment of 999999 against a signed Checkout total of
+  2500, in another currency, or to another payee resolved `evidence_verified`
+  and nothing in the resolution, the Pack verification or the timeline showed
+  the difference. The `MandateBoundAp2PaymentReconciliation/v1` output carries
+  only `matched`, `mismatched` or `not_comparable` per check. Besides the AP2
+  `transactionId` and the `packDigest` that name the reviewed Pack, it never
+  carries amounts, party identifiers, items, instruments or tokens, and it
+  reads only claims verified inside an anchored,
+  `evidence_verified` Pack. It is a review signal: it never changes the
+  resolution or `verify`.
+- `ap2-dispute render --format markdown|csv`, with
+  `renderAp2EvidenceTimelineMarkdown` and `renderAp2EvidenceTimelineCsv`, export
+  the metadata-only AP2 evidence timeline for tickets and spreadsheets, as
+  `case-report` already does for CasePacks. Like the HTML rendering, both verify
+  the Pack against the retained digest themselves. The Markdown uses the
+  CasePack report escaper, and the CSV quotes every cell, neutralizes formulas
+  and ends lines with CRLF. Neutralizing prefixes a `'` to a transaction ID
+  that begins with `-`, about 1 in 64, so strip it before joining on that
+  column. JSON and HTML output are unchanged.
+
 ### Changed
 
 - The AP2 dispute module now shares the UCP/AP2 RFC 3339 timestamp guard
@@ -35,6 +131,26 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Security
 
+- The AP2 v0.2.0 dispute resolver no longer lets withheld SD-JWT disclosures
+  widen an open Mandate's constraints. The chain verifier silently dropped every
+  `{"...": digest}` array placeholder and `_sd` digest whose disclosure the
+  presenting agent left out, and the agent chooses that before it signs the
+  terminal hop. Withholding every acceptable item of a `checkout.line_items`
+  requirement turned it into a wildcard that any SKU satisfied, and withholding
+  a whole constraint entry, or one requirement of a line-item constraint, meant
+  it was never evaluated. Each case reported `evidence_verified` for a purchase
+  outside the user's mandate. They now fail closed with
+  `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`, as does a constraint entry that hides
+  one of its own fields, such as the optional `min` of the newly evaluated
+  `payment.amount_range`. A partial reveal is evaluated against what it reveals,
+  an issuer-signed literal empty `acceptable_items` keeps its any-item meaning,
+  and undisclosed alternative `delegate_payload` elements stay legitimate. The
+  defect was present in 1.2.0 and 2.0.0. `verifyAp2MandateChain` from
+  `@oonyl/mandatebound/ucp-ap2` carries the same fix; the v1.1
+  `verifyAp2Mandate` adapter and the native engine are unaffected. Undisclosed
+  `_sd` digests elsewhere in an open Mandate payload, which could hide a pre-set
+  payee, amount or payment instrument from the inheritance check, remain a
+  documented residual risk.
 - Raise the `fast-uri` override and lock to 3.1.9 or later, and record the
   advisories published on 2026-10-23 in the dependency gate:
   [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),
@@ -327,7 +443,8 @@ required.
 - Added CLI, localhost API, simulator, OpenAPI contract, and synthetic test suite.
 - Added security, privacy, interoperability, governance, and legal-boundary documentation.
 
-[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/EauDoon/mandatebound/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/EauDoon/mandatebound/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/EauDoon/mandatebound/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/EauDoon/mandatebound/compare/v1.0.0...v1.1.0
