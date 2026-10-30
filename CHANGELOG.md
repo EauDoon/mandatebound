@@ -33,6 +33,18 @@ in [Protocol v1](docs/PROTOCOL.md).
   expand a small input into an unbounded intermediate string before rejection;
   accepted canonical bytes and digest values remain unchanged.
 
+### Security
+
+- Raise the `fast-uri` override and lock to 3.1.9 or later, and record the
+  advisories published on 2026-10-23 in the dependency gate:
+  [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),
+  [GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h) and
+  [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp)
+  affect 3.0.0 to 3.1.8, and
+  [GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr)
+  affects 3.1.3 to 3.1.8. The gate passed the locked 3.1.8 because it did not
+  know them, while `npm audit` reported the lockfile as vulnerable.
+
 ## [2.0.0] - 2026-10-09
 
 ### Upgrading from 1.2.0

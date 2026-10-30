@@ -9,6 +9,20 @@ export const advisoryRules = [
   {
     name: "fast-uri",
     minimumVulnerable: "3.0.0",
+    maximumVulnerable: "3.1.8",
+    fixedIn: "3.1.9",
+    advisories: ["GHSA-333x-w4r6-6crp", "GHSA-w74x-v6f9-j3xg", "GHSA-xhq7-xmqj-769h"],
+  },
+  {
+    name: "fast-uri",
+    minimumVulnerable: "3.1.3",
+    maximumVulnerable: "3.1.8",
+    fixedIn: "3.1.9",
+    advisories: ["GHSA-wjr9-j795-jxcr"],
+  },
+  {
+    name: "fast-uri",
+    minimumVulnerable: "3.0.0",
     maximumVulnerable: "3.1.7",
     fixedIn: "3.1.8",
     advisories: ["GHSA-hrr3-gc8f-f4qj"],
