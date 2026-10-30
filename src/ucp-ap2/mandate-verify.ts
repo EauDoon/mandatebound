@@ -58,6 +58,15 @@ const AP2_INHERITANCE_EXCLUSIONS = new Set([
 
 export { AP2_TERMINAL_TYPES, AP2_INTERMEDIATE_TYPES, AP2_ROOT_TYPES, AP2_INHERITANCE_EXCLUSIONS };
 
+/**
+ * Resolved SD-JWT arrays that dropped issuer-signed placeholders because the
+ * presenter did not disclose them, keyed by the exact array object, with the
+ * number dropped. Produced by the AP2 v0.2.0 chain resolver.
+ */
+export type WithheldArrays = ReadonlyMap<readonly JsonValue[], number>;
+
+const AP2_CONSTRAINT_DISCLOSURE_WITHHELD = "AP2_CONSTRAINT_DISCLOSURE_WITHHELD";
+
 export function materializeTopLevelDisclosures(
   parsed: ParsedCompactAp2Token,
   issues: InteropIssue[],
@@ -389,13 +398,38 @@ function verifyLineItemsConstraint(constraint: JsonObject, checkoutJwt: unknown)
     && boundedMaxFlow(graph, source, sink) === requiredQuantity;
 }
 
+/**
+ * A line-item constraint cannot be evaluated when the presenter withheld one
+ * of its requirement entries, or every element of an issuer-signed
+ * acceptable_items list that had elements. An issuer-signed literal empty
+ * list is not withheld and keeps its wildcard meaning.
+ */
+function lineItemsDisclosureWithheld(
+  constraint: JsonObject,
+  withheldCount: (value: unknown) => number,
+): boolean {
+  if (!Array.isArray(constraint.items)) return false;
+  if (withheldCount(constraint.items) > 0) return true;
+  return constraint.items.some((requirement) =>
+    isObject(requirement) &&
+    Array.isArray(requirement.acceptable_items) &&
+    requirement.acceptable_items.length === 0 &&
+    withheldCount(requirement.acceptable_items) > 0);
+}
+
 export function verifyConstraints(
   claims: JsonObject,
   options: VerifyAp2MandateOptions,
   issues: InteropIssue[],
   closedClaims?: JsonObject,
   requirePinnedSchema = false,
+  withheld?: WithheldArrays,
 ): void {
+  // Only the pinned AP2 v0.2.0 chain profile resolves array disclosures.
+  const withheldCount = (value: unknown): number =>
+    requirePinnedSchema && withheld !== undefined && Array.isArray(value)
+      ? withheld.get(value) ?? 0
+      : 0;
   if (claims.constraints === undefined) {
     if (requirePinnedSchema) {
       issues.push(upstreamIssue(
@@ -413,6 +447,13 @@ export function verifyConstraints(
       "Mandate constraints must be an array",
     ));
     return;
+  }
+  if (withheldCount(claims.constraints) > 0) {
+    issues.push(upstreamIssue(
+      AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+      "token.claims.constraints",
+      "Open Mandate withholds an issuer-signed constraint disclosure",
+    ));
   }
   let hasRequiredConstraint = false;
   for (let index = 0; index < claims.constraints.length; index += 1) {
@@ -450,6 +491,17 @@ export function verifyConstraints(
     }
     if (candidate.type === "checkout.line_items") {
       hasRequiredConstraint = true;
+      if (
+        options.expectedVct === "mandate.checkout.1" &&
+        lineItemsDisclosureWithheld(candidate as JsonObject, withheldCount)
+      ) {
+        issues.push(upstreamIssue(
+          AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+          `token.claims.constraints[${String(index)}]`,
+          "Constraint withholds an issuer-signed disclosure needed to evaluate it",
+        ));
+        continue;
+      }
       if (
         options.expectedVct !== "mandate.checkout.1" ||
         !verifyLineItemsConstraint(candidate as JsonObject, closedClaims?.checkout_jwt)

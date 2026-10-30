@@ -10,6 +10,25 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+### Upgrading from 2.0.0
+
+Protocol `1.0.0`, engine `1.0.0`, the AP2 Pack format `1.2.0`, the
+`schemas/v1.2` documents, the dispute profile and every Pack digest are
+unchanged. Pack verification re-derives the resolution under the current gates,
+so a retained Pack's verdict moves only where the gates below changed, and its
+`digestValid` and `anchorMatched` stay true.
+
+- AP2 evidence whose open Mandate withholds a constraint disclosure now resolves
+  `unresolved` with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD` where it used to
+  resolve `evidence_verified`. That includes honest evidence redacted with the
+  official SDK's `MandateClient.present(claims_to_disclose=...)`, which drops
+  every acceptable-item disclosure of a `checkout.line_items` constraint; the
+  pinned AP2 rules match line items only against the revealed acceptable items,
+  so such evidence never established the constraint. Present the open Mandate
+  with its constraint disclosures, as the SDK's default presentation does.
+  Packs whose Mandates reveal their constraints produce byte-identical
+  verification reports.
+
 ### Changed
 
 - The AP2 dispute module now shares the UCP/AP2 RFC 3339 timestamp guard
@@ -35,6 +54,20 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Security
 
+- The AP2 v0.2.0 dispute resolver no longer lets withheld SD-JWT disclosures
+  widen an open Mandate. The chain verifier silently dropped every
+  `{"...": digest}` array placeholder whose disclosure the presenting agent left
+  out, and the agent chooses that before it signs the terminal hop. Withholding
+  every acceptable item of a `checkout.line_items` requirement turned it into a
+  wildcard that any SKU satisfied, and withholding a whole constraint entry, or
+  one requirement of a line-item constraint, meant it was never evaluated. Each
+  case reported `evidence_verified` for a purchase outside the user's mandate.
+  They now fail closed with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`. A partial
+  reveal is evaluated against what it reveals, an issuer-signed literal empty
+  `acceptable_items` keeps its any-item meaning, and undisclosed alternative
+  `delegate_payload` elements stay legitimate. The defect was present in 1.2.0
+  and 2.0.0. The v1.1 `verifyAp2Mandate` adapter and the native engine are
+  unaffected.
 - Raise the `fast-uri` override and lock to 3.1.9 or later, and record the
   advisories published on 2026-10-23 in the dependency gate:
   [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),

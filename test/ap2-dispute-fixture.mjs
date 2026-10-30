@@ -73,26 +73,36 @@ export function arrayElement(value) {
  * A two-hop Delegate SD-JWT chain: the issuer signs the open Mandate, and the
  * agent's terminal hop binds the exact root presentation, including whichever
  * disclosures the agent chose to present.
+ *
+ * `wrapRootPayload` places the open Mandate itself behind a delegate_payload
+ * placeholder and presents its disclosure first, the shape the official SDK
+ * emits. `rootPayloadAlternatives` appends further delegate_payload elements,
+ * typically placeholders for alternative payloads the agent does not present.
  */
 export function createMandate(claims, issuer, agent, audience, nonce, constraints, {
   rootDisclosures = [],
+  wrapRootPayload = false,
+  rootPayloadAlternatives = [],
 } = {}) {
   const openVct = claims.vct === "mandate.checkout.1"
     ? "mandate.checkout.open.1"
     : "mandate.payment.open.1";
+  const openPayload = {
+    vct: openVct,
+    iat: 1_770_000_000,
+    exp: 1_800_000_000,
+    constraints,
+    cnf: { jwk: agent.publicJwk },
+  };
+  const wrapped = wrapRootPayload ? arrayElement(openPayload) : null;
   const rootJwt = createJwt({
     _sd_alg: "sha-256",
-    delegate_payload: [{
-      vct: openVct,
-      iat: 1_770_000_000,
-      exp: 1_800_000_000,
-      constraints,
-      cnf: { jwk: agent.publicJwk },
-    }],
+    delegate_payload: [wrapped === null ? openPayload : wrapped.placeholder, ...rootPayloadAlternatives],
   }, issuer, "dc+sd-jwt");
-  const rootPresentation = rootDisclosures.length === 0
+  const presented = wrapped === null ? rootDisclosures : [wrapped.encoded, ...rootDisclosures];
+  const rootPresentation = presented.length === 0
     ? `${rootJwt}~`
-    : `${rootJwt}~${rootDisclosures.join("~")}~`;
+    : `${rootJwt}~${presented.join("~")}~`;
   const terminalJwt = createJwt({
     _sd_alg: "sha-256",
     aud: audience,
@@ -135,6 +145,7 @@ export function makeFixture({
   expectedMerchantId,
   checkoutConstraints = defaultCheckoutConstraints({ allowedMerchantId }),
   checkoutRootDisclosures = [],
+  checkoutRootOptions = {},
   paymentConstraints = (reference) => [reference],
   paymentRootDisclosures = [],
   checkoutClaims = {},
@@ -179,6 +190,7 @@ export function makeFixture({
     checkout_jwt: checkoutJwt,
     checkout_hash: transactionId,
   }, issuer, agent, "https://merchant.example", "checkout-nonce", checkoutConstraints, {
+    ...checkoutRootOptions,
     rootDisclosures: checkoutRootDisclosures,
   });
   const openCheckoutHash = computeAp2OpenMandateHash(checkoutMandate);
