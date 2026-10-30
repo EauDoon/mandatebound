@@ -17,6 +17,7 @@
       "pack",
       "verify",
       "render",
+      "batch",
       "reconcile"
     ],
     "evaluatedConstraints": [

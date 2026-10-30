@@ -34,6 +34,8 @@ import {
   renderAp2EvidenceTimelineHtml,
   renderAp2EvidenceTimelineMarkdown,
   verifyAp2DisputeEvidencePack,
+  verifyAp2DisputeEvidencePacks,
+  type Ap2EvidencePackBatchInputItem,
   type AssembleAp2DisputeEvidenceInput,
   type PackAp2DisputeEvidenceInput,
 } from "./ap2-dispute.js";
@@ -190,7 +192,7 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
 const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
 const AP2_DISPUTE_ACTIONS = Object.freeze([
-  "resolve", "pack", "verify", "render", "reconcile",
+  "resolve", "pack", "verify", "render", "batch", "reconcile",
 ] as const);
 const OPERATOR_ACTIONS = Object.freeze([
   "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
@@ -213,7 +215,7 @@ const CLI_COMMANDS = Object.freeze([
   { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
   {
     name: "ap2-dispute",
-    summary: "Resolve, pack, verify, render or reconcile AP2 dispute evidence",
+    summary: "Resolve, pack, verify, render, batch-verify or reconcile AP2 dispute evidence",
     actions: AP2_DISPUTE_ACTIONS,
   },
   { name: "conformance", summary: "Print the bounded capability statement" },
@@ -949,6 +951,28 @@ export async function runCli(
           invocation.action === "render" ? ["json", "html", "markdown", "csv"] : ["json"],
         );
         const input = asObject(await readInput(invocation.path, stdin, MAX_AP2_CLI_INPUT_BYTES));
+        if (invocation.action === "batch") {
+          if (!hasExactKeys(input, ["packs"]) || !Array.isArray(input["packs"])) {
+            throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Pack batch input must be exactly { packs: [...] }.");
+          }
+          let batch;
+          try {
+            batch = verifyAp2DisputeEvidencePacks(input["packs"] as Ap2EvidencePackBatchInputItem[]);
+          } catch (error) {
+            // The library's batch messages are fixed and never echo input.
+            if (error instanceof TypeError) {
+              throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, `${error.message}.`, { cause: error });
+            }
+            throw error;
+          }
+          const exit = batch.summary.invalid > 0
+            ? CLI_EXIT.INVALID
+            : batch.summary.unresolved > 0 || batch.summary.changed > 0
+              ? CLI_EXIT.CONFLICT
+              : CLI_EXIT.SUCCESS;
+          writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: batch });
+          return exit;
+        }
         if (invocation.action === "resolve") {
           if (
             !hasExactKeys(input, ["transactionId", "asOf", "verificationPlan", "sources"])

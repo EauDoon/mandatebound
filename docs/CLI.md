@@ -194,7 +194,7 @@ when valid, 3 when invalid, and 5 when `test` runs but an expectation fails.
 
 ## ap2-dispute
 
-Actions: `resolve`, `pack`, `verify`, `render`, `reconcile`.
+Actions: `resolve`, `pack`, `verify`, `render`, `batch`, `reconcile`.
 `resolve` reads `{transactionId, asOf, verificationPlan, sources}`; `pack` adds
 `createdAt`, `checkoutVersions` and `revocations`. `verify`, `render` and
 `reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
@@ -204,6 +204,15 @@ which they exit 2. `render` accepts `--format json`, `html`, `markdown` or
 
 Exit 0 for `evidence_verified` or `verified`, 5 for `unresolved`, and 3 for
 invalid input or a Pack that is not even well formed. `pack` exits 0 or 3.
+
+`batch` re-verifies retained Packs and reads exactly `{packs: [...]}`: 1 to 100
+items of `{id, pack, expectedPackDigest, previousStatus?}`, where `id` is unique
+and matches `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, `pack` is a Pack or its
+`{ok: true, result}` envelope, and the optional `previousStatus` is `verified`
+or `unresolved`. Each item is verified against its own digest, so `batch` takes
+no `--expected-pack-digest`. It exits 3 for a malformed batch or any Pack that
+is not well formed, otherwise 5 when any Pack is `unresolved` or differs from its
+`previousStatus`, and otherwise 0.
 
 `reconcile` compares the closed Payment Mandate with the merchant-signed
 Checkout it is bound to and prints `matched`, `mismatched` or `not_comparable`

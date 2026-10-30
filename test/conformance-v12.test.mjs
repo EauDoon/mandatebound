@@ -74,7 +74,7 @@ test("published capability declaration for this release matches the runtime stat
   );
   assert.deepEqual(
     published.disputeProfile.operations,
-    ["resolve", "pack", "verify", "render", "reconcile"],
+    ["resolve", "pack", "verify", "render", "batch", "reconcile"],
   );
   // The constraint types the resolver evaluates, and the pinned types it
   // still rejects, exactly as the library exports them.

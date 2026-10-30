@@ -56,6 +56,17 @@ so a retained Pack's verdict moves only where the gates below changed, and its
   declaration publishes them as the optional
   `disputeProfile.evaluatedConstraints` and
   `disputeProfile.failClosedConstraints`.
+- `ap2-dispute batch` and `verifyAp2DisputeEvidencePacks` re-verify up to 100
+  retained AP2 Evidence Packs at once, each against its own independently
+  retained digest, and flag every Pack whose status differs from the
+  `previousStatus` the caller recorded. Package upgrades change verdicts for
+  retained Packs, as 2.0.0 did for delegated `exp` and this release does again,
+  and Packs could only be checked one at a time. The
+  `MandateBoundAp2EvidencePackBatch/v1` output reports each Pack's status,
+  anchor and digest fields, sorted issue codes and full verification report in
+  input order, with summary counts and a `batchDigest`. It exits 3 for a
+  malformed batch or Pack, 5 when any Pack is unresolved or changed, and 0
+  otherwise.
 - `ap2-dispute reconcile` and `reconcileAp2DisputeEvidencePack` compare the
   closed Payment Mandate's payee, currency and amount with the merchant-signed
   Checkout it is bound to. The resolver binds the two only through

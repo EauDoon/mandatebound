@@ -120,7 +120,7 @@ Build first, then use the local `dist/cli.js` binary or the installed `mandatebo
 | Evidence operations | `operator collect`, `operator sources`, `operator timeline`, `operator lineage`, `operator checkpoints`, `operator windows`, `operator reuse`, `operator bottlenecks`, `operator findings`, `operator batch-diff` | [`docs/EVIDENCE_OPERATIONS.md`](docs/EVIDENCE_OPERATIONS.md) |
 | CasePack | `casepack build`, `casepack verify`, `casepack unpack`, `casepack diff`, `case-report` | [`docs/V1_1.md`](docs/V1_1.md) |
 | Policy tools | `policy validate`, `policy test`, `policy diff` | [`BRIEF.md`](BRIEF.md) |
-| AP2 dispute evidence | `ap2-dispute resolve`, `ap2-dispute pack`, `ap2-dispute verify`, `ap2-dispute render`, `ap2-dispute reconcile` | [`docs/V1_2.md`](docs/V1_2.md) |
+| AP2 dispute evidence | `ap2-dispute resolve`, `ap2-dispute pack`, `ap2-dispute verify`, `ap2-dispute render`, `ap2-dispute batch`, `ap2-dispute reconcile` | [`docs/V1_2.md`](docs/V1_2.md) |
 | Capability statement | `conformance` | [`conformance/v2.0/README.md`](conformance/v2.0/README.md) |
 | Help and version | `help`, `version` (also `--help`, `--version`) | [`docs/CLI.md`](docs/CLI.md#conformance-help-and-version) |
 

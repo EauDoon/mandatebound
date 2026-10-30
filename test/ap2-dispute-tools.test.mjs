@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import {
+  AP2_EVIDENCE_PACK_BATCH_LIMIT,
   createAp2EvidenceTimeline,
   packAp2DisputeEvidence,
   reconcileAp2DisputeEvidencePack,
@@ -11,6 +12,7 @@ import {
   renderAp2EvidenceTimelineHtml,
   renderAp2EvidenceTimelineMarkdown,
   verifyAp2DisputeEvidencePack,
+  verifyAp2DisputeEvidencePacks,
 } from "../dist/ap2-dispute.js";
 import { CLI_EXIT, runCli } from "../dist/cli.js";
 import { csvCell, renderCaseCoverageCsv, renderCaseReportMarkdown } from "../dist/report.js";
@@ -20,6 +22,8 @@ const FIXTURES = new URL("./fixtures/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8"));
 const GOLDEN_120 = "ap2-evidence-pack-1.2.0.json";
 const NO_EXP_120 = "ap2-evidence-pack-1.2.0-no-delegated-exp.json";
+const REVEALED_200 = "ap2-evidence-pack-2.0.0-revealed-constraints.json";
+const PAYMENT_200 = "ap2-evidence-pack-2.0.0-payment-constraints.json";
 const OTHER_DIGEST = `sha256:${"0".repeat(64)}`;
 const sha256 = (text) => `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`;
 
@@ -333,4 +337,144 @@ test("ap2-dispute render prints Markdown and CSV with the HTML exit codes", asyn
     const missingAnchor = await cli(["ap2-dispute", "render", "-", "--format", format], input);
     assert.equal(missingAnchor.code, CLI_EXIT.USAGE, format);
   }
+});
+
+// -------------------------------------------------------------------- batch
+
+function item(id, pack, extra = {}) {
+  return { id, pack, expectedPackDigest: pack.packDigest, ...extra };
+}
+
+test("batch reports each retained Pack in input order with summary counts", () => {
+  const verified = packFor(makeFixture());
+  const revoked = packFor(makeFixture(), "revoked");
+  const tampered = tamper(packFor(makeFixture()));
+  const batch = verifyAp2DisputeEvidencePacks([
+    item("pack-verified", verified),
+    { id: "pack-tampered", pack: tampered, expectedPackDigest: tampered.packDigest },
+    { id: "pack-wrong-anchor", pack: verified, expectedPackDigest: OTHER_DIGEST },
+    item("pack-revoked", revoked),
+    { id: "pack-invalid", pack: { schemaId: "not-a-pack" }, expectedPackDigest: OTHER_DIGEST },
+  ]);
+  assert.equal(batch.schemaId, "MandateBoundAp2EvidencePackBatch/v1");
+  assert.equal(batch.legalEffect, "not-determined");
+  assert.deepEqual(batch.items.map(({ id, status }) => [id, status]), [
+    ["pack-verified", "verified"],
+    ["pack-tampered", "unresolved"],
+    ["pack-wrong-anchor", "unresolved"],
+    ["pack-revoked", "unresolved"],
+    ["pack-invalid", "invalid"],
+  ]);
+  assert.deepEqual(batch.summary, { total: 5, verified: 1, unresolved: 3, invalid: 1, changed: 0 });
+  const byId = Object.fromEntries(batch.items.map((entry) => [entry.id, entry]));
+  assert.equal(byId["pack-tampered"].digestValid, false);
+  assert.equal(byId["pack-wrong-anchor"].anchorMatched, false);
+  assert.equal(byId["pack-revoked"].reportedRevocationState, "revoked");
+  assert.ok(byId["pack-revoked"].issueCodes.includes("AP2_REPORTED_REVOCATION_REVOKED"));
+  assert.equal(byId["pack-invalid"].packDigest, null);
+  assert.deepEqual(byId["pack-invalid"].issueCodes, ["AP2_PACK_SHAPE_INVALID"]);
+  for (const entry of batch.items) {
+    assert.deepEqual(entry.issueCodes, [...new Set(entry.issueCodes)].sort());
+    assert.equal(Object.hasOwn(entry, "statusChanged"), false);
+  }
+});
+
+test("batch flags a status that changed since the previous verification", () => {
+  const verified = packFor(makeFixture());
+  const unresolved = packFor(makeFixture({ checkoutMerchantId: "merchant-2" }));
+  const batch = verifyAp2DisputeEvidencePacks([
+    item("was-verified", unresolved, { previousStatus: "verified" }),
+    item("was-unresolved", verified, { previousStatus: "unresolved" }),
+    item("unchanged", verified, { previousStatus: "verified" }),
+  ]);
+  assert.deepEqual(batch.items.map(({ id, previousStatus, statusChanged }) => [id, previousStatus, statusChanged]), [
+    ["was-verified", "verified", true],
+    ["was-unresolved", "unresolved", true],
+    ["unchanged", "verified", false],
+  ]);
+  assert.equal(batch.summary.changed, 2);
+});
+
+test("batch digest is deterministic and order-sensitive, and envelopes are accepted", () => {
+  const first = packFor(makeFixture());
+  const second = packFor(makeFixture());
+  const forward = verifyAp2DisputeEvidencePacks([item("a", first), item("b", second)]);
+  assert.equal(verifyAp2DisputeEvidencePacks([item("a", first), item("b", second)]).batchDigest, forward.batchDigest);
+  assert.notEqual(verifyAp2DisputeEvidencePacks([item("b", second), item("a", first)]).batchDigest, forward.batchDigest);
+  const enveloped = verifyAp2DisputeEvidencePacks([
+    { id: "a", pack: { ok: true, result: first }, expectedPackDigest: first.packDigest },
+    item("b", second),
+  ]);
+  assert.equal(enveloped.batchDigest, forward.batchDigest);
+});
+
+test("the frozen 1.2.0 and 2.0.0 Packs batch exactly as they verify one at a time", () => {
+  const names = [GOLDEN_120, NO_EXP_120, REVEALED_200, PAYMENT_200];
+  const packs = names.map(readPack);
+  const batch = verifyAp2DisputeEvidencePacks(names.map((name, index) => item(`fixture-${String(index)}`, packs[index])));
+  for (let index = 0; index < names.length; index += 1) {
+    const single = verifyAp2DisputeEvidencePack(packs[index], { expectedPackDigest: packs[index].packDigest });
+    assert.deepEqual(batch.items[index].verification, single, names[index]);
+    assert.equal(batch.items[index].status, single.status, names[index]);
+  }
+  assert.deepEqual(batch.items.map((entry) => entry.status), ["verified", "unresolved", "verified", "verified"]);
+});
+
+test("a malformed batch is rejected with fixed messages that never echo input", () => {
+  const pack = packFor(makeFixture());
+  const secret = "secret-input-value";
+  for (const [items, message] of [
+    [[], /1 to 100 items/u],
+    [Array.from({ length: AP2_EVIDENCE_PACK_BATCH_LIMIT + 1 }, (_, index) => item(`p${String(index)}`, pack)), /1 to 100 items/u],
+    ["not-a-list", /1 to 100 items/u],
+    [[item("dup", pack), item("dup", pack)], /must be unique/u],
+    [[item(`-${secret}`, pack)], /id is invalid/u],
+    [[item("x".repeat(129), pack)], /id is invalid/u],
+    [[{ ...item("a", pack), [secret]: true }], /must hold id, pack, expectedPackDigest/u],
+    [[{ id: "a", pack }], /must hold id, pack, expectedPackDigest/u],
+    [[{ ...item("a", pack), expectedPackDigest: secret }], /sha256 digest/u],
+    [[item("a", pack, { previousStatus: secret })], /verified or unresolved/u],
+    [[item("a", pack, { previousStatus: "invalid" })], /verified or unresolved/u],
+    [[null], /must hold id, pack/u],
+  ]) {
+    assert.throws(() => verifyAp2DisputeEvidencePacks(items), (error) => {
+      assert.ok(error instanceof TypeError);
+      assert.match(error.message, message);
+      assert.equal(error.message.includes(secret), false);
+      return true;
+    });
+  }
+});
+
+test("ap2-dispute batch exits 0, 5 and 3 as documented", async () => {
+  const verified = packFor(makeFixture());
+  const unresolved = packFor(makeFixture({ checkoutMerchantId: "merchant-2" }));
+  const run = (packs) => cli(["ap2-dispute", "batch", "-"], JSON.stringify({ packs }));
+
+  const ok = await run([item("a", verified), { id: "b", pack: { ok: true, result: verified }, expectedPackDigest: verified.packDigest }]);
+  assert.equal(ok.code, CLI_EXIT.SUCCESS, ok.stdout);
+  assert.equal(JSON.parse(ok.stdout).ok, true);
+  assert.equal(JSON.parse(ok.stdout).result.summary.verified, 2);
+
+  assert.equal((await run([item("a", verified), item("b", unresolved)])).code, CLI_EXIT.CONFLICT);
+  assert.equal((await run([item("a", verified, { previousStatus: "unresolved" })])).code, CLI_EXIT.CONFLICT);
+  const invalid = await run([item("a", verified), { id: "b", pack: {}, expectedPackDigest: OTHER_DIGEST }]);
+  assert.equal(invalid.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(invalid.stdout).result.summary.invalid, 1);
+
+  const duplicate = await run([item("a", verified), item("a", verified)]);
+  assert.equal(duplicate.code, CLI_EXIT.INVALID);
+  assert.deepEqual(JSON.parse(duplicate.stdout).error, {
+    code: "ALB_CLI_INPUT",
+    message: "AP2 Pack batch item ids must be unique.",
+  });
+  for (const body of [{}, { packs: [], extra: 1 }, { packs: {} }]) {
+    const rejected = await cli(["ap2-dispute", "batch", "-"], JSON.stringify(body));
+    assert.equal(rejected.code, CLI_EXIT.INVALID, JSON.stringify(body));
+    assert.equal(JSON.parse(rejected.stdout).error.code, "ALB_CLI_INPUT");
+  }
+  const anchored = await cli(["ap2-dispute", "batch", "-", "--expected-pack-digest", verified.packDigest], "{}");
+  assert.equal(anchored.code, CLI_EXIT.USAGE);
+  const csv = await cli(["ap2-dispute", "batch", "-", "--format", "csv"], "{}");
+  assert.equal(csv.code, CLI_EXIT.USAGE);
 });

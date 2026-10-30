@@ -2080,3 +2080,136 @@ export function reconcileAp2DisputeEvidencePack(
   });
   return Object.freeze({ ...material, reconciliationDigest: sha256Digest(material) });
 }
+
+export const AP2_EVIDENCE_PACK_BATCH_LIMIT = 100;
+
+export interface Ap2EvidencePackBatchInputItem {
+  /** Caller label, unique in the batch: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$. */
+  readonly id: string;
+  /** A bare Pack, or the `{ ok: true, result }` envelope `ap2-dispute pack` prints. */
+  readonly pack: unknown;
+  /** Independently retained content address for this Pack. */
+  readonly expectedPackDigest: Sha256Digest;
+  /** The status recorded at the previous verification, to flag a change. */
+  readonly previousStatus?: "verified" | "unresolved";
+}
+
+export interface Ap2EvidencePackBatchItem {
+  readonly id: string;
+  readonly status: "verified" | "unresolved" | "invalid";
+  readonly previousStatus?: "verified" | "unresolved";
+  readonly statusChanged?: boolean;
+  readonly packDigest: Sha256Digest | null;
+  readonly anchorMatched: boolean;
+  readonly digestValid: boolean;
+  readonly checkoutVersionBinding: Ap2CheckoutVersionBinding;
+  readonly revocationCoverage: Ap2RevocationCoverage;
+  readonly reportedRevocationState: Ap2ReportedRevocationState;
+  /** Sorted unique codes from the verification and its embedded resolution. */
+  readonly issueCodes: readonly string[];
+  readonly verification: Ap2DisputeEvidencePackVerification;
+}
+
+export interface Ap2EvidencePackBatch {
+  readonly schemaId: "MandateBoundAp2EvidencePackBatch/v1";
+  readonly legalEffect: typeof LEGAL_EFFECT;
+  readonly summary: {
+    readonly total: number;
+    readonly verified: number;
+    readonly unresolved: number;
+    readonly invalid: number;
+    readonly changed: number;
+  };
+  readonly items: readonly Ap2EvidencePackBatchItem[];
+  readonly batchDigest: Sha256Digest;
+}
+
+const PREVIOUS_STATUSES: readonly string[] = Object.freeze(["verified", "unresolved"]);
+
+function assertBatchItems(items: unknown): asserts items is readonly Ap2EvidencePackBatchInputItem[] {
+  if (!Array.isArray(items) || items.length === 0 || items.length > AP2_EVIDENCE_PACK_BATCH_LIMIT) {
+    throw new TypeError(`AP2 Pack batch must hold 1 to ${String(AP2_EVIDENCE_PACK_BATCH_LIMIT)} items`);
+  }
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (
+      !isRecord(item) ||
+      !hasAllowedKeys(item, ["id", "pack", "expectedPackDigest"], ["previousStatus"])
+    ) {
+      throw new TypeError("AP2 Pack batch item must hold id, pack, expectedPackDigest and an optional previousStatus");
+    }
+    if (typeof item.id !== "string" || !SOURCE_ID_PATTERN.test(item.id)) {
+      throw new TypeError("AP2 Pack batch item id is invalid");
+    }
+    if (ids.has(item.id)) throw new TypeError("AP2 Pack batch item ids must be unique");
+    ids.add(item.id);
+    if (typeof item.expectedPackDigest !== "string" || !isSha256Digest(item.expectedPackDigest)) {
+      throw new TypeError("AP2 Pack batch item expectedPackDigest must be a sha256 digest");
+    }
+    if (
+      item.previousStatus !== undefined &&
+      (typeof item.previousStatus !== "string" || !PREVIOUS_STATUSES.includes(item.previousStatus))
+    ) {
+      throw new TypeError("AP2 Pack batch item previousStatus must be verified or unresolved");
+    }
+  }
+}
+
+function unwrapPackEnvelope(value: unknown): unknown {
+  return isRecord(value) && hasExactKeys(value, ["ok", "result"]) && value.ok === true
+    ? value.result
+    : value;
+}
+
+/**
+ * Re-verify a set of retained AP2 Evidence Packs, each against its own
+ * independently retained digest, and flag every status that differs from the
+ * one recorded at the previous verification. A malformed batch throws a
+ * TypeError with a fixed message; a single malformed Pack is reported as
+ * `invalid` and never throws.
+ */
+export function verifyAp2DisputeEvidencePacks(
+  items: readonly Ap2EvidencePackBatchInputItem[],
+): Ap2EvidencePackBatch {
+  assertBatchItems(items);
+  const results = items.map((item): Ap2EvidencePackBatchItem => {
+    const verification = verifyAp2DisputeEvidencePack(unwrapPackEnvelope(item.pack), {
+      expectedPackDigest: item.expectedPackDigest,
+    });
+    const status = verification.packDigest === null ? "invalid" as const : verification.status;
+    const issueCodes = freezeStrings([
+      ...verification.issues.map((issue) => issue.code),
+      ...(verification.resolution?.issues ?? []).map((issue) => issue.code),
+    ]);
+    return Object.freeze({
+      id: item.id,
+      status,
+      ...(item.previousStatus === undefined
+        ? {}
+        : { previousStatus: item.previousStatus, statusChanged: status !== item.previousStatus }),
+      packDigest: verification.packDigest,
+      anchorMatched: verification.anchorMatched,
+      digestValid: verification.digestValid,
+      checkoutVersionBinding: verification.checkoutVersionBinding,
+      revocationCoverage: verification.revocationCoverage,
+      reportedRevocationState: verification.reportedRevocationState,
+      issueCodes,
+      verification,
+    });
+  });
+  const count = (status: Ap2EvidencePackBatchItem["status"]): number =>
+    results.filter((entry) => entry.status === status).length;
+  const material = Object.freeze({
+    schemaId: "MandateBoundAp2EvidencePackBatch/v1" as const,
+    legalEffect: LEGAL_EFFECT,
+    summary: Object.freeze({
+      total: results.length,
+      verified: count("verified"),
+      unresolved: count("unresolved"),
+      invalid: count("invalid"),
+      changed: results.filter((entry) => entry.statusChanged === true).length,
+    }),
+    items: Object.freeze(results),
+  });
+  return Object.freeze({ ...material, batchDigest: sha256Digest(material) });
+}
