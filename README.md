@@ -121,7 +121,7 @@ Build first, then use the local `dist/cli.js` binary or the installed `mandatebo
 | CasePack | `casepack build`, `casepack verify`, `casepack unpack`, `casepack diff`, `case-report` | [`docs/V1_1.md`](docs/V1_1.md) |
 | Policy tools | `policy validate`, `policy test`, `policy diff` | [`BRIEF.md`](BRIEF.md) |
 | AP2 dispute evidence | `ap2-dispute resolve`, `ap2-dispute pack`, `ap2-dispute verify`, `ap2-dispute render`, `ap2-dispute batch`, `ap2-dispute reconcile` | [`docs/V1_2.md`](docs/V1_2.md) |
-| Capability statement | `conformance` | [`conformance/v2.0/README.md`](conformance/v2.0/README.md) |
+| Capability statement | `conformance` | [`conformance/v2.1/README.md`](conformance/v2.1/README.md) |
 | Help and version | `help`, `version` (also `--help`, `--version`) | [`docs/CLI.md`](docs/CLI.md#conformance-help-and-version) |
 
 JSON commands accept one strict document from `--input PATH`, a positional path, or stdin. The CLI returns `{ok, result}` envelopes and bounded error codes. `casepack verify`, `case-report`, and the operator workflows require caller-owned anchors when the case contract declares them. The [CLI reference](docs/CLI.md) lists every command's input shape, input limits, output, and exit codes; the linked guides add worked workflows.

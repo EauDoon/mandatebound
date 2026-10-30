@@ -1,5 +1,7 @@
 # MandateBound 2.0 conformance fixtures
 
+Historical: this describes the 2.0.0 release. Its `capabilities.json` remains retrievable from the `v2.0.0` tag and the 2.0.0 release tarball. The current declaration is in [v2.1](../v2.1/README.md).
+
 This directory identifies the bounded conformance surface of the 2.0 release line, exercised by `npm run conformance`. The capability profiles are the ones 1.2.0 declared plus external evidence review; AP2 artifacts keep the frozen 1.2.0 format release.
 
 The suite covers the v1.1 evidence-import and CasePack fixtures and:

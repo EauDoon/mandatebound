@@ -249,7 +249,7 @@ requires `--expected-receipt-digest`.
 
 `conformance` takes no input and prints the runtime capability statement. The
 published declaration for this release, which a test keeps equal to it, is
-described in [the conformance README](../conformance/v2.0/README.md).
+described in [the conformance README](../conformance/v2.1/README.md).
 
 `help` (or `--help`) and `version` (or `--version`) take no input and exit 0.
 Both print `name`, `version`, `protocolVersion`, `releaseVersion`,

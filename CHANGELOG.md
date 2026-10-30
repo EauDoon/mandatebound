@@ -10,29 +10,32 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-30
+
 ### Upgrading from 2.0.0
 
-Protocol `1.0.0`, engine `1.0.0`, the AP2 Pack format `1.2.0`, the
-`schemas/v1.2` documents, the dispute profile and every Pack digest are
-unchanged. Pack verification re-derives the resolution under the current gates,
-so a retained Pack's verdict moves only where the gates below changed, and its
-`digestValid` and `anchorMatched` stay true. `verifyAp2MandateChain` from
+2.1.0 is a minor release: no public interface, CLI flag, input or output format
+is removed or renamed, and every new output field is optional. Protocol
+`1.0.0`, engine `1.0.0`, the AP2 Pack format `1.2.0`, the `schemas/v1.2`
+documents, the dispute profile and every Pack digest are unchanged. Pack
+verification re-derives the resolution under the current gates, so a retained
+Pack's verdict moves only where the gates below changed, and its `digestValid`
+and `anchorMatched` stay true. `verifyAp2MandateChain` from
 `@oonyl/mandatebound/ucp-ap2`, which the resolver runs on each Mandate chain,
 changes in the same cases: its `upstreamValid` and issues move as described
 below for direct callers too.
 
 - AP2 evidence whose open Mandate withholds a constraint disclosure now resolves
   `unresolved` with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD` where it used to
-  resolve `evidence_verified`. So does evidence whose issuer placed an RFC 9901
-  decoy digest in a constraint list, a constraint entry or a line-item
-  requirement list, because a decoy cannot be told apart from a withheld
-  disclosure. That includes honest evidence redacted with the
+  resolve `evidence_verified`. That includes honest evidence redacted with the
   official SDK's `MandateClient.present(claims_to_disclose=...)`, which drops
   every acceptable-item disclosure of a `checkout.line_items` constraint; the
   pinned AP2 rules match line items only against the revealed acceptable items,
   so such evidence never established the constraint. Present the open Mandate
-  with its constraint disclosures, as the SDK's default presentation does.
-  Packs whose Mandates reveal their constraints produce byte-identical
+  with its constraint disclosures, as the SDK's default presentation does. An
+  RFC 9901 decoy digest in a constraint list, a constraint entry or a line-item
+  requirement list has the same effect, because a decoy cannot be told apart
+  from a withheld disclosure. Packs whose Mandates reveal their constraints produce byte-identical
   verification reports.
 - AP2 evidence whose open Payment Mandate carries `payment.amount_range`,
   `payment.allowed_payees`, `payment.allowed_payment_instruments` or
@@ -44,6 +47,13 @@ below for direct callers too.
   name-and-website fallback stays `unresolved` here. `payment.budget`,
   `payment.agent_recurrence` and `payment.execution_date` keep their code and
   message.
+- Operator assessment receipts embed the package release, so a receipt made by
+  2.0.0 reports a `releaseVersion` difference (exit 5 from `receipt-verify`)
+  under 2.1.0, as every release bump does. Review and re-issue it; this is not
+  evidence of tampering.
+- The conformance declaration moves to `conformance/v2.1/capabilities.json`.
+  The 2.0.0 declaration remains retrievable from the `v2.0.0` tag and release
+  tarball.
 
 ### Added
 
@@ -433,7 +443,8 @@ required.
 - Added CLI, localhost API, simulator, OpenAPI contract, and synthetic test suite.
 - Added security, privacy, interoperability, governance, and legal-boundary documentation.
 
-[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/EauDoon/mandatebound/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/EauDoon/mandatebound/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/EauDoon/mandatebound/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/EauDoon/mandatebound/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/EauDoon/mandatebound/compare/v1.0.0...v1.1.0

@@ -1,6 +1,6 @@
 # MandateBound v1.2 conformance fixtures
 
-Historical: this describes the 1.2.0 release. Its `capabilities.json` remains retrievable from the `v1.2.0` tag and the 1.2.0 release tarball. The current declaration is in [v2.0](../v2.0/README.md).
+Historical: this describes the 1.2.0 release. Its `capabilities.json` remains retrievable from the `v1.2.0` tag and the 1.2.0 release tarball. The current declaration is in [v2.1](../v2.1/README.md).
 
 This directory identifies the bounded conformance surface exercised by `npm run conformance`.
 
