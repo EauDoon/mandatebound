@@ -90,9 +90,42 @@ test("dependency check fails closed on a vulnerable installed version", () => {
 test("dependency check accepts the fixed version and reports the scanned tree", () => {
   const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-safe-"));
   try {
-    const result = runChecker(directory, { name: "fast-uri", version: "3.1.8" });
+    const result = runChecker(directory, { name: "fast-uri", version: "3.1.9" });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /dependency check: 1 installed packages clear of recorded advisories/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("dependency check rejects the October 2026 URI advisories' last affected release", () => {
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-scheme-"));
+  try {
+    const result = runChecker(directory, { name: "fast-uri", version: "3.1.8" });
+    assert.equal(result.status, 1);
+    for (const advisory of [
+      "GHSA-w74x-v6f9-j3xg",
+      "GHSA-xhq7-xmqj-769h",
+      "GHSA-wjr9-j795-jxcr",
+      "GHSA-333x-w4r6-6crp",
+    ]) {
+      assert.match(result.stderr, new RegExp(advisory));
+    }
+    assert.match(result.stderr, /upgrade to 3\.1\.9/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("dependency check keeps the host canonicalization advisory to its published window", () => {
+  // GHSA-wjr9-j795-jxcr affects 3.1.3 and later only; the other three
+  // October 2026 advisories reach back to 3.0.0.
+  const directory = mkdtempSync(join(tmpdir(), "mandatebound-deps-window-"));
+  try {
+    const before = runChecker(directory, { name: "fast-uri", version: "3.1.2" });
+    assert.equal(before.status, 1);
+    assert.match(before.stderr, /GHSA-w74x-v6f9-j3xg/);
+    assert.doesNotMatch(before.stderr, /GHSA-wjr9-j795-jxcr/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

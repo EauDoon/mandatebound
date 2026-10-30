@@ -21,10 +21,29 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `assembleAp2DisputeEvidence`, `resolveAp2DisputeEvidence` and
+  `packAp2DisputeEvidence`, and with them `ap2-dispute pack`, reject an `asOf`
+  or `createdAt` that is not a string. A one-element array such as
+  `["2026-07-23T00:00:00.000Z"]` stringified to a valid timestamp and was copied
+  into the output, so `ap2-dispute pack` exited 0 and printed a Pack that the
+  published Pack schema and `ap2-dispute verify` both reject as malformed.
+  String timestamps, retained Packs and their digests are unaffected.
 - Canonical JSON now enforces its UTF-8 byte budget during serialization, rather
   than after allocating the complete output. Repeated shared values cannot
   expand a small input into an unbounded intermediate string before rejection;
   accepted canonical bytes and digest values remain unchanged.
+
+### Security
+
+- Raise the `fast-uri` override and lock to 3.1.9 or later, and record the
+  advisories published on 2026-10-23 in the dependency gate:
+  [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),
+  [GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h) and
+  [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp)
+  affect 3.0.0 to 3.1.8, and
+  [GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr)
+  affects 3.1.3 to 3.1.8. The gate passed the locked 3.1.8 because it did not
+  know them, while `npm audit` reported the lockfile as vulnerable.
 
 ## [2.0.0] - 2026-10-09
 
