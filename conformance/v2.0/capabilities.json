@@ -18,6 +18,20 @@
       "verify",
       "render"
     ],
+    "evaluatedConstraints": [
+      "checkout.allowed_merchants",
+      "checkout.line_items",
+      "payment.allowed_payees",
+      "payment.allowed_payment_instruments",
+      "payment.allowed_pisps",
+      "payment.amount_range",
+      "payment.reference"
+    ],
+    "failClosedConstraints": [
+      "payment.agent_recurrence",
+      "payment.budget",
+      "payment.execution_date"
+    ],
     "revocationEvidence": "imported-reported-state",
     "builtInNetworkAccess": false,
     "legalEffect": "not-determined"

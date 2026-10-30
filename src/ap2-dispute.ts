@@ -18,6 +18,7 @@ import {
   type VerifyAp2ReceiptOptions,
   type VerifyAp2CheckoutJwtOptions,
 } from "./ucp-ap2.js";
+import { AP2_PINNED_CONSTRAINT_SUPPORT } from "./ucp-ap2/mandate-verify.js";
 import { parseTimestampMillis } from "./ucp-ap2/primitives.js";
 import { AP2_DISPUTE_FORMAT_RELEASE, LEGAL_EFFECT } from "./version.js";
 
@@ -30,6 +31,13 @@ export const AP2_DISPUTE_EVIDENCE_PROFILE = Object.freeze({
   retrievalTransport: "caller-supplied",
   builtInNetworkAccess: false,
 } as const);
+
+/**
+ * The open-Mandate constraint types the dispute resolver evaluates, and the
+ * pinned AP2 v0.2.0 types it still rejects with AP2_CONSTRAINT_UNSUPPORTED.
+ * Any other type is unsupported too.
+ */
+export const AP2_DISPUTE_CONSTRAINT_SUPPORT = AP2_PINNED_CONSTRAINT_SUPPORT;
 
 export const AP2_DISPUTE_ARTIFACT_KINDS = Object.freeze([
   "checkout_mandate",

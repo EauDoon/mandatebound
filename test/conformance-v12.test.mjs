@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { AP2_DISPUTE_CONSTRAINT_SUPPORT } from "../dist/ap2-dispute.js";
 import { compareCasePackStatus } from "../dist/casepack-tools.js";
 import { getConformanceStatement } from "../dist/conformance.js";
 import { RELEASE_VERSION } from "../dist/version.js";
@@ -72,6 +73,10 @@ test("published capability declaration for this release matches the runtime stat
     "ap2-v0.2.0-mandate-chain+b4587ac1d055888a73b4b21750973cffba961793",
   );
   assert.deepEqual(published.disputeProfile.operations, ["resolve", "pack", "verify", "render"]);
+  // The constraint types the resolver evaluates, and the pinned types it
+  // still rejects, exactly as the library exports them.
+  assert.deepEqual(published.disputeProfile.evaluatedConstraints, AP2_DISPUTE_CONSTRAINT_SUPPORT.evaluated);
+  assert.deepEqual(published.disputeProfile.failClosedConstraints, AP2_DISPUTE_CONSTRAINT_SUPPORT.failClosed);
   // Every runtime capability, in order, with the status the runtime declares.
   assert.deepEqual(
     published.capabilities,

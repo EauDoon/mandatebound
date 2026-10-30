@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import fc from "fast-check";
+// Importing the helper also pins the global fast-check seed for this file.
+import "./fast-check-seed.mjs";
 import {
+  AP2_DISPUTE_CONSTRAINT_SUPPORT,
   assembleAp2DisputeEvidence,
   packAp2DisputeEvidence,
   verifyAp2DisputeEvidencePack,
 } from "../dist/ap2-dispute.js";
-import { verifyAp2MandateChain } from "../dist/ucp-ap2.js";
+import { verifyAp2Mandate, verifyAp2MandateChain } from "../dist/ucp-ap2.js";
 import {
   arrayElement,
   asOf,
@@ -14,6 +19,7 @@ import {
   makeFixture,
   makePackInput,
 } from "./ap2-dispute-fixture.mjs";
+import { issueCodes, makeClosedAp2Fixture } from "./ucp-ap2-helpers.mjs";
 
 // The presenting agent chooses which issuer-signed disclosures to reveal
 // before it signs the terminal hop. A constraint it withholds must never
@@ -220,4 +226,272 @@ test("the chain verifier reports a withheld constraint at the open Mandate", () 
     report.issues.filter((issue) => issue.code === WITHHELD).map(({ path, impact }) => ({ path, impact })),
     [{ path: "token.claims.constraints", impact: "upstream_validity" }],
   );
+});
+
+// AP2 v0.2.0 open Payment Mandate constraints. The pinned reference shopping
+// agent builds every open Payment Mandate as [payment.amount_range,
+// payment.allowed_payees, payment.reference], and adds
+// payment.allowed_payment_instruments for x402.
+
+const FAILED = "AP2_CONSTRAINT_FAILED";
+const INVALID = "AP2_CONSTRAINT_INVALID";
+const UNSUPPORTED = "AP2_CONSTRAINT_UNSUPPORTED";
+const UNSUPPORTED_MESSAGE = "Unknown or unsupported constraint types fail closed";
+const PISP = Object.freeze({
+  legal_name: "Synthetic Initiation Ltd",
+  brand_name: "SynthPay",
+  domain_name: "pisp.example",
+});
+
+function paymentWith(constraints, { paymentClaims = {}, paymentRootDisclosures = [] } = {}) {
+  return makeFixture({
+    paymentConstraints: (reference) => [...constraints, reference],
+    paymentClaims,
+    paymentRootDisclosures,
+  });
+}
+
+function paymentConstraintIssues(result) {
+  return result.issues
+    .filter((issue) => issue.path.startsWith("artifacts.payment_mandate.token.claims.constraints"))
+    .map(({ code, path, message }) => ({ code, path, message }));
+}
+
+function assertPaymentConstraint(fixture, expected) {
+  const result = assembleAp2DisputeEvidence(fixture.input);
+  if (expected === null) {
+    assert.equal(result.status, "evidence_verified", JSON.stringify(result.issues));
+    return result;
+  }
+  assert.equal(result.status, "unresolved");
+  const found = paymentConstraintIssues(result);
+  assert.deepEqual(found.map(({ code, path }) => ({ code, path })), [{
+    code: expected,
+    path: "artifacts.payment_mandate.token.claims.constraints[0]",
+  }], JSON.stringify(result.issues));
+  return result;
+}
+
+test("the reference agent's open Payment Mandate shape resolves and packs verified", () => {
+  const payee = arrayElement({ id: "merchant-1", name: "Synthetic Store" });
+  const decoy = arrayElement({ id: "merchant-decoy", name: "Decoy Store" });
+  const fixture = makeFixture({
+    paymentConstraints: (reference) => [
+      { type: "payment.amount_range", currency: "USD", min: 0, max: 5_000 },
+      { type: "payment.allowed_payees", allowed: [payee.placeholder, decoy.placeholder] },
+      reference,
+    ],
+    paymentRootDisclosures: [payee.encoded],
+  });
+  const result = assembleAp2DisputeEvidence(fixture.input);
+  assert.equal(result.status, "evidence_verified", JSON.stringify(result.issues));
+  const pack = packAp2DisputeEvidence(makePackInput(fixture));
+  const verification = verifyAp2DisputeEvidencePack(pack, { expectedPackDigest: pack.packDigest });
+  assert.equal(verification.status, "verified", JSON.stringify(verification.issues));
+});
+
+test("payment.amount_range compares currency and inclusive bounds with the closed amount", () => {
+  const range = { type: "payment.amount_range", currency: "USD", min: 1_000, max: 2_500 };
+  // The closed Payment Mandate pays USD 2500.
+  assertPaymentConstraint(paymentWith([range]), null);
+  assertPaymentConstraint(paymentWith([{ ...range, min: 2_500 }]), null);
+  assertPaymentConstraint(paymentWith([{ type: range.type, currency: "USD", max: 2_500 }]), null);
+  assertPaymentConstraint(paymentWith([{ ...range, max: 2_499 }]), FAILED);
+  assertPaymentConstraint(paymentWith([{ ...range, min: 2_501, max: 9_000 }]), FAILED);
+  assertPaymentConstraint(paymentWith([{ ...range, currency: "EUR" }]), FAILED);
+  const capped = assertPaymentConstraint(paymentWith([{ ...range, min: 0, max: 100 }]), FAILED);
+  assert.equal(paymentConstraintIssues(capped)[0].message,
+    "Amount-range constraint could not be satisfied by the closed Payment Mandate");
+});
+
+test("a malformed payment.amount_range is invalid, including a major-unit string amount", () => {
+  // A JSON number with a fraction never reaches the evaluator: the strict
+  // token parser rejects every non-integer number first.
+  for (const malformed of [
+    { type: "payment.amount_range", currency: "USD", max: "25.00" },
+    { type: "payment.amount_range", currency: "USD", max: "2500" },
+    { type: "payment.amount_range", currency: "USD", min: 3_000, max: 2_500 },
+    { type: "payment.amount_range", currency: "USD", min: "0", max: 2_500 },
+    { type: "payment.amount_range", max: 2_500 },
+    { type: "payment.amount_range", currency: "", max: 2_500 },
+    { type: "payment.amount_range", currency: "USD" },
+  ]) {
+    const result = assertPaymentConstraint(paymentWith([malformed]), INVALID);
+    assert.equal(paymentConstraintIssues(result)[0].message, "Amount-range constraint is malformed");
+  }
+});
+
+test("payment.allowed_payees matches the closed payee by id only", () => {
+  const constraint = (allowed) => ({ type: "payment.allowed_payees", allowed });
+  assertPaymentConstraint(paymentWith([constraint([{ id: "merchant-1", name: "Synthetic Store" }])]), null);
+  assertPaymentConstraint(paymentWith([constraint([{ id: "merchant-2", name: "Synthetic Store" }])]), FAILED);
+  // The SDK's name and website fallback is not accepted: merchant.json requires id.
+  assertPaymentConstraint(paymentWith([constraint([{ name: "Synthetic Store", website: "https://merchant.example" }])]), FAILED);
+  // A list whose elements are all withheld reveals nothing and fails.
+  const hidden = arrayElement({ id: "merchant-1", name: "Synthetic Store" });
+  assertPaymentConstraint(paymentWith([constraint([hidden.placeholder])]), FAILED);
+  assertPaymentConstraint(paymentWith([constraint([hidden.placeholder])], {
+    paymentRootDisclosures: [hidden.encoded],
+  }), null);
+  assertPaymentConstraint(paymentWith([{ type: "payment.allowed_payees" }]), FAILED);
+});
+
+test("payment.allowed_payment_instruments matches the closed instrument id", () => {
+  const constraint = (allowed) => ({ type: "payment.allowed_payment_instruments", allowed });
+  assertPaymentConstraint(paymentWith([constraint([{ id: "instrument-1", type: "card" }])]), null);
+  const mismatch = assertPaymentConstraint(paymentWith([constraint([{ id: "instrument-2", type: "card" }])]), FAILED);
+  assert.equal(paymentConstraintIssues(mismatch)[0].message,
+    "Allowed-payment-instrument constraint could not be satisfied by the closed Payment Mandate");
+});
+
+test("payment.allowed_pisps requires a closed pisp equal to one allowed entry", () => {
+  const constraint = { type: "payment.allowed_pisps", allowed: [PISP] };
+  assertPaymentConstraint(paymentWith([constraint], { paymentClaims: { pisp: PISP } }), null);
+  for (const field of ["legal_name", "brand_name", "domain_name"]) {
+    assertPaymentConstraint(paymentWith([constraint], {
+      paymentClaims: { pisp: { ...PISP, [field]: "different" } },
+    }), FAILED);
+  }
+  const missing = assertPaymentConstraint(paymentWith([constraint]), FAILED);
+  assert.equal(paymentConstraintIssues(missing)[0].message,
+    "Allowed-PISP constraint could not be satisfied by the closed Payment Mandate");
+});
+
+test("payment constraints inside a Checkout Mandate stay unsupported with the unchanged message", () => {
+  const fixture = makeFixture({
+    checkoutConstraints: [
+      ...defaultCheckoutConstraints(),
+      { type: "payment.amount_range", currency: "USD", max: 5_000 },
+    ],
+  });
+  const result = assembleAp2DisputeEvidence(fixture.input);
+  assert.equal(result.status, "unresolved");
+  assert.deepEqual(
+    result.issues.filter((issue) => issue.code === UNSUPPORTED).map(({ path, message }) => ({ path, message })),
+    [{ path: "artifacts.checkout_mandate.token.claims.constraints[2]", message: UNSUPPORTED_MESSAGE }],
+  );
+});
+
+test("budget, agent recurrence and execution date keep failing closed with the unchanged message", () => {
+  for (const constraint of [
+    { type: "payment.budget", currency: "USD", max: 10_000 },
+    { type: "payment.agent_recurrence", frequency: "MONTHLY", max_occurrences: 3 },
+    { type: "payment.execution_date", not_before: "2026-07-01" },
+  ]) {
+    const result = assertPaymentConstraint(paymentWith([constraint]), UNSUPPORTED);
+    assert.equal(paymentConstraintIssues(result)[0].message, UNSUPPORTED_MESSAGE);
+  }
+  assert.deepEqual(AP2_DISPUTE_CONSTRAINT_SUPPORT.failClosed, [
+    "payment.agent_recurrence",
+    "payment.budget",
+    "payment.execution_date",
+  ]);
+  assert.equal(Object.isFrozen(AP2_DISPUTE_CONSTRAINT_SUPPORT), true);
+  assert.equal(Object.isFrozen(AP2_DISPUTE_CONSTRAINT_SUPPORT.evaluated), true);
+});
+
+test("a malformed closed payee, amount or instrument fails the constraint without throwing", () => {
+  const cases = [
+    [{ type: "payment.amount_range", currency: "USD", max: 5_000 }, { payment_amount: "2500" }],
+    [{ type: "payment.amount_range", currency: "USD", max: 5_000 }, { payment_amount: { currency: "USD", amount: "2500" } }],
+    [{ type: "payment.amount_range", currency: "USD", max: 5_000 }, { payment_amount: undefined }],
+    [{ type: "payment.allowed_payees", allowed: [{ id: "merchant-1" }] }, { payee: ["merchant-1"] }],
+    [{ type: "payment.allowed_payees", allowed: [{ id: "merchant-1" }] }, { payee: { id: 7 } }],
+    [{ type: "payment.allowed_payment_instruments", allowed: [{ id: "instrument-1" }] }, { payment_instrument: null }],
+    [{ type: "payment.allowed_pisps", allowed: [PISP] }, { pisp: "pisp.example" }],
+  ];
+  for (const [constraint, paymentClaims] of cases) {
+    const result = assembleAp2DisputeEvidence(paymentWith([constraint], { paymentClaims }).input);
+    assert.equal(result.status, "unresolved");
+    assert.deepEqual(paymentConstraintIssues(result).map(({ code }) => code), [FAILED], JSON.stringify(paymentClaims));
+  }
+});
+
+test("the v1.1 direct-signed adapter still rejects the newly evaluated payment types", () => {
+  for (const constraint of [
+    { type: "payment.amount_range", currency: "USD", max: 5_000 },
+    { type: "payment.allowed_payees", allowed: [{ id: "merchant-1" }] },
+    { type: "payment.allowed_payment_instruments", allowed: [{ id: "instrument-1" }] },
+    { type: "payment.allowed_pisps", allowed: [PISP] },
+  ]) {
+    const fixture = makeClosedAp2Fixture({
+      vct: "mandate.payment.1",
+      checkout_jwt: undefined,
+      checkout_hash: undefined,
+      transaction_id: "transaction-1",
+      payee: { id: "merchant-1", name: "Synthetic Store" },
+      payment_amount: { currency: "USD", amount: 2_500 },
+      payment_instrument: { id: "instrument-1", type: "card" },
+      pisp: PISP,
+      constraints: [constraint],
+    });
+    const { expectedCheckoutJwt: _jwt, expectedCheckoutHash: _hash, ...options } = fixture.options;
+    const result = verifyAp2Mandate({ ...options, expectedVct: "mandate.payment.1" });
+    assert.equal(issueCodes(result).has(UNSUPPORTED), true, constraint.type);
+  }
+});
+
+test("the published constraint support lists the evaluated and fail-closed types", () => {
+  assert.deepEqual(AP2_DISPUTE_CONSTRAINT_SUPPORT.evaluated, [
+    "checkout.allowed_merchants",
+    "checkout.line_items",
+    "payment.allowed_payees",
+    "payment.allowed_payment_instruments",
+    "payment.allowed_pisps",
+    "payment.amount_range",
+    "payment.reference",
+  ]);
+});
+
+// Frozen Pack written by the released 2.0.0 code (dist/ built from tag v2.0.0,
+// commit 32d525618e23678f86c754e4a536e4d094988a1b) from
+// test/ap2-dispute-fixture.mjs: the reference agent's open Payment Mandate
+// shape, with the allowed payee revealed and a decoy payee withheld. 2.0.0
+// verified it unresolved because both payment constraints were unsupported.
+// Synthetic data, public JWKs only. Never regenerate this file.
+const PAYMENT_CONSTRAINTS_PACK_URL = new URL(
+  "./fixtures/ap2-evidence-pack-2.0.0-payment-constraints.json",
+  import.meta.url,
+);
+const PAYMENT_CONSTRAINTS_PACK_DIGEST = "sha256:6f7dde015569687a3ebbf3dc4efeaaa4a7efdc5501721e51b082282123d1f7fe";
+const PAYMENT_CONSTRAINTS_200_REPORT_DIGEST = "sha256:401476c6bf032e371f97f74038ce53ed81c43fc4e4c349877bbd17d9fd65ae69";
+
+test("a 2.0.0 Pack with payment constraints moves from unresolved to verified", () => {
+  const pack = JSON.parse(readFileSync(PAYMENT_CONSTRAINTS_PACK_URL, "utf8"));
+  assert.equal(pack.releaseVersion, "1.2.0");
+  assert.equal(pack.packDigest, PAYMENT_CONSTRAINTS_PACK_DIGEST);
+  const verification = verifyAp2DisputeEvidencePack(pack, { expectedPackDigest: PAYMENT_CONSTRAINTS_PACK_DIGEST });
+  assert.equal(verification.status, "verified", JSON.stringify(verification.resolution.issues));
+  assert.equal(verification.digestValid, true);
+  assert.equal(verification.anchorMatched, true);
+  assert.equal(verification.packDigest, PAYMENT_CONSTRAINTS_PACK_DIGEST);
+  assert.notEqual(verification.reportDigest, PAYMENT_CONSTRAINTS_200_REPORT_DIGEST);
+  assert.deepEqual(verification.issues, []);
+
+  const privateMembers = new Set(["d", "p", "q", "dp", "dq", "qi", "k", "oth"]);
+  const scan = (value) => Array.isArray(value)
+    ? value.some(scan)
+    : value !== null && typeof value === "object"
+      ? Object.entries(value).some(([key, item]) => privateMembers.has(key) || scan(item))
+      : typeof value === "string" && /PRIVATE KEY/u.test(value);
+  assert.equal(scan(pack), false);
+});
+
+test("property: the amount-range verdict is min <= amount <= max in the same currency", () => {
+  fc.assert(fc.property(
+    fc.integer({ min: 0, max: 10_000 }),
+    fc.integer({ min: 0, max: 10_000 }),
+    fc.integer({ min: 0, max: 10_000 }),
+    fc.constantFrom("USD", "EUR"),
+    (amount, a, b, currency) => {
+      const min = Math.min(a, b);
+      const max = Math.max(a, b);
+      const fixture = paymentWith([{ type: "payment.amount_range", currency: "USD", min, max }], {
+        paymentClaims: { payment_amount: { currency, amount } },
+      });
+      const result = assembleAp2DisputeEvidence(fixture.input);
+      const expected = currency === "USD" && min <= amount && amount <= max;
+      return (result.status === "evidence_verified") === expected;
+    },
+  ), { numRuns: 40 });
 });

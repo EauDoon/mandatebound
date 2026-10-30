@@ -28,6 +28,34 @@ so a retained Pack's verdict moves only where the gates below changed, and its
   with its constraint disclosures, as the SDK's default presentation does.
   Packs whose Mandates reveal their constraints produce byte-identical
   verification reports.
+- AP2 evidence whose open Payment Mandate carries `payment.amount_range`,
+  `payment.allowed_payees`, `payment.allowed_payment_instruments` or
+  `payment.allowed_pisps` used to resolve `unresolved` with
+  `AP2_CONSTRAINT_UNSUPPORTED`. It now resolves `evidence_verified` when the
+  closed Payment Mandate satisfies them, or `unresolved` with a precise
+  `AP2_CONSTRAINT_FAILED` or `AP2_CONSTRAINT_INVALID` when it does not. Payees
+  match by `id` only, so evidence an SDK verifier accepts through its
+  name-and-website fallback stays `unresolved` here. `payment.budget`,
+  `payment.agent_recurrence` and `payment.execution_date` keep their code and
+  message.
+
+### Added
+
+- The AP2 v0.2.0 dispute resolver evaluates the open Payment Mandate
+  constraints the pinned reference shopping agent emits:
+  `payment.amount_range` (same currency, inclusive integer minor-unit bounds),
+  `payment.allowed_payees` and `payment.allowed_payment_instruments` (the
+  closed `payee.id` or `payment_instrument.id` equals a revealed allowed `id`)
+  and `payment.allowed_pisps` (all three PISP names equal one allowed entry).
+  The agent builds every open Payment Mandate as `[payment.amount_range,
+  payment.allowed_payees, payment.reference]`, so each of its
+  human-not-present payment chains resolved `unresolved`, and a purchase that
+  broke the user's cap looked the same as one that respected it.
+  `AP2_DISPUTE_CONSTRAINT_SUPPORT` from `@oonyl/mandatebound/ap2-dispute` lists
+  the evaluated and the still fail-closed types, and the conformance
+  declaration publishes them as the optional
+  `disputeProfile.evaluatedConstraints` and
+  `disputeProfile.failClosedConstraints`.
 
 ### Changed
 

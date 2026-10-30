@@ -67,6 +67,117 @@ export type WithheldArrays = ReadonlyMap<readonly JsonValue[], number>;
 
 const AP2_CONSTRAINT_DISCLOSURE_WITHHELD = "AP2_CONSTRAINT_DISCLOSURE_WITHHELD";
 
+/**
+ * Open-Mandate constraint types the pinned AP2 v0.2.0 dispute profile
+ * evaluates, and the pinned types it still rejects as unsupported. Budget and
+ * agent recurrence need cumulative spend history the evidence does not carry,
+ * and execution_date has no fixed format at the pinned commit.
+ */
+export const AP2_PINNED_CONSTRAINT_SUPPORT: Readonly<{
+  readonly evaluated: readonly string[];
+  readonly failClosed: readonly string[];
+}> = Object.freeze({
+  evaluated: Object.freeze([
+    "checkout.allowed_merchants",
+    "checkout.line_items",
+    "payment.allowed_payees",
+    "payment.allowed_payment_instruments",
+    "payment.allowed_pisps",
+    "payment.amount_range",
+    "payment.reference",
+  ]),
+  failClosed: Object.freeze([
+    "payment.agent_recurrence",
+    "payment.budget",
+    "payment.execution_date",
+  ]),
+});
+
+interface ConstraintOutcome {
+  readonly code: "AP2_CONSTRAINT_FAILED" | "AP2_CONSTRAINT_INVALID";
+  readonly message: string;
+}
+
+function constraintFailed(message: string): ConstraintOutcome {
+  return { code: "AP2_CONSTRAINT_FAILED", message };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+/** True when a revealed allowed entry carries exactly this string id. */
+function allowedById(allowed: unknown, id: unknown): boolean {
+  return nonEmptyString(id) &&
+    Array.isArray(allowed) &&
+    allowed.some((candidate) => isObject(candidate) && candidate.id === id);
+}
+
+/**
+ * Evaluate one payment.* constraint of an open Payment Mandate against the
+ * closed Payment Mandate, following the pinned SDK evaluators. These run
+ * before the closed Mandate's own schema check, so a malformed closed field
+ * fails the constraint instead of throwing. Messages never echo values.
+ * Returns null when the constraint holds, or undefined for a type this
+ * evaluator does not handle.
+ */
+function evaluatePaymentConstraint(
+  constraint: JsonObject,
+  closedClaims: JsonObject | undefined,
+): ConstraintOutcome | null | undefined {
+  const closed = closedClaims ?? {};
+  switch (constraint.type) {
+    case "payment.amount_range": {
+      const { currency, min, max } = constraint;
+      if (
+        !nonEmptyString(currency) ||
+        !Number.isSafeInteger(max) ||
+        (min !== undefined && (!Number.isSafeInteger(min) || (min as number) > (max as number)))
+      ) {
+        return { code: "AP2_CONSTRAINT_INVALID", message: "Amount-range constraint is malformed" };
+      }
+      const paid = closed.payment_amount;
+      const satisfied = isObject(paid) &&
+        paid.currency === currency &&
+        Number.isSafeInteger(paid.amount) &&
+        (min === undefined || (paid.amount as number) >= (min as number)) &&
+        (paid.amount as number) <= (max as number);
+      return satisfied
+        ? null
+        : constraintFailed("Amount-range constraint could not be satisfied by the closed Payment Mandate");
+    }
+    case "payment.allowed_payees":
+      return isObject(closed.payee) && allowedById(constraint.allowed, closed.payee.id)
+        ? null
+        : constraintFailed("Allowed-payee constraint could not be satisfied by the closed Payment Mandate");
+    case "payment.allowed_payment_instruments":
+      return isObject(closed.payment_instrument) &&
+          allowedById(constraint.allowed, closed.payment_instrument.id)
+        ? null
+        : constraintFailed(
+          "Allowed-payment-instrument constraint could not be satisfied by the closed Payment Mandate",
+        );
+    case "payment.allowed_pisps": {
+      const pisp = closed.pisp;
+      const satisfied = isObject(pisp) &&
+        nonEmptyString(pisp.legal_name) &&
+        nonEmptyString(pisp.brand_name) &&
+        nonEmptyString(pisp.domain_name) &&
+        Array.isArray(constraint.allowed) &&
+        constraint.allowed.some((candidate) =>
+          isObject(candidate) &&
+          candidate.legal_name === pisp.legal_name &&
+          candidate.brand_name === pisp.brand_name &&
+          candidate.domain_name === pisp.domain_name);
+      return satisfied
+        ? null
+        : constraintFailed("Allowed-PISP constraint could not be satisfied by the closed Payment Mandate");
+    }
+    default:
+      return undefined;
+  }
+}
+
 export function materializeTopLevelDisclosures(
   parsed: ParsedCompactAp2Token,
   issues: InteropIssue[],
@@ -530,6 +641,19 @@ export function verifyConstraints(
         ));
       }
       continue;
+    }
+    if (requirePinnedSchema && options.expectedVct === "mandate.payment.1") {
+      const outcome = evaluatePaymentConstraint(candidate as JsonObject, closedClaims);
+      if (outcome !== undefined) {
+        if (outcome !== null) {
+          issues.push(upstreamIssue(
+            outcome.code,
+            `token.claims.constraints[${String(index)}]`,
+            outcome.message,
+          ));
+        }
+        continue;
+      }
     }
     issues.push(upstreamIssue(
       "AP2_CONSTRAINT_UNSUPPORTED",
