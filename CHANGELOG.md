@@ -16,11 +16,17 @@ Protocol `1.0.0`, engine `1.0.0`, the AP2 Pack format `1.2.0`, the
 `schemas/v1.2` documents, the dispute profile and every Pack digest are
 unchanged. Pack verification re-derives the resolution under the current gates,
 so a retained Pack's verdict moves only where the gates below changed, and its
-`digestValid` and `anchorMatched` stay true.
+`digestValid` and `anchorMatched` stay true. `verifyAp2MandateChain` from
+`@oonyl/mandatebound/ucp-ap2`, which the resolver runs on each Mandate chain,
+changes in the same cases: its `upstreamValid` and issues move as described
+below for direct callers too.
 
 - AP2 evidence whose open Mandate withholds a constraint disclosure now resolves
   `unresolved` with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD` where it used to
-  resolve `evidence_verified`. That includes honest evidence redacted with the
+  resolve `evidence_verified`. So does evidence whose issuer placed an RFC 9901
+  decoy digest in a constraint list, a constraint entry or a line-item
+  requirement list, because a decoy cannot be told apart from a withheld
+  disclosure. That includes honest evidence redacted with the
   official SDK's `MandateClient.present(claims_to_disclose=...)`, which drops
   every acceptable-item disclosure of a `checkout.line_items` constraint; the
   pinned AP2 rules match line items only against the revealed acceptable items,
@@ -112,19 +118,25 @@ so a retained Pack's verdict moves only where the gates below changed, and its
 ### Security
 
 - The AP2 v0.2.0 dispute resolver no longer lets withheld SD-JWT disclosures
-  widen an open Mandate. The chain verifier silently dropped every
-  `{"...": digest}` array placeholder whose disclosure the presenting agent left
-  out, and the agent chooses that before it signs the terminal hop. Withholding
-  every acceptable item of a `checkout.line_items` requirement turned it into a
-  wildcard that any SKU satisfied, and withholding a whole constraint entry, or
-  one requirement of a line-item constraint, meant it was never evaluated. Each
-  case reported `evidence_verified` for a purchase outside the user's mandate.
-  They now fail closed with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`. A partial
-  reveal is evaluated against what it reveals, an issuer-signed literal empty
-  `acceptable_items` keeps its any-item meaning, and undisclosed alternative
-  `delegate_payload` elements stay legitimate. The defect was present in 1.2.0
-  and 2.0.0. The v1.1 `verifyAp2Mandate` adapter and the native engine are
-  unaffected.
+  widen an open Mandate's constraints. The chain verifier silently dropped every
+  `{"...": digest}` array placeholder and `_sd` digest whose disclosure the
+  presenting agent left out, and the agent chooses that before it signs the
+  terminal hop. Withholding every acceptable item of a `checkout.line_items`
+  requirement turned it into a wildcard that any SKU satisfied, and withholding
+  a whole constraint entry, or one requirement of a line-item constraint, meant
+  it was never evaluated. Each case reported `evidence_verified` for a purchase
+  outside the user's mandate. They now fail closed with
+  `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`, as does a constraint entry that hides
+  one of its own fields, such as the optional `min` of the newly evaluated
+  `payment.amount_range`. A partial reveal is evaluated against what it reveals,
+  an issuer-signed literal empty `acceptable_items` keeps its any-item meaning,
+  and undisclosed alternative `delegate_payload` elements stay legitimate. The
+  defect was present in 1.2.0 and 2.0.0. `verifyAp2MandateChain` from
+  `@oonyl/mandatebound/ucp-ap2` carries the same fix; the v1.1
+  `verifyAp2Mandate` adapter and the native engine are unaffected. Undisclosed
+  `_sd` digests elsewhere in an open Mandate payload, which could hide a pre-set
+  payee, amount or payment instrument from the inheritance check, remain a
+  documented residual risk.
 - Raise the `fast-uri` override and lock to 3.1.9 or later, and record the
   advisories published on 2026-10-23 in the dependency gate:
   [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),

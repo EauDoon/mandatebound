@@ -59,11 +59,12 @@ const AP2_INHERITANCE_EXCLUSIONS = new Set([
 export { AP2_TERMINAL_TYPES, AP2_INTERMEDIATE_TYPES, AP2_ROOT_TYPES, AP2_INHERITANCE_EXCLUSIONS };
 
 /**
- * Resolved SD-JWT arrays that dropped issuer-signed placeholders because the
- * presenter did not disclose them, keyed by the exact array object, with the
- * number dropped. Produced by the AP2 v0.2.0 chain resolver.
+ * Resolved SD-JWT arrays that dropped issuer-signed `{"...": digest}`
+ * placeholders, and resolved objects that dropped `_sd` digests, because the
+ * presenter did not disclose them. Keyed by the exact resolved array or
+ * object, with the number dropped. Produced by the AP2 v0.2.0 chain resolver.
  */
-export type WithheldArrays = ReadonlyMap<readonly JsonValue[], number>;
+export type WithheldDisclosures = ReadonlyMap<object, number>;
 
 const AP2_CONSTRAINT_DISCLOSURE_WITHHELD = "AP2_CONSTRAINT_DISCLOSURE_WITHHELD";
 
@@ -534,11 +535,11 @@ export function verifyConstraints(
   issues: InteropIssue[],
   closedClaims?: JsonObject,
   requirePinnedSchema = false,
-  withheld?: WithheldArrays,
+  withheld?: WithheldDisclosures,
 ): void {
-  // Only the pinned AP2 v0.2.0 chain profile resolves array disclosures.
+  // Only the pinned AP2 v0.2.0 chain profile resolves SD-JWT disclosures.
   const withheldCount = (value: unknown): number =>
-    requirePinnedSchema && withheld !== undefined && Array.isArray(value)
+    requirePinnedSchema && withheld !== undefined && typeof value === "object" && value !== null
       ? withheld.get(value) ?? 0
       : 0;
   if (claims.constraints === undefined) {
@@ -574,6 +575,19 @@ export function verifyConstraints(
         "AP2_CONSTRAINT_INVALID",
         `token.claims.constraints[${String(index)}]`,
         "Constraint is missing a string type",
+      ));
+      continue;
+    }
+    if (withheldCount(candidate) > 0) {
+      // A constraint entry that hides one of its own fields, such as the
+      // optional min of an amount range, cannot be evaluated as signed.
+      if (candidate.type === "checkout.line_items" || candidate.type === "payment.reference") {
+        hasRequiredConstraint = true;
+      }
+      issues.push(upstreamIssue(
+        AP2_CONSTRAINT_DISCLOSURE_WITHHELD,
+        `token.claims.constraints[${String(index)}]`,
+        "Constraint withholds an issuer-signed disclosure needed to evaluate it",
       ));
       continue;
     }

@@ -35,7 +35,7 @@ import {
   AP2_TERMINAL_TYPES,
   verifyConstraints,
   verifyExpiryClaims,
-  type WithheldArrays,
+  type WithheldDisclosures,
 } from "./mandate-verify.js";
 import { verifyParsedJwtSignature } from "./jwk.js";
 
@@ -97,14 +97,15 @@ interface ResolvedAp2SegmentClaims {
   readonly claims: JsonObject;
   /**
    * Every resolved array that dropped an issuer-signed `{"...": digest}`
-   * placeholder because its disclosure was not presented, with the number it
-   * dropped. Keys are the exact array objects inside `claims`.
+   * placeholder, and every resolved object that dropped an `_sd` digest,
+   * because its disclosure was not presented, with the number it dropped.
+   * Keys are the exact arrays and objects inside `claims`.
    */
-  readonly withheld: WithheldArrays;
+  readonly withheld: WithheldDisclosures;
 }
 
 function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): ResolvedAp2SegmentClaims {
-  const withheld = new Map<readonly JsonValue[], number>();
+  const withheld = new Map<object, number>();
   const byDigest = new Map<string, ParsedSdJwtDisclosure>();
   const byExact = new Map<string, ParsedSdJwtDisclosure>();
   for (const disclosure of segment.disclosures) {
@@ -190,9 +191,13 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): Resolve
       if (new Set(digests).size !== digests.length) {
         throw new UcpAp2ParseError("AP2 SD-JWT _sd contains duplicate digests");
       }
+      let undisclosed = 0;
       for (const digest of digests as string[]) {
         const disclosure = byDigest.get(digest);
-        if (disclosure === undefined) continue;
+        if (disclosure === undefined) {
+          undisclosed += 1;
+          continue;
+        }
         if (
           !Array.isArray(disclosure.decoded) ||
           disclosure.decoded.length !== 3 ||
@@ -207,6 +212,9 @@ function resolveAp2SegmentClaims(segment: ParsedAp2MandateChainSegment): Resolve
         const resolved = walk(resolveDisclosure(disclosure, 3), name === "delegate_payload");
         if (resolved !== undefined) result[name] = resolved;
       }
+      // An undisclosed digest may be a decoy or a withheld claim; constraint
+      // checks read this record and fail closed where that matters.
+      if (undisclosed > 0) withheld.set(result, undisclosed);
     }
     return result;
   };
@@ -272,7 +280,7 @@ function verifyAp2OpenInheritance(
   closed: JsonObject,
   options: VerifyAp2MandateOptions,
   issues: InteropIssue[],
-  withheld: WithheldArrays,
+  withheld: WithheldDisclosures,
 ): void {
   const expectedOpenVct: Ap2MandateVct = options.expectedVct === "mandate.checkout.1"
     ? "mandate.checkout.open.1"
@@ -440,8 +448,8 @@ export function verifyAp2MandateChain(
     );
     const rootResolution = resolveAp2SegmentClaims(root);
     const rootClaims = rootResolution.claims;
-    // One record for the whole chain: its keys are distinct array objects.
-    const withheld = new Map<readonly JsonValue[], number>(rootResolution.withheld);
+    // One record for the whole chain: its keys are distinct resolved values.
+    const withheld = new Map<object, number>(rootResolution.withheld);
     if (rootClaims.iss !== undefined && rootClaims.iss !== options.expectedIssuer) {
       issues.push(upstreamIssue(
         "AP2_ISSUER_MISMATCH",
@@ -491,7 +499,7 @@ export function verifyAp2MandateChain(
         );
         const hopResolution = resolveAp2SegmentClaims(current);
         const claims = hopResolution.claims;
-        for (const [array, count] of hopResolution.withheld) withheld.set(array, count);
+        for (const [value, count] of hopResolution.withheld) withheld.set(value, count);
         const hasSdHash = hasOwn(claims, "sd_hash");
         const hasIssuerHash = hasOwn(claims, "issuer_jwt_hash");
         if (hasSdHash === hasIssuerHash) {

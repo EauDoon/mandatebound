@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import fc from "fast-check";
@@ -475,6 +476,81 @@ test("a 2.0.0 Pack with payment constraints moves from unresolved to verified", 
       ? Object.entries(value).some(([key, item]) => privateMembers.has(key) || scan(item))
       : typeof value === "string" && /PRIVATE KEY/u.test(value);
   assert.equal(scan(pack), false);
+});
+
+/** One selectively disclosable object property: the digest goes in `_sd`. */
+let objectSalt = 0;
+function objectProperty(name, value) {
+  objectSalt += 1;
+  const encoded = Buffer.from(JSON.stringify([`object-salt-${String(objectSalt)}`, name, value]), "utf8")
+    .toString("base64url");
+  return { encoded, digest: createHash("sha256").update(encoded, "ascii").digest("base64url") };
+}
+
+test("a constraint entry that withholds one of its own fields fails closed", () => {
+  // The closed Payment Mandate pays USD 2500; the issuer signed min 3000.
+  const min = objectProperty("min", 3_000);
+  const range = { type: "payment.amount_range", currency: "USD", max: 5_000, _sd: [min.digest] };
+  const withheld = assembleAp2DisputeEvidence(paymentWith([range]).input);
+  assert.equal(withheld.status, "unresolved");
+  assert.deepEqual(paymentConstraintIssues(withheld), [{
+    code: WITHHELD,
+    path: "artifacts.payment_mandate.token.claims.constraints[0]",
+    message: WITHHELD_PART_MESSAGE,
+  }]);
+  const revealed = assembleAp2DisputeEvidence(paymentWith([range], { paymentRootDisclosures: [min.encoded] }).input);
+  assert.deepEqual(paymentConstraintIssues(revealed).map(({ code }) => code), [FAILED]);
+  // A fully disclosed field is evaluated like a literal one.
+  const lowMin = objectProperty("min", 1_000);
+  assertPaymentConstraint(paymentWith(
+    [{ type: "payment.amount_range", currency: "USD", max: 5_000, _sd: [lowMin.digest] }],
+    { paymentRootDisclosures: [lowMin.encoded] },
+  ), null);
+});
+
+test("decoy digests where constraints are read fail closed like withheld disclosures", () => {
+  // RFC 9901 lets an issuer add decoy digests to arrays and objects; the
+  // resolver cannot tell one from a withheld disclosure.
+  const decoyEntry = arrayElement({ type: "payment.amount_range", currency: "USD", max: 1 });
+  const listDecoy = assembleAp2DisputeEvidence(paymentWith([decoyEntry.placeholder]).input);
+  assert.deepEqual(withheldIssues(listDecoy).map(({ path }) => path), [
+    "artifacts.payment_mandate.token.claims.constraints",
+  ]);
+  const fieldDecoy = objectProperty("unused", "decoy");
+  const checkout = makeFixture({
+    checkoutConstraints: [
+      defaultCheckoutConstraints()[0],
+      { ...defaultCheckoutConstraints()[1], _sd: [fieldDecoy.digest] },
+    ],
+  });
+  const result = assembleAp2DisputeEvidence(checkout.input);
+  assert.equal(result.status, "unresolved");
+  assert.deepEqual(withheldIssues(result).map(({ path }) => path), [
+    "artifacts.checkout_mandate.token.claims.constraints[1]",
+  ]);
+  // The withheld line-item constraint still counts as present.
+  assert.equal(codes(result).has("AP2_REQUIRED_CONSTRAINT_MISSING"), false);
+});
+
+test("verifyAp2MandateChain applies the new payment constraint evaluation directly", () => {
+  // 2.0.0 reported AP2_CONSTRAINT_UNSUPPORTED twice for this chain.
+  const fixture = makeFixture({
+    paymentConstraints: (reference) => [
+      { type: "payment.amount_range", currency: "USD", min: 0, max: 3_000 },
+      { type: "payment.allowed_payees", allowed: [{ id: "merchant-1", name: "Synthetic Store" }] },
+      reference,
+    ],
+  });
+  const report = verifyAp2MandateChain({
+    ...fixture.verificationPlan.paymentMandate,
+    token: fixture.paymentMandate,
+    expectedVct: "mandate.payment.1",
+    expectedCheckoutHash: fixture.transactionId,
+    expectedOpenCheckoutHash: fixture.openCheckoutHash,
+    asOf,
+  });
+  assert.equal(report.upstreamValid, true, JSON.stringify(report.issues));
+  assert.deepEqual(report.issues, []);
 });
 
 test("property: the amount-range verdict is min <= amount <= max in the same currency", () => {

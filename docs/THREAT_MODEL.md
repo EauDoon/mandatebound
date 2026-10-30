@@ -95,7 +95,7 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 - stale, unpinned, mismatched, or auto-promoted external trust
 - weakened coverage contracts, missing declared sources, checkpoint gaps, equivocation, and invalid inclusion proofs
 - delegation expiry, widened scope, or mismatched evidence references
-- AP2 constraint entries, line-item requirements, or every acceptable item withheld behind undisclosed SD-JWT array placeholders to widen an open Mandate
+- AP2 constraint entries, fields of a constraint entry, line-item requirements, or every acceptable item withheld behind undisclosed SD-JWT placeholders or `_sd` digests to widen an open Mandate's constraints
 
 ### API and privacy
 
@@ -117,4 +117,4 @@ The design assumes that a principal, operator, claimant, agent, evidence provide
 
 The engine cannot prove evidence completeness, real-world events, honest identity binding, causal truth, legal authority, governing law, external log-tail completeness, upstream disclosure completeness, or secure production key custody. These remain explicit governance requirements.
 
-For AP2 v0.2.0 Mandate chains, disclosure completeness is now partly checked: a withheld array element in an open Mandate's constraint list, in a `checkout.line_items` requirement list, or every element of a non-empty acceptable-item list leaves the dispute resolution unresolved with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`. Object-level `_sd` digests that are never disclosed remain a residual risk: SD-JWT allows decoy digests there, so an undisclosed digest cannot be told apart from a decoy, and one could hide a pre-set open-Mandate field such as a payee, amount or payment instrument from the inheritance check.
+For AP2 v0.2.0 Mandate chains, disclosure completeness is now partly checked: a withheld array element in an open Mandate's constraint list, in a `checkout.line_items` requirement list, or every element of a non-empty acceptable-item list, and an undisclosed `_sd` digest inside a constraint entry, leave the dispute resolution unresolved with `AP2_CONSTRAINT_DISCLOSURE_WITHHELD`. RFC 9901 allows decoy digests in arrays and objects alike and a decoy cannot be told apart from a withheld disclosure, so a decoy in one of those positions also fails closed. Undisclosed `_sd` digests elsewhere in an open Mandate payload remain a residual risk: failing closed on them would reject every decoy-bearing payload, and one could hide a pre-set open-Mandate field such as a payee, amount or payment instrument from the inheritance check.
