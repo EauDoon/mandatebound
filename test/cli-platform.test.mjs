@@ -612,6 +612,17 @@ test("AP2 dispute CLI exposes pack, independent verify, and timeline render", as
   const pack = JSON.parse(packed.stdout).result;
   assert.equal(pack.schemaId, "MandateBoundAp2EvidencePack/v1");
 
+  // A one-element array stringifies to a valid timestamp; pack must reject it
+  // rather than print a Pack its own verify rejects as malformed.
+  for (const field of ["asOf", "createdAt"]) {
+    const rejected = await invoke(
+      ["ap2-dispute", "pack", "-"],
+      JSON.stringify({ ...input, [field]: [input[field]] }),
+    );
+    assert.equal(rejected.code, CLI_EXIT.INVALID, `${field}: ${rejected.stdout}`);
+    assert.equal(JSON.parse(rejected.stdout).ok, false);
+  }
+
   const verifyArgs = [
     "ap2-dispute",
     "verify",

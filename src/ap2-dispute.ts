@@ -321,7 +321,11 @@ const ALLOWED_SOURCE_ROLES: Readonly<Record<
   ]),
 });
 
-function parseTimestamp(value: string, path: string): number {
+function parseTimestamp(value: unknown, path: string): number {
+  // The grammar test stringifies its argument, so a one-element array or a
+  // String object would pass it, and asOf and createdAt are copied into the
+  // output verbatim. Only a string is a timestamp.
+  if (typeof value !== "string") throw new TypeError(`Invalid timestamp at ${path}`);
   // The RFC 3339 grammar, the calendar bounds and the instant parse live in
   // one place. This wrapper keeps the dispute-facing error contract.
   try {

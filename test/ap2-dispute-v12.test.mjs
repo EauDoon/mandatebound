@@ -1324,6 +1324,25 @@ test("the dispute RFC 3339 guard keeps the full RFC 3339 grammar", () => {
   }
 });
 
+test("a non-string evaluation or creation time is rejected, not copied into the output", async () => {
+  const fixture = makeFixture();
+  const packInput = makePackInput(fixture);
+  // Each value stringifies to a valid timestamp, so the grammar alone let it
+  // through and the value itself was copied into the resolution or Pack,
+  // whose published schema and own verifier require a string.
+  for (const value of [[asOf], new String(asOf), { toString: () => asOf }]) {
+    assert.throws(() => assembleAp2DisputeEvidence({ ...fixture.input, asOf: value }), TypeError);
+    assert.throws(() => packAp2DisputeEvidence({ ...packInput, asOf: value }), TypeError);
+    assert.throws(() => packAp2DisputeEvidence({ ...packInput, createdAt: value }), TypeError);
+    await assert.rejects(() => resolveAp2DisputeEvidence({
+      transactionId: fixture.transactionId,
+      asOf: value,
+      verificationPlan: fixture.verificationPlan,
+      retrievers: [],
+    }), TypeError);
+  }
+});
+
 test("required autonomous constraints, nested Payment fields, and caller trust IDs fail closed", () => {
   const fixture = makeFixture();
   const underfilled = createMandate({

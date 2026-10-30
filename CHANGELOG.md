@@ -21,6 +21,13 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- `assembleAp2DisputeEvidence`, `resolveAp2DisputeEvidence` and
+  `packAp2DisputeEvidence`, and with them `ap2-dispute pack`, reject an `asOf`
+  or `createdAt` that is not a string. A one-element array such as
+  `["2026-07-23T00:00:00.000Z"]` stringified to a valid timestamp and was copied
+  into the output, so `ap2-dispute pack` exited 0 and printed a Pack that the
+  published Pack schema and `ap2-dispute verify` both reject as malformed.
+  String timestamps, retained Packs and their digests are unaffected.
 - Canonical JSON now enforces its UTF-8 byte budget during serialization, rather
   than after allocating the complete output. Repeated shared values cannot
   expand a small input into an unbounded intermediate string before rejection;
