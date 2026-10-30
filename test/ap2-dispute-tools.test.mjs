@@ -478,3 +478,11 @@ test("ap2-dispute batch exits 0, 5 and 3 as documented", async () => {
   const csv = await cli(["ap2-dispute", "batch", "-", "--format", "csv"], "{}");
   assert.equal(csv.code, CLI_EXIT.USAGE);
 });
+
+test("ap2-dispute batch reads the whole batch under the 17 MiB input cap", async () => {
+  // 100 Packs fit in one CLI run only when they average under about 170 KiB.
+  const oversized = `{"packs":[${" ".repeat(17 * 1024 * 1024)}]}`;
+  const result = await cli(["ap2-dispute", "batch", "-"], oversized);
+  assert.equal(result.code, CLI_EXIT.INVALID);
+  assert.equal(JSON.parse(result.stdout).error.code, "ALB_CLI_INPUT_LIMIT");
+});

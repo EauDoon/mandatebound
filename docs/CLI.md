@@ -34,8 +34,9 @@ guides with worked examples are linked from each section.
 | `ap2-dispute` | 17 MiB | 32 | 100,000 |
 | Canonical CasePack input bound into an operator receipt | 16 MiB | 48 | 250,000 |
 
-The 17 MiB documents leave room for a CasePack or Pack inside its 16 MiB
-canonical bound plus the surrounding JSON. External evidence for `review` is
+The 17 MiB documents leave room for one CasePack or Pack inside its 16 MiB
+canonical bound plus the surrounding JSON. An `ap2-dispute batch` document
+holds every Pack it re-verifies, so the cap applies to their total size. External evidence for `review` is
 also capped at 1 MiB of decoded bytes. `operator audit` reads a store snapshot
 of at most 32 MiB, 100,000 records and 1 MiB per record.
 
@@ -210,9 +211,13 @@ items of `{id, pack, expectedPackDigest, previousStatus?}`, where `id` is unique
 and matches `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, `pack` is a Pack or its
 `{ok: true, result}` envelope, and the optional `previousStatus` is `verified`
 or `unresolved`. Each item is verified against its own digest, so `batch` takes
-no `--expected-pack-digest`. It exits 3 for a malformed batch or any Pack that
-is not well formed, otherwise 5 when any Pack is `unresolved` or differs from its
-`previousStatus`, and otherwise 0.
+no `--expected-pack-digest`. The whole batch document counts against the
+`ap2-dispute` input limits, so 100 Packs fit in one run only when they average
+under about 170 KiB each; an oversized batch exits 3 like any oversized input.
+Split a larger set across several runs, or call
+`verifyAp2DisputeEvidencePacks`, which has no document cap. It exits 3 for a
+malformed batch or any Pack that is not well formed, otherwise 5 when any Pack
+is `unresolved` or differs from its `previousStatus`, and otherwise 0.
 
 `reconcile` compares the closed Payment Mandate with the merchant-signed
 Checkout it is bound to and prints `matched`, `mismatched` or `not_comparable`
