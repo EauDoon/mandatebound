@@ -90,7 +90,9 @@ below for direct callers too.
   `case-report` already does for CasePacks. Like the HTML rendering, both verify
   the Pack against the retained digest themselves. The Markdown uses the
   CasePack report escaper, and the CSV quotes every cell, neutralizes formulas
-  and ends lines with CRLF. JSON and HTML output are unchanged.
+  and ends lines with CRLF. Neutralizing prefixes a `'` to a transaction ID
+  that begins with `-`, about 1 in 64, so strip it before joining on that
+  column. JSON and HTML output are unchanged.
 
 ### Changed
 

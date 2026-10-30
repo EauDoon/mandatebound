@@ -201,7 +201,10 @@ Actions: `resolve`, `pack`, `verify`, `render`, `batch`, `reconcile`.
 `reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
 printed, and require an independently retained `--expected-pack-digest`, without
 which they exit 2. `render` accepts `--format json`, `html`, `markdown` or
-`csv`; the CSV has one row per timeline event and CRLF line endings.
+`csv`; the CSV has one row per timeline event and CRLF line endings. A CSV
+cell that would start a spreadsheet formula gets a leading `'`, and that
+includes the roughly 1 in 64 base64url transaction IDs that begin with `-`, so
+strip one leading `'` from `transactionId` before joining it to other records.
 
 Exit 0 for `evidence_verified` or `verified`, 5 for `unresolved`, and 3 for
 invalid input or a Pack that is not even well formed. `pack` exits 0 or 3.

@@ -312,6 +312,26 @@ test("the CSV timeline has one quoted row per event and CRLF line endings", () =
   }
 });
 
+test("a transaction ID that begins with '-' gets the documented leading apostrophe in CSV", () => {
+  // The transaction ID is the base64url SHA-256 of the Checkout JWT, so about
+  // 1 in 64 begins with '-', a spreadsheet formula trigger.
+  let fixture = null;
+  for (let attempt = 1; attempt <= 2_000 && fixture === null; attempt += 1) {
+    const candidate = makeFixture({ checkoutClaims: { id: `checkout-dash-${String(attempt)}` } });
+    if (candidate.transactionId.startsWith("-")) fixture = candidate;
+  }
+  assert.notEqual(fixture, null);
+  const pack = packFor(fixture);
+  const csv = renderAp2EvidenceTimelineCsv(pack, { expectedPackDigest: pack.packDigest });
+  const cells = csv.slice(0, -2).split("\r\n").slice(1).map((line) => line.split(",")[0]);
+  assert.ok(cells.length > 0);
+  for (const cell of cells) {
+    assert.equal(cell, `"'${fixture.transactionId}"`);
+    // Stripping one leading apostrophe recovers the exact identifier.
+    assert.equal(cell.slice(1, -1).replace(/^'/u, ""), fixture.transactionId);
+  }
+});
+
 test("ap2-dispute render prints Markdown and CSV with the HTML exit codes", async () => {
   const pack = packFor(makeFixture());
   const input = JSON.stringify({ ok: true, result: pack });
