@@ -6,7 +6,14 @@
 
 /** Escape a value for inline Markdown text, collapsing line breaks to a space. */
 export function markdownText(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  // Make terminal controls and invisible direction/format overrides visible.
+  // Do this before Markdown escaping so the diagnostic backslash stays literal.
+  const visible = value.replace(/[\r\n]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu,
+    (char) => {
+      const code = char.codePointAt(0)!;
+      return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, "0")}`;
+    });
+  return visible.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
     .replace(/[\\`*_{}\[\]()#+.!|>-]/g, "\\$&").replace(/[\r\n]+/g, " ");
 }
 
