@@ -10,6 +10,10 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Render control and invisible Unicode format characters visibly in Markdown exports to prevent terminal control and bidirectional display spoofing; signed evidence and replay bytes are unchanged.
+
 ## [2.1.0] - 2026-10-30
 
 ### Upgrading from 2.0.0
