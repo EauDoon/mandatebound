@@ -187,7 +187,10 @@ text per entry and 1,024 entries. See [V1.1 profile](V1_1.md).
 
 `case-report` reads `{casePack, anchors}` and renders `--format json`, `html`,
 `markdown` or `csv`. Exit 0 for a valid report, 3 otherwise; the report is
-printed either way.
+printed either way. HTML and Markdown include native-bundle verification,
+verified-entry counts and whether trust was checked. Both preserve per-envelope
+integrity, coverage, upstream-validity and evidence-eligibility results; these
+statuses do not establish source truth. CSV remains a coverage-only export.
 
 `policy` actions: `validate` (`{policy, rulebook}`), `test`
 (`{policy, rulebook, cases}`) and `diff` (`{before, after}` rulebooks). Exit 0

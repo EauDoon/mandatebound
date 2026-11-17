@@ -247,13 +247,15 @@ test("HTML and JSON timeline renderings of the frozen Packs are byte-identical t
 });
 
 test("case-report Markdown exposes invisible text while CSV retains its baseline", () => {
-  // CSV retains the 2.0.0 rendering; Markdown now exposes the zero-width space.
+  // CSV retains the 2.0.0 rendering; Markdown exposes controls and includes native/evidence sections.
   const report = {
     casePackId: "<img src=x>|[click](javascript:x)\n# fake_case.v1",
     casePackDigest: `sha256:${"a".repeat(64)}`,
     assessedAt: "2026-07-23T00:00:00.000Z",
     valid: false,
     status: { integrity: "verified", coverage: "unresolved" },
+    nativeBundle: { valid: false, verifiedEntries: 0, totalEntries: 1, trustChecked: false },
+    envelopes: [],
     coverage: [
       { requirementId: "=HYPERLINK(1)", status: "missing", matchedEnvelopes: 0 },
       { requirementId: "​+cmd", status: "verified", matchedEnvelopes: 2 },
@@ -261,7 +263,7 @@ test("case-report Markdown exposes invisible text while CSV retains its baseline
     findings: [{ code: "bad_code", path: "/a-b", message: "<script>alert(1)</script> *x* `y`" }],
   };
   assert.equal(renderCaseReportMarkdown(report).includes("\u200b"), false);
-  assert.equal(sha256(renderCaseReportMarkdown(report)), "sha256:4118c9183831f2363dd22f4d9170d3f6eb64cc74b99b65d2c8a5ca11f861cda1");
+  assert.equal(sha256(renderCaseReportMarkdown(report)), "sha256:d679db32d14eeac05e00b63519215942893adf3dd59f7b7b3ce4fba661c8cbff");
   assert.equal(sha256(renderCaseCoverageCsv(report)), "sha256:0e319e2b47ccc0155a90a90502e09b5100f49a52836516f878aa35cedddd53db");
   assert.equal(csvCell("⁠=1+2"), "\"'⁠=1+2\"");
 });

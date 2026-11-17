@@ -133,3 +133,24 @@ test("HTML reports provide safe offline navigation, review summaries, and print 
   assert.ok(!hostile.includes("<script>"));
   assert.match(hostile, /Review required/);
 });
+
+test("portable reports preserve native verification and envelope evidence", () => {
+  const { pack, anchors } = operatorFixture();
+  const report = createCaseReport(pack, anchors);
+  const before = structuredClone(report);
+  const markdown = renderCaseReportMarkdown(report);
+  assert.ok(markdown.includes(`Verified entries: ${report.nativeBundle.verifiedEntries} / ${report.nativeBundle.totalEntries}`));
+  assert.ok(markdown.includes(`Trust checked: ${report.nativeBundle.trustChecked ? "yes" : "no"}`));
+  assert.match(markdown, /## Protocol evidence/);
+  assert.match(markdown, /Source truth remains unknown/);
+  for (const item of report.envelopes) {
+    assert.ok(markdown.includes(`| ${item.upstreamValid} | ${item.evidenceEligible} |`));
+  }
+  const empty = { ...report, nativeBundle: { valid: false, verifiedEntries: 0, totalEntries: 3, trustChecked: false }, envelopes: [] };
+  assert.match(renderCaseReportMarkdown(empty), /No protocol evidence envelopes were reported/);
+  assert.match(renderCaseReportMarkdown(empty), /Verified entries: 0 \/ 3/);
+  assert.match(renderCaseReportHtml(empty), /Verification: not valid\. Verified entries: 0 \/ 3\. Trust checked: no/);
+  const labeled = { ...report, envelopes: [{ envelopeId: "row|<b>\nnext", integrityStatus: "missing", coverageStatus: "missing", upstreamValid: false, evidenceEligible: false, sourceTruthStatus: "unknown" }] };
+  assert.ok(renderCaseReportMarkdown(labeled).includes("row\\|&lt;b&gt; next"));
+  assert.deepEqual(report, before);
+});

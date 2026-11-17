@@ -178,11 +178,13 @@ td,th,li,h1{overflow-wrap:anywhere}.meta{min-width:0}.meta>*{min-width:0}
 <span>${report.coverage.filter((item) => item.status !== "satisfied" && item.status !== "not_applicable").length} coverage requirements need review</span>
 <span>${report.findings.length} verifier findings</span>
 </div>
-<nav aria-label="Report sections"><a href="#assurance">Assurance</a><a href="#coverage">Coverage</a><a href="#evidence">Evidence</a><a href="#findings">Findings</a></nav>
+<nav aria-label="Report sections"><a href="#assurance">Assurance</a><a href="#native-bundle">Native bundle</a><a href="#coverage">Coverage</a><a href="#evidence">Evidence</a><a href="#findings">Findings</a></nav>
 </header>
 <main id="main" tabindex="-1">
 <h2 id="assurance">Assurance status</h2>
 <table><tbody>${statusRows}</tbody></table>
+<h2 id="native-bundle">Native bundle</h2>
+<p>Verification: ${report.nativeBundle.valid ? "valid" : "not valid"}. Verified entries: ${escapeHtml(report.nativeBundle.verifiedEntries)} / ${escapeHtml(report.nativeBundle.totalEntries)}. Trust checked: ${report.nativeBundle.trustChecked ? "yes" : "no"}.</p>
 <h2 id="coverage">Coverage requirements</h2>
 <div class="table-scroll" role="region" aria-label="Coverage requirements" tabindex="0"><table><caption>Declared requirements only</caption><thead><tr><th scope="col">Requirement</th><th scope="col">Status</th><th scope="col">Matched envelopes</th></tr></thead><tbody>${coverageRows}</tbody></table></div>
 <h2 id="evidence">Protocol evidence</h2>
@@ -213,6 +215,16 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
     "", "Legal effect is not determined. Global completeness is not established. Source truth remains unknown.",
     "", "## Assurance status", "", "| Area | Status |", "| --- | --- |",
     ...Object.entries(report.status).map(([key, value]) => `| ${markdownText(key)} | ${markdownText(value)} |`),
+    "", "## Native bundle", "",
+    `Verification: ${report.nativeBundle.valid ? "valid" : "not valid"}`,
+    `Verified entries: ${report.nativeBundle.verifiedEntries} / ${report.nativeBundle.totalEntries}`,
+    `Trust checked: ${report.nativeBundle.trustChecked ? "yes" : "no"}`,
+    "", "## Protocol evidence", "",
+    "Source truth remains unknown.", "",
+    "| Envelope | Integrity | Coverage | Upstream valid | Evidence eligible |",
+    "| --- | --- | --- | --- | --- |",
+    ...report.envelopes.map((item) => `| ${markdownText(item.envelopeId)} | ${markdownText(item.integrityStatus)} | ${markdownText(item.coverageStatus)} | ${item.upstreamValid} | ${item.evidenceEligible} |`),
+    ...(report.envelopes.length === 0 ? ["", "No protocol evidence envelopes were reported."] : []),
     "", "## Coverage requirements", "", "| Requirement | Status | Matched envelopes |", "| --- | --- | --- |",
     ...report.coverage.map((item) => `| ${markdownText(item.requirementId)} | ${markdownText(item.status)} | ${item.matchedEnvelopes} |`),
     "", "## Verifier findings", "",
