@@ -10,6 +10,10 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ## [Unreleased]
 
+### Improvements
+
+- Include native-bundle verification and trust-check counts in HTML and Markdown reports, and preserve per-envelope evidence results in Markdown exports.
+
 ### Fixed
 
 - Render control and invisible Unicode format characters visibly in Markdown exports to prevent terminal control and bidirectional display spoofing; signed evidence and replay bytes are unchanged.
