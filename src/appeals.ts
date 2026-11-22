@@ -193,6 +193,11 @@ export function replayAppealEvents(
   };
 }
 
+function assertValidAppealCandidate(events: readonly AppealEvent[]): void {
+  const [issue] = replayAppealEvents(events).issues;
+  if (issue !== undefined) throw new AppealError(issue.code, "Appeal event is invalid.");
+}
+
 export function assertAppealAppendable(
   existing: readonly AppealEvent[],
   event: AppealEvent,
@@ -201,6 +206,7 @@ export function assertAppealAppendable(
     if (event.sequence !== 1 || event.eventType !== "filed" || event.previousEventDigest !== undefined) {
       throw new AppealError("ALB_APPEAL_GENESIS", "Appeal must begin with a filed event.");
     }
+    assertValidAppealCandidate([event]);
     return;
   }
 
@@ -221,8 +227,5 @@ export function assertAppealAppendable(
     throw new AppealError("ALB_APPEAL_DUPLICATE", "Appeal event identifier already exists.");
   }
 
-  const candidate = replayAppealEvents([...existing, event]);
-  if (candidate.issues.length > 0) {
-    throw new AppealError(candidate.issues[0]?.code ?? "ALB_APPEAL_INVALID", "Appeal event is invalid.");
-  }
+  assertValidAppealCandidate([...existing, event]);
 }

@@ -16,6 +16,7 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- Validate an appeal's first filing with the same replay rules as later events before storing it. Store verification and JSONL reopen now also reject previously stored filings that appeal replay marks conflicted.
 - Render control and invisible Unicode format characters visibly in Markdown exports to prevent terminal control and bidirectional display spoofing; signed evidence and replay bytes are unchanged.
 
 ## [2.1.0] - 2026-10-30
