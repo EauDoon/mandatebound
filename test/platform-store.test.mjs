@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { appealEventDigest } from "../dist/appeals.js";
+import { appealEventDigest, replayAppealEvents } from "../dist/appeals.js";
 import { canonicalize } from "../dist/canonical.js";
 import {
   DEFAULT_JSONL_STORE_LIMITS,
@@ -393,6 +393,123 @@ test("appeals are append-only, fork-aware, and explicitly checkpointed", async (
   );
   assert.equal((await store.getAppeal("appeal-1")).events.length, 2);
   await store.close();
+});
+
+const reviewer = { id: "reviewer-synthetic", role: "reviewer" };
+const reviewStarted = { eventType: "review_started", actor: reviewer };
+const evidenceAdded = { eventType: "evidence_added", evidenceBundleDigest: DIGEST_B };
+
+for (const [label, filingFields, steps, status] of [
+  ["evidence supplied at filing", { evidenceBundleDigest: DIGEST }, [], "open"],
+  ["supplemental evidence", {}, [evidenceAdded], "open"],
+  ["review start", {}, [reviewStarted], "open"],
+  ["upheld decision after review", {}, [reviewStarted, { eventType: "upheld", actor: reviewer }], "upheld"],
+  ["withdrawal after evidence", {}, [evidenceAdded, { eventType: "withdrawn" }], "withdrawn"],
+]) {
+  test(`appeal lifecycle: ${label} agrees with replay at every append`, async (t) => {
+    const store = new MemoryStore();
+    t.after(() => store.close());
+    const original = await store.putDecision(decision());
+    const filed = event({ decisionId: original.artifactId, ...filingFields });
+    const events = [filed];
+    let history = await store.appendAppeal(filed);
+    assert.deepEqual(history, replayAppealEvents(events));
+    for (const step of steps) {
+      const next = event({
+        ...step,
+        artifactId: `appeal-event-${events.length + 1}`,
+        decisionId: original.artifactId,
+        sequence: events.length + 1,
+        previousEventDigest: appealEventDigest(events.at(-1)),
+        reasonCodes: [step.eventType],
+      });
+      events.push(next);
+      history = await store.appendAppeal(next);
+      assert.deepEqual(history, replayAppealEvents(events));
+    }
+    assert.equal(history.status, status);
+    assert.deepEqual(history.issues, []);
+    assert.equal((await store.verifyChain()).valid, true);
+  });
+}
+
+test("appeal lifecycle: two filings for one decision retain independent checkpoints", async (t) => {
+  const store = new MemoryStore();
+  t.after(() => store.close());
+  const original = await store.putDecision(decision());
+  const first = event({ decisionId: original.artifactId });
+  const second = { ...first, appealId: "appeal-2", artifactId: "second-filing" };
+  await Promise.all([store.appendAppeal(first), store.appendAppeal(second)]);
+  for (const filed of [first, second]) {
+    const checkpoint = { sequence: 1, headDigest: appealEventDigest(filed) };
+    const history = await store.getAppeal(filed.appealId, checkpoint);
+    assert.equal(history.completeness.state, "verified");
+    assert.deepEqual(history.events, [filed]);
+    assert.deepEqual(history.issues, []);
+  }
+});
+
+test("appeal lifecycle: retrying a filing after reopen preserves the stored bytes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-filing-retry-"));
+  const path = join(directory, "store.jsonl");
+  let store;
+  try {
+    store = await JsonlStore.open(path);
+    const original = await store.putDecision(decision());
+    const filed = event({ decisionId: original.artifactId });
+    const initial = await store.appendAppeal(filed);
+    const bytes = await readFile(path);
+    await store.close();
+
+    store = await JsonlStore.open(path);
+    assert.deepEqual(await store.appendAppeal(filed), initial);
+    assert.deepEqual(await readFile(path), bytes);
+    assert.deepEqual(initial, replayAppealEvents([filed]));
+    assert.equal((await store.verifyChain()).records, 2);
+  } finally {
+    await store?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("appeal lifecycle: a reversal reopens with the original and superseding decisions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "alb-appeal-reversal-"));
+  const path = join(directory, "store.jsonl");
+  let store;
+  try {
+    store = await JsonlStore.open(path);
+    const original = await store.putDecision(decision());
+    const filed = event({ decisionId: original.artifactId });
+    await store.appendAppeal(filed);
+    const superseding = await store.putDecision(decision({
+      supersedesDecisionId: original.artifactId,
+      appealId: filed.appealId,
+      outcome: "operator",
+      reasonCodes: ["appeal_reversed"],
+    }));
+    const reversed = event({
+      artifactId: "appeal-event-2",
+      decisionId: original.artifactId,
+      sequence: 2,
+      previousEventDigest: appealEventDigest(filed),
+      eventType: "reversed",
+      actor: reviewer,
+      reasonCodes: ["appeal_reversed"],
+      supersedingDecisionId: superseding.artifactId,
+    });
+    const history = await store.appendAppeal(reversed);
+    await store.close();
+
+    store = await JsonlStore.open(path);
+    assert.deepEqual(await store.getAppeal(filed.appealId), history);
+    assert.deepEqual(history, replayAppealEvents([filed, reversed]));
+    assert.equal(history.status, "reversed");
+    assert.deepEqual(await store.getDecision(original.artifactId), original);
+    assert.deepEqual(await store.getDecision(superseding.artifactId), superseding);
+  } finally {
+    await store?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("decision-bound reviewer assertions and appeal event caps are enforced", async () => {

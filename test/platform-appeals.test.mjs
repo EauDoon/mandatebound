@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Hash } from "node:crypto";
 import test from "node:test";
 import {
   AppealError,
@@ -42,6 +43,27 @@ function child(parent, overrides = {}) {
 function expectAppealCode(fn, code) {
   assert.throws(fn, (error) => error instanceof AppealError && error.code === code);
 }
+
+test("appeal lifecycle: a filing matches its retained checkpoint", () => {
+  const filed = event();
+  const checkpoint = {
+    sequence: 1,
+    headDigest: "sha256:b30a3217be3d87154159507619312053959b499dccf043e3a8dd8533e6348adb",
+  };
+  assertAppealAppendable([], filed);
+  const replay = replayAppealEvents([filed], checkpoint);
+  assert.equal(replay.status, "open");
+  assert.deepEqual(replay.completeness, { state: "verified", checkpoint });
+  assert.deepEqual(replay.issues, []);
+});
+
+test("appeal lifecycle: initial validation propagates a replay digest failure", (t) => {
+  const filed = event();
+  const failure = new Error("Synthetic digest failure");
+  t.mock.method(Hash.prototype, "digest", () => { throw failure; });
+  assert.throws(() => replayAppealEvents([filed]), (error) => error === failure);
+  assert.throws(() => assertAppealAppendable([], filed), (error) => error === failure);
+});
 
 test("empty histories and completeness checkpoints are explicit", () => {
   const empty = replayAppealEvents([]);
