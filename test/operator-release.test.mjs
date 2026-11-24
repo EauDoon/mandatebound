@@ -21,6 +21,19 @@ async function cli(args, value, overrides = {}) {
   return { code, output, json: () => JSON.parse(output) };
 }
 
+test("case-report does not present unreadable input as a clean zero-coverage assessment", async () => {
+  const input = { casePack: null, anchors: invocation().anchors };
+  for (const format of ["html", "markdown"]) {
+    const result = await cli(["case-report", "--format", format], input);
+    assert.equal(result.code, 3);
+    assert.match(result.output, /No coverage results were returned/);
+    assert.doesNotMatch(result.output, /0 coverage requirements need review|No applicable coverage requirements/);
+  }
+  const json = await cli(["case-report", "--format", "json"], input);
+  assert.equal(json.code, 3);
+  assert.deepEqual(json.json().result.coverage, []);
+});
+
 test("native preview uses the existing engine without touching a store", async () => {
   const input = buildScenario("unresolved").input;
   const result = await cli(["preview"], input, { store: new Proxy({}, { get() { throw new Error("store touched"); } }) });

@@ -16,6 +16,7 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Fixed
 
+- The next patch clarifies empty HTML and Markdown coverage results. A failed assessment without coverage rows no longer displays a reassuring zero-review count. JSON and CSV formats remain unchanged.
 - Validate an appeal's first filing with the same replay rules as later events before storing it. Store verification and JSONL reopen now also reject previously stored filings that appeal replay marks conflicted.
 - Render control and invisible Unicode format characters visibly in Markdown exports to prevent terminal control and bidirectional display spoofing; signed evidence and replay bytes are unchanged.
 
