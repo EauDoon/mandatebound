@@ -119,12 +119,18 @@ function statusCell(status: string): string {
   return `<span class="status status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
 }
 
+function emptyCoverageMessage(report: MandateBoundCaseReport): string {
+  return report.valid
+    ? "No coverage requirements were reported."
+    : "No coverage results were returned. An invalid assessment cannot establish that no requirements apply.";
+}
+
 export function renderCaseReportHtml(report: MandateBoundCaseReport): string {
   const statusRows = Object.entries(report.status)
     .map(([name, value]) => `<tr><th scope="row">${escapeHtml(name)}</th><td>${statusCell(value)}</td></tr>`)
     .join("");
   const coverageRows = report.coverage.length === 0
-    ? "<tr><td colspan=\"3\">No applicable coverage requirements were reported.</td></tr>"
+    ? `<tr><td colspan="3">${emptyCoverageMessage(report)}</td></tr>`
     : report.coverage.map((item) =>
       `<tr><td>${escapeHtml(item.requirementId)}</td><td>${statusCell(item.status)}</td><td>${escapeHtml(item.matchedEnvelopes)}</td></tr>`)
       .join("");
@@ -175,7 +181,7 @@ td,th,li,h1{overflow-wrap:anywhere}.meta{min-width:0}.meta>*{min-width:0}
 <p class="boundary">This report is policy-relative decision support. Global completeness is not established and legal effect is not determined.</p>
 <div class="summary" aria-label="Report summary">
 <strong>${report.valid ? "Verification passed" : "Review required"}</strong>
-<span>${report.coverage.filter((item) => item.status !== "satisfied" && item.status !== "not_applicable").length} coverage requirements need review</span>
+<span>${report.coverage.length === 0 ? emptyCoverageMessage(report) : `${report.coverage.filter((item) => item.status !== "satisfied" && item.status !== "not_applicable").length} coverage requirements need review`}</span>
 <span>${report.findings.length} verifier findings</span>
 </div>
 <nav aria-label="Report sections"><a href="#assurance">Assurance</a><a href="#native-bundle">Native bundle</a><a href="#coverage">Coverage</a><a href="#evidence">Evidence</a><a href="#findings">Findings</a></nav>
@@ -227,6 +233,7 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
     ...(report.envelopes.length === 0 ? ["", "No protocol evidence envelopes were reported."] : []),
     "", "## Coverage requirements", "", "| Requirement | Status | Matched envelopes |", "| --- | --- | --- |",
     ...report.coverage.map((item) => `| ${markdownText(item.requirementId)} | ${markdownText(item.status)} | ${item.matchedEnvelopes} |`),
+    ...(report.coverage.length === 0 ? ["", emptyCoverageMessage(report)] : []),
     "", "## Verifier findings", "",
     ...(report.findings.length === 0 ? ["No verifier findings."] : report.findings.map((item) =>
       `- ${markdownText(item.code)} at ${markdownText(item.path)}: ${markdownText(item.message)}`)),

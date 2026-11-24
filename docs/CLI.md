@@ -190,7 +190,9 @@ text per entry and 1,024 entries. See [V1.1 profile](V1_1.md).
 printed either way. HTML and Markdown include native-bundle verification,
 verified-entry counts and whether trust was checked. Both preserve per-envelope
 integrity, coverage, upstream-validity and evidence-eligibility results; these
-statuses do not establish source truth. CSV remains a coverage-only export.
+statuses do not establish source truth. If no coverage rows were returned, the
+printable formats say so. For an invalid assessment that is missing information,
+not proof that zero requirements need review. CSV remains a coverage-only export.
 
 `policy` actions: `validate` (`{policy, rulebook}`), `test`
 (`{policy, rulebook, cases}`) and `diff` (`{before, after}` rulebooks). Exit 0

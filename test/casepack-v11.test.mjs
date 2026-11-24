@@ -562,7 +562,7 @@ test("static CasePack HTML escapes report strings and contains no raw evidence",
     findings: [],
   });
   assert.equal(emptyRendered.includes("unidentified-casepack"), true);
-  assert.equal(emptyRendered.includes("No applicable coverage requirements were reported."), true);
+  assert.equal(emptyRendered.includes("No coverage requirements were reported."), true);
   assert.equal(emptyRendered.includes("No protocol evidence envelopes were reported."), true);
   assert.equal(emptyRendered.includes("No verifier findings."), true);
 
