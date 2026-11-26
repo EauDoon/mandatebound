@@ -241,17 +241,35 @@ export function renderCaseReportMarkdown(report: MandateBoundCaseReport): string
   return `${lines.join("\n")}\n`;
 }
 
+type CsvValue = string | number;
+
+function renderReportCsv(
+  report: MandateBoundCaseReport,
+  columns: readonly string[],
+  values: readonly CsvValue[][],
+): string {
+  const heading = ["casePackId", "assessedAt", "verification", ...columns, "legalEffect", "globalCompleteness"];
+  const context = [report.casePackId ?? "unidentified-casepack", report.assessedAt, report.valid ? "valid" : "not valid"];
+  const records = values.length ? values : [columns.map(() => "")];
+  const rows = [heading, ...records.map((row) => [...context, ...row, "not-determined", "not-established"])];
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+}
+
 /** RFC 4180 coverage export, with formula-neutralized cells and explicit assurance boundaries. */
 export function renderCaseCoverageCsv(report: MandateBoundCaseReport): string {
-  const coverage = report.coverage.length === 0
-    ? [{ requirementId: "", status: "", matchedEnvelopes: "" }]
-    : report.coverage;
-  const rows: (string | number)[][] = [[
-    "casePackId", "assessedAt", "verification", "requirementId", "status", "matchedEnvelopes",
-    "legalEffect", "globalCompleteness",
-  ], ...coverage.map((item) => [
-    report.casePackId ?? "unidentified-casepack", report.assessedAt, report.valid ? "valid" : "not valid",
-    item.requirementId, item.status, item.matchedEnvelopes, "not-determined", "not-established",
-  ])];
-  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+  return renderReportCsv(report, ["requirementId", "status", "matchedEnvelopes"],
+    report.coverage.map((row) => [row.requirementId, row.status, row.matchedEnvelopes]));
+}
+
+export function renderCaseFindingsCsv(report: MandateBoundCaseReport): string {
+  return renderReportCsv(report, ["code", "path", "message"],
+    report.findings.map((row) => [row.code, row.path, row.message]));
+}
+
+export function renderCaseEnvelopesCsv(report: MandateBoundCaseReport): string {
+  const columns = ["envelopeId", "integrity", "coverage", "upstreamValid", "evidenceEligible", "sourceTruth"];
+  return renderReportCsv(report, columns, report.envelopes.map((row) => [
+    row.envelopeId, row.integrityStatus, row.coverageStatus,
+    String(row.upstreamValid), String(row.evidenceEligible), row.sourceTruthStatus,
+  ]));
 }

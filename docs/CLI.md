@@ -186,13 +186,16 @@ or comparable, otherwise 3. Raw evidence in `anchors.rawEvidence` is encoded as
 text per entry and 1,024 entries. See [V1.1 profile](V1_1.md).
 
 `case-report` reads `{casePack, anchors}` and renders `--format json`, `html`,
-`markdown` or `csv`. Exit 0 for a valid report, 3 otherwise; the report is
+`markdown`, `csv`, `findings-csv` or `envelopes-csv`. Exit 0 for a valid report, 3 otherwise; the report is
 printed either way. HTML and Markdown include native-bundle verification,
 verified-entry counts and whether trust was checked. Both preserve per-envelope
 integrity, coverage, upstream-validity and evidence-eligibility results; these
 statuses do not establish source truth. If no coverage rows were returned, the
 printable formats say so. For an invalid assessment that is missing information,
-not proof that zero requirements need review. CSV remains a coverage-only export.
+not proof that zero requirements need review. The `csv` format exports coverage.
+`findings-csv` exports verifier codes, paths and messages. `envelopes-csv` exports
+envelope integrity, coverage, upstream validity, eligibility and source truth.
+Each CSV includes assessment metadata even when its collection is empty.
 
 `policy` actions: `validate` (`{policy, rulebook}`), `test`
 (`{policy, rulebook, cases}`) and `diff` (`{before, after}` rulebooks). Exit 0

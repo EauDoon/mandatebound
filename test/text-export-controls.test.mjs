@@ -15,6 +15,7 @@ test("Markdown exposes terminal controls and invisible direction overrides", () 
 test("Markdown retains ordinary Unicode and existing line and syntax escaping", () => {
   assert.equal(markdownText("雪 café 💡"), "雪 café 💡");
   assert.equal(markdownText("first\r\nsecond\nthird"), "first second third");
+  assert.equal(markdownText("first\u2028second\u2029third"), "first second third");
   assert.equal(markdownText("[link](https://example.test)|<tag>"), "\\[link\\]\\(https://example\\.test\\)\\|&lt;tag&gt;");
   assert.equal(markdownText("a\tb"), "a\\\\u0009b");
 });

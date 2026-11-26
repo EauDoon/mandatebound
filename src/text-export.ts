@@ -8,7 +8,7 @@
 export function markdownText(value: string): string {
   // Make terminal controls and invisible direction/format overrides visible.
   // Do this before Markdown escaping so the diagnostic backslash stays literal.
-  const visible = value.replace(/[\r\n]+/g, " ").replace(/[\p{Cc}\p{Cf}]/gu,
+  const visible = value.replace(/[\r\n\u2028\u2029]+/gu, " ").replace(/[\p{Cc}\p{Cf}]/gu,
     (char) => {
       const code = char.codePointAt(0)!;
       return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, "0")}`;

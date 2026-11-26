@@ -57,6 +57,10 @@ Within its synthetic and reference boundary, MandateBound demonstrates that a re
 
 The current release supports one exact evidence-import target: UCP 2026-04-08 REST with the UCP AP2 Mandates Extension and AP2 v0.2.0. It also provides an AP2 dispute Evidence Pack and resolver, caller-supplied retrieval adapters, metadata-only timeline rendering, native v1 policy tools, and local operator review workflows. These are bounded implementation claims, not protocol certification or production fitness.
 
+## Explore the evidence atlas
+
+Open [the offline evidence atlas](docs/evidence-atlas.html) to trace the native policy, CasePack reporting and operator triage paths. On GitHub, choose **Download raw file** and open the saved HTML in your browser. An installed package includes the same standalone file at `node_modules/@oonyl/mandatebound/docs/evidence-atlas.html`. Select a module to see its dependencies, or save the selected route as JSON. The module directory and three synthetic outcomes also work with JavaScript disabled.
+
 ## How it works
 
 ```text
