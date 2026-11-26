@@ -142,7 +142,7 @@ select {
   width: 100%;
   touch-action: pan-y;
   cursor: grab;
-  aspect-ratio: 2/1;
+  height: auto;
 }
 .plot svg:active {
   cursor: grabbing;
@@ -165,7 +165,7 @@ select {
 }
 .node text {
   fill: var(--ink);
-  font: 600 12px system-ui,sans-serif;
+  font: 600 var(--node-label-size, 12px) system-ui,sans-serif;
   paint-order: stroke;
   stroke: #0d1b25;
   stroke-width: 4px;
@@ -203,13 +203,22 @@ select {
   color: var(--aqua);
   overflow-wrap: anywhere;
 }
-.info a {
-  margin-top: auto;
+.graph-notes {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem 1.25rem;
+  margin-top: .75rem;
+}
+.graph-notes button {
+  flex: none;
 }
 .legend {
   font-size: .9rem;
   color: var(--muted);
-  margin: .65rem 0 0;
+  flex: 1 1 30rem;
+  margin: 0;
 }
 .section {
   margin: 2.4rem 0 0;
@@ -297,17 +306,22 @@ footer {
   }
 }
 @media(max-width:34rem) {
-  .plot svg {
-    aspect-ratio: 1.5/1;
+  .lead {
+    padding: .8rem 0 .7rem;
   }
-  .node text {
-    font-size: 15px;
-  }
-  .bar select {
-    max-width: 100%;
+  .lead p {
+    margin-bottom: .45rem;
   }
   .bar {
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+    gap: .5rem;
+  }
+  .bar select {
+    width: 100%;
+    min-width: 0;
+    font-size: .9rem;
+    padding-inline: .35rem;
   }
   .rotate {
     flex-wrap: wrap;
@@ -328,7 +342,7 @@ footer {
     background: white;
     color: black;
   }
-  .bar,.viewer,.legend,header,.skip,footer {
+  .bar,.viewer,.graph-notes,header,.skip,footer {
     display: none;
   }
   a,p,small,code {
@@ -349,18 +363,18 @@ footer {
 <a class="skip" href="#main">Skip to evidence atlas</a>
 <header><b>EAUDOON / MANDATEBOUND</b><a href="#directory">Module directory</a></header>
 <main id="main">
-<div class="lead"><div class="kicker">Architecture / offline reference</div>
+<div class="lead"><div class="kicker">Offline architecture</div>
 <h1>Evidence atlas</h1>
-<p>Follow a CasePack into an operator’s report, or follow native evidence into a policy decision. Arrows point from a module to a dependency it uses.</p></div>
+<p>Trace a CasePack into an operator’s report or native evidence into a policy decision.</p></div>
 <section id="interactive" aria-label="Interactive dependency graph" hidden>
-<div class="bar"><label>Workflow<select id="route"><option value="all">All modules</option><option value="triage">Operator triage</option><option value="reporting">CasePack reporting</option><option value="decision">Native policy decision</option></select></label>
-<label>Inspect module<select id="module"></select></label><button id="download">Save route JSON</button></div>
+<div class="bar"><label>Workflow<select id="route"><option value="all">All modules</option><option value="triage">Operator triage</option><option value="reporting">Case reports</option><option value="decision">Native policy</option></select></label>
+<label>Inspect module<select id="module"></select></label></div>
 <div class="viewer"><div class="plot">
 <svg id="stage" viewBox="0 0 660 340" role="img" aria-label="Rotatable 3D module dependency graph" aria-describedby="controls" tabindex="0">
 <defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#9caeb6"/></marker></defs><g id="drawing"></g></svg>
 <div class="rotate"><button id="left" aria-label="Rotate left">← Rotate</button><button id="reset">Reset view</button><button id="right" aria-label="Rotate right">Rotate →</button></div></div>
 <aside class="info" aria-live="polite" aria-atomic="true"><span class="kicker" id="kind"></span><h2 id="name"></h2><p id="description"></p><p id="dependencies"></p><a class="mirror" id="source"></a></aside></div>
-<p class="legend" id="controls">Drag to orbit or focus the graph and use the arrow keys. Select a module to inspect its source. The gold lines show its outgoing dependencies.</p>
+<div class="graph-notes"><p class="legend" id="controls">Arrows point to dependencies. Gold arrows leave the selected module. Drag to orbit, or focus the graph and use the arrow keys.</p><button id="download">Save route JSON</button></div>
 </section>
 <section class="section"><h2>Three outcomes for a disputed purchase</h2><p>These recorded synthetic outcomes come from the source checkout’s <code>node examples/case-study.mjs</code>. Each decision keeps <code>legalEffect: "not-determined"</code>.</p>
 <div class="case-grid"><article><div class="kicker">Complete case</div><h3>Principal branch</h3><p>All 12 bundle entries verify. The recorded purchase falls within the mandate.</p><code>allocated<br>inside_mandate_without_vendor_causation</code></article>
@@ -448,14 +462,18 @@ footer {
     const depth = y * Math.sin(pitch) + turned * Math.cos(pitch);
     const scale = 640 / (640 - depth);
     return {
-      x: (compact ? 175 : 322) + (x * Math.cos(yaw) + z * Math.sin(yaw)) * scale * (compact ? 0.59 : 1),
-      y: (compact ? 128 : 159) + (y * Math.cos(pitch) - turned * Math.sin(pitch)) * scale * (compact ? 0.84 : 1),
+      x: (compact ? 181 : 322) + (x * Math.cos(yaw) + z * Math.sin(yaw)) * scale * (compact ? 0.59 : 1),
+      y: (compact ? 156 : 159) + (y * Math.cos(pitch) - turned * Math.sin(pitch)) * scale * (compact ? 1.03 : 1),
       depth, scale,
     };
   }
   function draw() {
-    const compact = stage.clientWidth < 450;
-    const width = compact ? 370 : 660, height = compact ? 280 : 340;
+    const pixels = stage.clientWidth;
+    if (!pixels) return;
+    const compact = pixels < 450;
+    const width = compact ? 370 : 660, height = compact ? 330 : 340;
+    const unitsPerPixel = width / pixels;
+    stage.style.setProperty("--node-label-size", Math.max(12, 13.5 * unitsPerPixel) + "px");
     stage.setAttribute("viewBox", "0 0 " + width + " " + height);
     const content = byId("drawing");
     content.replaceChildren();
@@ -480,7 +498,7 @@ footer {
       const item = index.get(id), p = points.get(id);
       const node = svg("g", {class:id === selected ? "node selected" : "node",
         transform:"translate("+p.x+" "+p.y+")", "data-id":id}, content);
-      svg("circle",{r:14,fill:"transparent",style:"stroke:none"},node);
+      svg("circle",{r:Math.max(14, 20 * unitsPerPixel),fill:"transparent",style:"stroke:none"},node);
       if (id === selected) svg("circle",{r:10*p.scale,class:"ring"},node);
       svg("circle",{r:6*p.scale,fill:layers[item.layer]},node);
       const label = svg("text", {"text-anchor":"middle"}, node);
@@ -488,30 +506,47 @@ footer {
       labels.push({label, point:p});
     }
     // Place labels inside the viewport, preferring the nearest free line above or below a node.
-    const occupied = [];
+    const occupied = [...points.values()].map(({x, y}) => ({left:x-8, right:x+8, top:y-8, bottom:y+8}));
     for (const {label, point} of labels) {
       const bounds = label.getBBox();
-      const centerX = Math.max(bounds.width / 2 + 3, Math.min(width - bounds.width / 2 - 3, point.x));
-      const left = centerX - bounds.width / 2;
-      const right = centerX + bounds.width / 2;
-      const candidates = [-14, 25, -35, 46, -56, 67, -77, 88, -98, 109, -119, 130];
-      const available = dy => {
-        const top = point.y + dy + bounds.y;
-        const bottom = top + bounds.height;
-        return top >= 0 && bottom <= height && occupied.every(box =>
-          right + 3 < box.left || left - 3 > box.right || bottom + 2 < box.top || top - 2 > box.bottom);
-      };
-      const offset = candidates.find(available) ?? candidates[0];
-      const top = point.y + offset + bounds.y;
-      occupied.push({left, right, top, bottom:top + bounds.height});
-      if (Math.abs(offset) > 26) {
-        const guide = svg("line", {x1:0, y1:0, x2:centerX-point.x,
-          y2:offset > 0 ? offset + bounds.y - 2 : offset + bounds.y + bounds.height + 2,
-          stroke:"#738590", "stroke-dasharray":"2 3"}, label.parentNode);
+      // A label can sit beside a node or against the free edge of another box.
+      // Testing these boundaries also finds narrow gaps between already placed labels.
+      const xs = new Set([point.x - bounds.width / 2, 2, width - bounds.width - 2]);
+      const ys = new Set([point.y - bounds.height - 12, point.y + 12, 2, height - bounds.height - 2]);
+      for (const box of occupied) {
+        xs.add(box.left - bounds.width - 4).add(box.right + 4);
+        ys.add(box.top - bounds.height - 4).add(box.bottom + 4);
+      }
+      let best, distance = Infinity;
+      for (const left of xs) {
+        const right = left + bounds.width;
+        if (left < 2 || right > width - 2) continue;
+        for (const top of ys) {
+          const bottom = top + bounds.height;
+          if (top < 2 || bottom > height - 2) continue;
+          const candidate = Math.hypot(left + bounds.width / 2 - point.x, top + bounds.height / 2 - point.y);
+          if (candidate >= distance || occupied.some(box =>
+            right + 2 >= box.left && left - 2 <= box.right && bottom + 2 >= box.top && top - 2 <= box.bottom)) continue;
+          best = {left, right, top, bottom};
+          distance = candidate;
+        }
+      }
+      if (!best) {
+        // Keep the graph operable if unusually large user fonts exhaust the drawing area.
+        label.remove();
+        continue;
+      }
+      occupied.push(best);
+      const dx = best.left + bounds.width / 2 - point.x;
+      const edgeX = Math.max(best.left, Math.min(best.right, point.x)) - point.x;
+      const edgeY = Math.max(best.top, Math.min(best.bottom, point.y)) - point.y;
+      if (Math.hypot(edgeX, edgeY) > 15) {
+        const guide = svg("line", {x1:0, y1:0, x2:edgeX, y2:edgeY,
+          stroke:"#91a6af", "stroke-dasharray":"2 3"}, label.parentNode);
         label.parentNode.prepend(guide);
       }
-      label.setAttribute("x", centerX - point.x);
-      label.setAttribute("y", offset);
+      label.setAttribute("x", dx);
+      label.setAttribute("y", best.top - point.y - bounds.y);
     }
   }
   function inspect(id) {
