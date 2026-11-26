@@ -54,7 +54,10 @@ import {
   testPolicyPack,
   validatePolicyPack,
 } from "./policy-tools.js";
-import { createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown, renderCaseCoverageCsv } from "./report.js";
+import {
+  createCaseReport, renderCaseReportHtml, renderCaseReportMarkdown,
+  renderCaseCoverageCsv, renderCaseFindingsCsv, renderCaseEnvelopesCsv,
+} from "./report.js";
 import { assessCases, compareCaseAssessments, createEvidenceChecklist, createCaseReviewQueue, renderCaseReviewQueueCsv, triageCase } from "./operator.js";
 import { inventoryCaseEvidence, compareCaseCoverage, compareCaseEnvelopes, compareCaseFindings, compareCaseAnchorContext, createAssessmentReceipt, verifyAssessmentReceipt } from "./operator-review.js";
 import { auditJsonlStore } from "./store-audit.js";
@@ -212,7 +215,7 @@ const CLI_COMMANDS = Object.freeze([
   { name: "serve", summary: "Listen on loopback with the reference API" },
   { name: "casepack", summary: "Build, verify, unpack, or diff a CasePack", actions: CASEPACK_ACTIONS },
   { name: "policy", summary: "Validate, test, or diff a policy pack", actions: POLICY_ACTIONS },
-  { name: "case-report", summary: "Render a CasePack report as JSON, HTML, Markdown or CSV" },
+  { name: "case-report", summary: "Render CasePack reports, coverage CSV, findings-csv or envelopes-csv" },
   {
     name: "ap2-dispute",
     summary: "Resolve, pack, verify, render, batch-verify or reconcile AP2 dispute evidence",
@@ -242,7 +245,7 @@ const CLI_EXIT_HELP = Object.freeze(Object.fromEntries(
   ]),
 ));
 const CLI_USAGE =
-  "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv]";
+  "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv|findings-csv|envelopes-csv]";
 const CLI_INPUT_HELP =
   "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
@@ -924,13 +927,15 @@ export async function runCli(
       }
       case "case-report": {
         assertAllowedOptions(args, ["input"]);
-        const format = assertOutputFormat(args, ["json", "html", "markdown", "csv"]);
+        const format = assertOutputFormat(args, ["json", "html", "markdown", "csv", "findings-csv", "envelopes-csv"]);
         const input = await readCasePackInput(requireSingleInput(args), stdin);
         const decoded = decodeCasePackInvocation(input);
         const report = createCaseReport(decoded.casePack, decoded.anchors);
         if (format === "html") stdout.write(renderCaseReportHtml(report));
         else if (format === "markdown") stdout.write(renderCaseReportMarkdown(report));
         else if (format === "csv") stdout.write(renderCaseCoverageCsv(report));
+        else if (format === "findings-csv") stdout.write(renderCaseFindingsCsv(report));
+        else if (format === "envelopes-csv") stdout.write(renderCaseEnvelopesCsv(report));
         else writeJson(stdout, { ok: report.valid, result: report });
         return report.valid ? CLI_EXIT.SUCCESS : CLI_EXIT.INVALID;
       }

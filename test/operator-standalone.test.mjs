@@ -35,6 +35,22 @@ test("standalone CLI reads files, exports reports, and audits without creating w
       assert.equal(result.status, 0, result.stderr);
       assert.ok(result.stdout.length > 100);
     }
+    const exported = (format, doc) => run(["dist/cli.js", "case-report", "--format", format], JSON.stringify(doc));
+    const envelopes = exported("envelopes-csv", input);
+    assert.equal(envelopes.status, 0, envelopes.stderr);
+    assert.match(envelopes.stdout, /"upstreamValid","evidenceEligible","sourceTruth"/);
+    assert.match(envelopes.stdout, /"envelope.alpha","[^"]+","[^"]+","true","true","unknown"/);
+    const cleanFindings = exported("findings-csv", input);
+    assert.equal(cleanFindings.status, 0, cleanFindings.stderr);
+    assert.match(cleanFindings.stdout, /"valid","","","","not-determined","not-established"/);
+    const invalidInput = { ...input, casePack: null };
+    const findings = exported("findings-csv", invalidInput);
+    assert.equal(findings.status, 3, findings.stderr);
+    assert.match(findings.stdout, /"code","path","message"/);
+    assert.match(findings.stdout, /"not valid","MBCP_/);
+    const empty = exported("envelopes-csv", invalidInput);
+    assert.equal(empty.status, 3, empty.stderr);
+    assert.match(empty.stdout, /"not valid","","","","","","","not-determined","not-established"/);
     const invalidCsv = run(["dist/cli.js", "case-report", "--format", "csv"],
       JSON.stringify({ casePack: null, anchors: input.anchors }));
     assert.equal(invalidCsv.status, 3, invalidCsv.stderr);

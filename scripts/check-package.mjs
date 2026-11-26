@@ -93,6 +93,7 @@ const required = new Set([
   "SECURITY.md",
   "package.json",
   "docs/ADOPTER_WORKFLOW.md",
+  "docs/evidence-atlas.html",
   "docs/examples/adopter-workflow.mjs",
   ...entryPoints,
 ]);

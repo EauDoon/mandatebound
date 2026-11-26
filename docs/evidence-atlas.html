@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Evidence atlas · MandateBound</title>
+<style>
+:root {
+  color-scheme: dark;
+  --ink: #f1f3ed;
+  --muted: #afc4ca;
+  --bg: #0a141d;
+  --edge: #314751;
+  --aqua: #8aeee0;
+  --blue: #a8c9ff;
+  --amber: #ffd497;
+  --panel: #111f2a;
+  font-family: system-ui,sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.53;
+}
+a {
+  color: var(--aqua);
+  text-underline-offset: .2em;
+}
+button,select {
+  font: inherit;
+  color: inherit;
+  background: #152732;
+  border: 1px solid #516974;
+  border-radius: .28rem;
+  min-height: 2.75rem;
+  padding: .45rem .65rem;
+}
+button {
+  cursor: pointer;
+}
+button:hover,select:hover {
+  border-color: var(--aqua);
+}
+:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 3px;
+}
+button[hidden],[hidden] {
+  display: none!important;
+}
+.info h2 {
+  margin: .25rem 0 .1rem;
+}
+.info p {
+  margin: .55rem 0;
+}
+.info a {
+  padding-top: .7rem;
+}
+header,main,footer {
+  max-width: 77rem;
+  margin: auto;
+  padding: 1.25rem clamp(1rem,4vw,3.5rem);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--edge);
+}
+header b,.mono,.kicker,code,summary small {
+  font: 500 .82rem/1.55 ui-monospace,monospace;
+}
+.kicker {
+  color: var(--aqua);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.lead {
+  padding: 1.3rem 0 .9rem;
+}
+.lead p {
+  max-width: 66ch;
+  color: var(--muted);
+  margin: .45rem 0 1.4rem;
+}
+h1,h2,h3,p {
+  margin-top: 0;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(2.55rem,6.4vw,5.4rem);
+  letter-spacing: -.06em;
+  line-height: 1.04;
+}
+h2 {
+  font-size: clamp(1.4rem,3vw,2rem);
+  line-height: 1.12;
+  letter-spacing: -.035em;
+}
+h3 {
+  margin: .45rem 0;
+  font-size: 1.38rem;
+}
+.bar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-bottom: .9rem;
+}
+label {
+  display: grid;
+  gap: .3rem;
+  color: var(--muted);
+  font-size: .82rem;
+}
+select {
+  color: var(--ink);
+  font-size: 1rem;
+}
+.viewer {
+  display: grid;
+  grid-template-columns: minmax(0,2.35fr) minmax(14rem,1fr);
+  border: 1px solid var(--edge);
+  border-radius: .6rem;
+  overflow: hidden;
+  background: var(--panel);
+}
+.plot {
+  position: relative;
+  background-color: #0d1b25;
+  background-image: radial-gradient(#314652 1px,transparent 1px);
+  background-size: 18px 18px;
+  padding: .55rem;
+}
+.plot svg {
+  display: block;
+  width: 100%;
+  touch-action: pan-y;
+  cursor: grab;
+  aspect-ratio: 2/1;
+}
+.plot svg:active {
+  cursor: grabbing;
+}
+.scene-rail {
+  fill: none;
+  stroke: #253b47;
+  stroke-width: 1;
+}
+.link {
+  stroke: #69828e;
+  stroke-width: 1.6;
+}
+.link.active {
+  stroke: var(--amber);
+  stroke-width: 2.3;
+}
+.node {
+  cursor: pointer;
+}
+.node text {
+  fill: var(--ink);
+  font: 600 12px system-ui,sans-serif;
+  paint-order: stroke;
+  stroke: #0d1b25;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.node circle {
+  stroke: #0c1821;
+  stroke-width: 2px;
+}
+.node.selected .ring {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 2;
+}
+.rotate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+}
+.rotate button {
+  font-size: .84rem;
+}
+.info {
+  border-left: 1px solid var(--edge);
+  padding: 1.45rem;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+.info p {
+  color: var(--muted);
+}
+.info code {
+  color: var(--aqua);
+  overflow-wrap: anywhere;
+}
+.info a {
+  margin-top: auto;
+}
+.legend {
+  font-size: .9rem;
+  color: var(--muted);
+  margin: .65rem 0 0;
+}
+.section {
+  margin: 2.4rem 0 0;
+}
+details {
+  border-top: 1px solid var(--edge);
+  padding: .78rem .25rem;
+}
+details:last-child {
+  border-bottom: 1px solid var(--edge);
+}
+summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+summary small {
+  color: var(--muted);
+  margin-left: .45rem;
+}
+.directory p {
+  margin: .5rem 0 .25rem;
+  color: var(--muted);
+}
+.case-grid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: .85rem;
+}
+.case-grid article {
+  border: 1px solid var(--edge);
+  border-top: 3px solid var(--aqua);
+  padding: 1.1rem;
+  background: var(--panel);
+  border-radius: .25rem;
+}
+.case-grid article:nth-child(2) {
+  border-top-color: var(--amber);
+}
+.case-grid article:nth-child(3) {
+  border-top-color: var(--blue);
+}
+.case-grid code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.case-grid p {
+  color: var(--muted);
+}
+footer {
+  margin-top: 1rem;
+  border-top: 1px solid var(--edge);
+  color: var(--muted);
+  font-size: .9rem;
+}
+.skip {
+  position: absolute;
+  left: .8rem;
+  top: -10rem;
+}
+.skip:focus {
+  top: .3rem;
+  background: var(--bg);
+  padding: .4rem;
+}
+.mirror {
+  overflow-wrap: anywhere;
+}
+@media(max-width:52rem) {
+  .viewer {
+    grid-template-columns: 1fr;
+  }
+  .info {
+    border-left: 0;
+    border-top: 1px solid var(--edge);
+    padding: 1rem;
+  }
+  .case-grid {
+    grid-template-columns: 1fr;
+  }
+  .plot {
+    padding: .15rem .15rem .7rem;
+  }
+  .lead {
+    padding-top: 1rem;
+  }
+}
+@media(max-width:34rem) {
+  .plot svg {
+    aspect-ratio: 1.5/1;
+  }
+  .node text {
+    font-size: 15px;
+  }
+  .bar select {
+    max-width: 100%;
+  }
+  .bar {
+    align-items: stretch;
+  }
+  .rotate {
+    flex-wrap: wrap;
+  }
+  header b {
+    font-size: .72rem;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  * {
+    animation: none!important;
+    scroll-behavior: auto!important;
+    transition: none!important;
+  }
+}
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  .bar,.viewer,.legend,header,.skip,footer {
+    display: none;
+  }
+  a,p,small,code {
+    color: #222!important;
+  }
+  .case-grid {
+    display: block;
+  }
+  .case-grid article {
+    background: white;
+    break-inside: avoid;
+  }
+  .section {
+    margin-top: 1rem;
+  }
+}
+</style></head><body>
+<a class="skip" href="#main">Skip to evidence atlas</a>
+<header><b>EAUDOON / MANDATEBOUND</b><a href="#directory">Module directory</a></header>
+<main id="main">
+<div class="lead"><div class="kicker">Architecture / offline reference</div>
+<h1>Evidence atlas</h1>
+<p>Follow a CasePack into an operator’s report, or follow native evidence into a policy decision. Arrows point from a module to a dependency it uses.</p></div>
+<section id="interactive" aria-label="Interactive dependency graph" hidden>
+<div class="bar"><label>Workflow<select id="route"><option value="all">All modules</option><option value="triage">Operator triage</option><option value="reporting">CasePack reporting</option><option value="decision">Native policy decision</option></select></label>
+<label>Inspect module<select id="module"></select></label><button id="download">Save route JSON</button></div>
+<div class="viewer"><div class="plot">
+<svg id="stage" viewBox="0 0 660 340" role="img" aria-label="Rotatable 3D module dependency graph" aria-describedby="controls" tabindex="0">
+<defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#9caeb6"/></marker></defs><g id="drawing"></g></svg>
+<div class="rotate"><button id="left" aria-label="Rotate left">← Rotate</button><button id="reset">Reset view</button><button id="right" aria-label="Rotate right">Rotate →</button></div></div>
+<aside class="info" aria-live="polite" aria-atomic="true"><span class="kicker" id="kind"></span><h2 id="name"></h2><p id="description"></p><p id="dependencies"></p><a class="mirror" id="source"></a></aside></div>
+<p class="legend" id="controls">Drag to orbit or focus the graph and use the arrow keys. Select a module to inspect its source. The gold lines show its outgoing dependencies.</p>
+</section>
+<section class="section"><h2>Three outcomes for a disputed purchase</h2><p>These recorded synthetic outcomes come from the source checkout’s <code>node examples/case-study.mjs</code>. Each decision keeps <code>legalEffect: "not-determined"</code>.</p>
+<div class="case-grid"><article><div class="kicker">Complete case</div><h3>Principal branch</h3><p>All 12 bundle entries verify. The recorded purchase falls within the mandate.</p><code>allocated<br>inside_mandate_without_vendor_causation</code></article>
+<article><div class="kicker">Missing evidence</div><h3>Unresolved</h3><p>The mandate, receipt and incident report are absent. The reviewer needs additional evidence.</p><code>indeterminate<br>missing_required_evidence</code></article>
+<article><div class="kicker">Changed evidence</div><h3>Unresolved</h3><p>The receipt payload and bundle root changed. The verifier records rejected evidence.</p><code>invalid<br>invalid_evidence</code></article></div></section>
+<section class="section directory" id="directory"><h2>Module directory</h2><p>This directory covers the nine modules in the map. Source links open their current files on GitHub.</p>
+<details data-node="cli" data-point="-248,-12,20" id="record-cli">
+<summary><strong>Command line</strong> <small>Entry point</small></summary>
+<p class="description">Reads one strict input document, dispatches a local command, and returns its documented exit code.</p>
+<p>Uses <a data-edge="operator" href="#record-operator">Review queue</a>, <a data-edge="report" href="#record-report">Case report</a>, <a data-edge="casepack" href="#record-casepack">CasePack</a>, <a data-edge="api" href="#record-api">Engine adapter</a>. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/cli.ts">Read src/cli.ts</a></p>
+</details>
+<details data-node="operator" data-point="-143,-114,12" id="record-operator">
+<summary><strong>Review queue</strong> <small>Review</small></summary>
+<p class="description">Orders bounded CasePack assessments for triage, evidence collection and comparison.</p>
+<p>Uses <a data-edge="report" href="#record-report">Case report</a>. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/operator.ts">Read src/operator.ts</a></p>
+</details>
+<details data-node="report" data-point="8,-92,55" id="record-report">
+<summary><strong>Case report</strong> <small>Review</small></summary>
+<p class="description">Turns a verification result into metadata for human review. Keeps eligibility, upstream validity and source truth separate.</p>
+<p>Uses <a data-edge="casepack" href="#record-casepack">CasePack</a>. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/report.ts">Read src/report.ts</a></p>
+</details>
+<details data-node="casepack" data-point="167,-85,-36" id="record-casepack">
+<summary><strong>CasePack</strong> <small>Evidence</small></summary>
+<p class="description">Exposes the CasePack sealer and verifier. The verifier checks declared coverage, caller-owned anchors, source evidence and the nested native bundle.</p>
+<p>No further modules shown in this excerpt. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/casepack.ts">Read src/casepack.ts</a></p>
+</details>
+<details data-node="api" data-point="-144,68,-18" id="record-api">
+<summary><strong>Engine adapter</strong> <small>Entry point</small></summary>
+<p class="description">The CLI uses the default local platform engine to load verification and evaluation functions. This path requires no running HTTP server.</p>
+<p>Uses <a data-edge="engine" href="#record-engine">Decision engine</a>, <a data-edge="bundle" href="#record-bundle">Closed bundle</a>. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/api.ts">Read src/api.ts</a></p>
+</details>
+<details data-node="engine" data-point="0,53,28" id="record-engine">
+<summary><strong>Decision engine</strong> <small>Policy</small></summary>
+<p class="description">Derives typed facts from the supplied evidence and records a bounded policy disposition at the explicit assessment time.</p>
+<p>Uses <a data-edge="bundle" href="#record-bundle">Closed bundle</a>, <a data-edge="trust" href="#record-trust">Pinned trust</a>, <a data-edge="policy" href="#record-policy">Rulebook</a>. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/engine.ts">Read src/engine.ts</a></p>
+</details>
+<details data-node="bundle" data-point="170,0,22" id="record-bundle">
+<summary><strong>Closed bundle</strong> <small>Evidence</small></summary>
+<p class="description">Checks the manifest, content digests and bundle root for the declared evidence.</p>
+<p>No further modules shown in this excerpt. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/bundle.ts">Read src/bundle.ts</a></p>
+</details>
+<details data-node="trust" data-point="184,91,-25" id="record-trust">
+<summary><strong>Pinned trust</strong> <small>Evidence</small></summary>
+<p class="description">Checks the pinned trust snapshot and resolves keys against roles, purposes, scopes and proof time.</p>
+<p>No further modules shown in this excerpt. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/trust.ts">Read src/trust.ts</a></p>
+</details>
+<details data-node="policy" data-point="37,139,-42" id="record-policy">
+<summary><strong>Rulebook</strong> <small>Policy</small></summary>
+<p class="description">Evaluates the bounded rule language against typed facts. Legal effect remains undetermined.</p>
+<p>No further modules shown in this excerpt. <a class="source" href="https://github.com/EauDoon/mandatebound/blob/main/src/policy.ts">Read src/policy.ts</a></p>
+</details>
+</section></main><footer>MandateBound · Synthetic case review and offline evidence verification</footer>
+<script>
+(() => {
+  "use strict";
+  const byId = id => document.getElementById(id);
+  const modules = Array.from(document.querySelectorAll("details[data-node]"), item => ({
+    id: item.dataset.node,
+    title: item.querySelector("strong").textContent,
+    layer: item.querySelector("small").textContent,
+    source: item.querySelector("a.source").getAttribute("href"),
+    description: item.querySelector(".description").textContent,
+    dependencies: Array.from(item.querySelectorAll("[data-edge]"), link => link.dataset.edge),
+    point: item.dataset.point.split(",").map(Number),
+  }));
+  const index = new Map(modules.map(item => [item.id, item]));
+  const route = byId("route"), picker = byId("module"), stage = byId("stage");
+  const layers = {"Entry point":"#a8c9ff",Review:"#b9daa8",Evidence:"#67d3d6",Policy:"#ffd497"};
+  const routes = {
+    all: modules.map(item => item.id),
+    triage: ["cli", "operator", "report", "casepack"],
+    reporting: ["cli", "report", "casepack"],
+    decision: ["cli", "api", "engine", "trust", "policy", "bundle"],
+  };
+  let selected = "cli", yaw = 0.12, pitch = -0.12;
+  const ns = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs, parent) {
+    const child = document.createElementNS(ns, tag);
+    for (const [key, value] of Object.entries(attrs)) child.setAttribute(key, value);
+    parent.append(child);
+    return child;
+  }
+  function project([x, y, z], compact) {
+    const turned = -x * Math.sin(yaw) + z * Math.cos(yaw);
+    const depth = y * Math.sin(pitch) + turned * Math.cos(pitch);
+    const scale = 640 / (640 - depth);
+    return {
+      x: (compact ? 175 : 322) + (x * Math.cos(yaw) + z * Math.sin(yaw)) * scale * (compact ? 0.59 : 1),
+      y: (compact ? 128 : 159) + (y * Math.cos(pitch) - turned * Math.sin(pitch)) * scale * (compact ? 0.84 : 1),
+      depth, scale,
+    };
+  }
+  function draw() {
+    const compact = stage.clientWidth < 450;
+    const width = compact ? 370 : 660, height = compact ? 280 : 340;
+    stage.setAttribute("viewBox", "0 0 " + width + " " + height);
+    const content = byId("drawing");
+    content.replaceChildren();
+    const center = project([0, 0, 0], compact);
+    for (const radius of [0.36, 0.46]) {
+      svg("ellipse", {cx:center.x,cy:center.y,rx:width*radius,ry:height*(0.14+Math.abs(pitch)*0.3),
+        transform:"rotate("+(-9+yaw*11)+" "+center.x+" "+center.y+")",class:"scene-rail"},content);
+    }
+    const ids = routes[route.value];
+    const points = new Map(ids.map(id => [id, project(index.get(id).point, compact)]));
+    for (const id of ids) {
+      const a = points.get(id);
+      for (const dep of index.get(id).dependencies.filter(dep => points.has(dep))) {
+        const b = points.get(dep);
+        const length = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+        svg("line", {x1:a.x, y1:a.y, x2:b.x - (b.x-a.x)*12/length, y2:b.y - (b.y-a.y)*12/length,
+          class:id === selected ? "link active" : "link", "marker-end":"url(#arrow)"}, content);
+      }
+    }
+    const labels = [];
+    for (const id of [...ids].sort((a,b) => points.get(a).depth - points.get(b).depth)) {
+      const item = index.get(id), p = points.get(id);
+      const node = svg("g", {class:id === selected ? "node selected" : "node",
+        transform:"translate("+p.x+" "+p.y+")", "data-id":id}, content);
+      svg("circle",{r:14,fill:"transparent",style:"stroke:none"},node);
+      if (id === selected) svg("circle",{r:10*p.scale,class:"ring"},node);
+      svg("circle",{r:6*p.scale,fill:layers[item.layer]},node);
+      const label = svg("text", {"text-anchor":"middle"}, node);
+      label.textContent = item.title;
+      labels.push({label, point:p});
+    }
+    // Place labels inside the viewport, preferring the nearest free line above or below a node.
+    const occupied = [];
+    for (const {label, point} of labels) {
+      const bounds = label.getBBox();
+      const centerX = Math.max(bounds.width / 2 + 3, Math.min(width - bounds.width / 2 - 3, point.x));
+      const left = centerX - bounds.width / 2;
+      const right = centerX + bounds.width / 2;
+      const candidates = [-14, 25, -35, 46, -56, 67, -77, 88, -98, 109, -119, 130];
+      const available = dy => {
+        const top = point.y + dy + bounds.y;
+        const bottom = top + bounds.height;
+        return top >= 0 && bottom <= height && occupied.every(box =>
+          right + 3 < box.left || left - 3 > box.right || bottom + 2 < box.top || top - 2 > box.bottom);
+      };
+      const offset = candidates.find(available) ?? candidates[0];
+      const top = point.y + offset + bounds.y;
+      occupied.push({left, right, top, bottom:top + bounds.height});
+      if (Math.abs(offset) > 26) {
+        const guide = svg("line", {x1:0, y1:0, x2:centerX-point.x,
+          y2:offset > 0 ? offset + bounds.y - 2 : offset + bounds.y + bounds.height + 2,
+          stroke:"#738590", "stroke-dasharray":"2 3"}, label.parentNode);
+        label.parentNode.prepend(guide);
+      }
+      label.setAttribute("x", centerX - point.x);
+      label.setAttribute("y", offset);
+    }
+  }
+  function inspect(id) {
+    selected = id;
+    picker.value = id;
+    const item = index.get(id);
+    byId("kind").textContent = item.layer;
+    byId("name").textContent = item.title;
+    byId("description").textContent = item.description;
+    const deps = item.dependencies.map(dep => index.get(dep).title);
+    byId("dependencies").textContent = deps.length ? "Uses " + deps.join(", ") + "." : "No further modules shown in this excerpt.";
+    const source = byId("source");
+    source.href = item.source;
+    source.textContent = "Read src/" + id + ".ts";
+    draw();
+  }
+  function setRoute() {
+    const ids = routes[route.value];
+    picker.replaceChildren(...ids.map(id => new Option(index.get(id).title,id)));
+    inspect(ids.includes(selected) ? selected : ids[0]);
+  }
+  function turn(dx, dy) {
+    yaw = Math.max(-0.9, Math.min(0.9, yaw + dx));
+    pitch = Math.max(-0.62, Math.min(0.62, pitch + dy));
+    draw();
+  }
+  byId("left").onclick = () => turn(-0.18,0);
+  byId("right").onclick = () => turn(0.18,0);
+  byId("reset").onclick = () => { yaw = 0.12; pitch = -0.12; draw(); };
+  stage.onkeydown = event => {
+    const step = {ArrowLeft:[-0.12,0], ArrowRight:[0.12,0], ArrowUp:[0,-0.12], ArrowDown:[0,0.12]}[event.key];
+    if (step) { event.preventDefault(); turn(...step); }
+  };
+  let gesture;
+  stage.onpointerdown = event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    gesture = {id:event.pointerId, x:event.clientX, y:event.clientY, yaw, pitch, moved:false, node:event.target.closest("[data-id]")?.dataset.id};
+    stage.setPointerCapture(event.pointerId);
+  };
+  stage.onpointermove = event => {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    if (Math.hypot(dx,dy) < 5 && !gesture.moved) return;
+    gesture.moved = true;
+    turn(gesture.yaw + dx * 0.004 - yaw, gesture.pitch + dy * 0.003 - pitch);
+  };
+  stage.onpointerup = event => {
+    if (gesture?.id === event.pointerId && !gesture.moved && gesture.node) inspect(gesture.node);
+    gesture = undefined;
+  };
+  stage.onpointercancel = () => { gesture = undefined; };
+  picker.onchange = () => inspect(picker.value);
+  route.onchange = setRoute;
+  byId("download").onclick = () => {
+    const ids = routes[route.value];
+    const nodes = ids.map(id => {
+      const {title,layer,source,dependencies} = index.get(id);
+      return {id,title,layer,source,dependencies:dependencies.filter(dep => ids.includes(dep))};
+    });
+    const payload = {data:{architecture:{repository:"EauDoon/mandatebound",route:route.value,nodes}}};
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)+"\n"],{type:"application/json"}));
+    const link = document.createElement("a");
+    link.href = url; link.download = "mandatebound-" + route.value + ".json"; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  byId("interactive").hidden = false;
+  setRoute();
+  window.addEventListener("resize", draw);
+})();
+</script>
+</body></html>

@@ -20,12 +20,16 @@ mandatebound operator triage --input case-invocation.json
 mandatebound operator checklist --input case-invocation.json
 mandatebound case-report --input case-invocation.json --format markdown
 mandatebound case-report --input case-invocation.json --format csv
+mandatebound case-report --input case-invocation.json --format findings-csv
+mandatebound case-report --input case-invocation.json --format envelopes-csv
 mandatebound case-report --input case-invocation.json --format html
 ```
 
 Triage prioritizes conflicting assurance dimensions. The checklist includes every declared coverage requirement, its observed envelope count, and an action for review. A missing raw-evidence input can leave integrity unknown even when the declared coverage counts are satisfied. Read assurance tasks alongside coverage rows.
 
 Reports contain metadata and verifier findings, not raw evidence. Treat identifiers and finding metadata as potentially sensitive. HTML is a static offline document with section navigation, keyboard-accessible tables, a review summary, and print styles. Markdown escapes active markup and shows control/invisible Unicode format characters as literal Unicode escape labels, preventing terminal and bidirectional display controls from acting on report text. This presentation-only escaping does not change signed evidence or replay bytes. CSV quotes every cell and prefixes spreadsheet formula-like content with an apostrophe. CSV is a presentation export, not an artifact to re-import for verification.
+
+Use `findings-csv` to hand off verifier codes, paths and messages. Use `envelopes-csv` to compare each envelope's integrity, coverage, upstream validity, eligibility and source truth. Both include assessment metadata and assurance boundaries. An empty collection produces one metadata row with blank detail cells.
 
 When no coverage requirements are reported, CSV still contains one metadata row with the case identifier, assessment time, verification result, and assurance boundaries. Its requirement, status, and matched-envelope cells are empty. An invalid empty report therefore remains visibly invalid in the exported file.
 

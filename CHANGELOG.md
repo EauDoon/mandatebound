@@ -12,6 +12,9 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Improvements
 
+- Ship an offline evidence atlas with source-linked module dependencies, three workflow views, JSON route exports, and a comparison of the documented synthetic outcomes.
+- Add findings and envelope metadata CSV exports. Each carries the assessment status and assurance boundaries even for an empty collection.
+- Normalize Unicode line and paragraph separators in single-line Markdown report fields.
 - Include native-bundle verification and trust-check counts in HTML and Markdown reports, and preserve per-envelope evidence results in Markdown exports.
 
 ### Fixed

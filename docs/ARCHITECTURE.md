@@ -4,6 +4,8 @@
 
 The system imports exact protocol evidence, preserves it in a policy-relative CasePack, and converts the nested native evidence snapshot into a reproducible policy recommendation without making a network request or claiming legal effect.
 
+The [offline evidence atlas](evidence-atlas.html) maps selected source dependencies. Its arrows run from a consumer to a dependency. The process diagram below follows the movement of evidence. Open the downloaded HTML file locally to inspect a module, compare the three synthetic case outcomes, or export one workflow as a read-only `data.architecture` JSON response.
+
 ## Components
 
 ```mermaid
