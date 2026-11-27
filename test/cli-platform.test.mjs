@@ -374,6 +374,7 @@ const ACTION_OPTIONS = {
   "ap2-dispute verify": ["--expected-pack-digest", DIGEST],
   "ap2-dispute render": ["--expected-pack-digest", DIGEST],
   "ap2-dispute reconcile": ["--expected-pack-digest", DIGEST],
+  "ap2-dispute packet": ["--expected-pack-digest", DIGEST, "--category", "not_authorized"],
   "operator receipt-verify": ["--expected-receipt-digest", DIGEST],
 };
 

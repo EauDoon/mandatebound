@@ -150,6 +150,7 @@ export function makeFixture({
   paymentRootDisclosures = [],
   checkoutClaims = {},
   paymentClaims = {},
+  paymentReceiptStatus = "Success",
 } = {}) {
   const issuer = ecPair("trusted-surface-key");
   const agent = ecPair("shopping-agent-key");
@@ -217,15 +218,25 @@ export function makeFixture({
     reference: computeAp2MandateReference(checkoutMandate),
     order_id: "order-synthetic-1",
   }, merchant);
-  const paymentReceipt = createJwt({
-    status: "Success",
-    iss: "https://processor.example",
-    iat: 1_770_000_200,
-    reference: computeAp2MandateReference(paymentMandate),
-    payment_id: "payment-synthetic-1",
-    psp_confirmation_id: "psp-synthetic-1",
-    network_confirmation_id: "network-synthetic-1",
-  }, processor);
+  const paymentReceipt = createJwt(paymentReceiptStatus === "Error"
+    ? {
+        status: "Error",
+        iss: "https://processor.example",
+        iat: 1_770_000_200,
+        reference: computeAp2MandateReference(paymentMandate),
+        payment_id: "payment-synthetic-1",
+        error: "payment_declined",
+        error_description: "Synthetic decline",
+      }
+    : {
+        status: "Success",
+        iss: "https://processor.example",
+        iat: 1_770_000_200,
+        reference: computeAp2MandateReference(paymentMandate),
+        payment_id: "payment-synthetic-1",
+        psp_confirmation_id: "psp-synthetic-1",
+        network_confirmation_id: "network-synthetic-1",
+      }, processor);
   const verificationPlan = {
     checkoutMandate: {
       issuerKeySnapshot: snapshot(issuer),

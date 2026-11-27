@@ -203,7 +203,7 @@ when valid, 3 when invalid, and 5 when `test` runs but an expectation fails.
 
 ## ap2-dispute
 
-Actions: `resolve`, `pack`, `verify`, `render`, `batch`, `reconcile`.
+Actions: `resolve`, `pack`, `verify`, `render`, `batch`, `reconcile`, `packet`.
 `resolve` reads `{transactionId, asOf, verificationPlan, sources}`; `pack` adds
 `createdAt`, `checkoutVersions` and `revocations`. `verify`, `render` and
 `reconcile` read a Pack, or the `{ok: true, result}` envelope that `pack`
@@ -235,8 +235,16 @@ Checkout it is bound to and prints `matched`, `mismatched` or `not_comparable`
 for the payee, the currency and the amount against the Checkout `total`. It is
 a review signal and never changes `verify`. It exits 0 when the Pack verifies
 and every check matches, 5 for an unverified Pack or any mismatched or
-noncomparable check, and 3 for a Pack that is not well formed. See
-[V1.2 profile](V1_2.md).
+noncomparable check, and 3 for a Pack that is not well formed.
+
+`packet` reads a Pack like `reconcile` and also requires `--category` with
+`not_authorized`, `not_received` or `not_as_described`; without a valid
+category it exits 2. It prints a metadata-only dispute response packet that
+marks each fact for that category `supported`, `contradicted`,
+`not_established` or `outside_pack`, and accepts `--format json` or
+`markdown`. It exits 0 when the Pack verifies and supports every in-Pack fact,
+5 for an unverified Pack or a contradicted or unestablished fact, and 3 for a
+Pack that is not well formed. See [V1.2 profile](V1_2.md).
 
 ## operator
 
