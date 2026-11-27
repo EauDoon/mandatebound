@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/banner.svg" alt="MandateBound. A TypeScript reference toolkit for preserving and verifying signed UCP/AP2 transaction evidence, making evidence gaps explicit, and replaying a bounded policy offline. Every policy result keeps legalEffect not-determined. Shown as a chain of sealed evidence blocks with one amber wireframe gap, crossed by a recording pulse and then by an identical green replay." width="100%"></p>
+
 # MandateBound: Agentic Commerce Evidence Readiness
 
 [![build](https://img.shields.io/github/actions/workflow/status/EauDoon/mandatebound/ci.yml?branch=main)](https://github.com/EauDoon/mandatebound/actions)
