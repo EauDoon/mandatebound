@@ -2215,3 +2215,389 @@ export function verifyAp2DisputeEvidencePacks(
   });
   return Object.freeze({ ...material, batchDigest: sha256Digest(material) });
 }
+
+// ------------------------------------------------------- dispute response packet
+
+/**
+ * Network-neutral dispute categories. A caller picks the category that the
+ * issuer's reason code falls under; MandateBound never infers or chooses a
+ * reason code.
+ */
+export const AP2_DISPUTE_PACKET_CATEGORIES = Object.freeze([
+  "not_authorized",
+  "not_received",
+  "not_as_described",
+] as const);
+export type Ap2DisputePacketCategory = (typeof AP2_DISPUTE_PACKET_CATEGORIES)[number];
+
+export interface Ap2DisputeNetworkLabel {
+  readonly network: "visa" | "mastercard";
+  readonly reasonCode: string;
+  readonly label: string;
+  /** Edition of the public network document the label was read from. */
+  readonly sourceEdition: string;
+  /** `current` when read from the edition in force at release, `stale-edition` otherwise. */
+  readonly sourceStatus: "current" | "stale-edition";
+}
+
+const VISA_SOURCE = "Visa Dispute Management Guide for Merchants, October 2026";
+const MASTERCARD_SOURCE = "Mastercard Chargeback Guide, Merchant Edition, 13 December 2018";
+
+/**
+ * Reference labels only. They help a reviewer file the packet next to a
+ * network case. They are not rule text, they do not select a reason code, and
+ * the Mastercard labels come from an older public edition. No card network
+ * had published an agent-specific reason code or liability shift that this
+ * release could verify, so agent purchases are labelled with the existing
+ * card-absent categories.
+ */
+export const AP2_DISPUTE_NETWORK_LABELS: Readonly<Record<Ap2DisputePacketCategory, readonly Ap2DisputeNetworkLabel[]>> =
+  Object.freeze({
+    not_authorized: Object.freeze([
+      Object.freeze({
+        network: "visa" as const,
+        reasonCode: "10.4",
+        label: "Other Fraud: Card-Absent Environment",
+        sourceEdition: VISA_SOURCE,
+        sourceStatus: "current" as const,
+      }),
+      Object.freeze({
+        network: "mastercard" as const,
+        reasonCode: "4837",
+        label: "No Cardholder Authorization",
+        sourceEdition: MASTERCARD_SOURCE,
+        sourceStatus: "stale-edition" as const,
+      }),
+    ]),
+    not_received: Object.freeze([
+      Object.freeze({
+        network: "visa" as const,
+        reasonCode: "13.1",
+        label: "Merchandise/Services Not Received",
+        sourceEdition: VISA_SOURCE,
+        sourceStatus: "current" as const,
+      }),
+      Object.freeze({
+        network: "mastercard" as const,
+        reasonCode: "4853",
+        label: "Cardholder Dispute: goods or services not provided",
+        sourceEdition: MASTERCARD_SOURCE,
+        sourceStatus: "stale-edition" as const,
+      }),
+    ]),
+    not_as_described: Object.freeze([
+      Object.freeze({
+        network: "visa" as const,
+        reasonCode: "13.3",
+        label: "Not as Described or Defective Merchandise/Services",
+        sourceEdition: VISA_SOURCE,
+        sourceStatus: "current" as const,
+      }),
+      Object.freeze({
+        network: "mastercard" as const,
+        reasonCode: "4853",
+        label: "Cardholder Dispute: not as described or defective",
+        sourceEdition: MASTERCARD_SOURCE,
+        sourceStatus: "stale-edition" as const,
+      }),
+    ]),
+  });
+
+export type Ap2DisputePacketFactName =
+  | "user_approved_signed_checkout"
+  | "payment_authorized_for_checkout"
+  | "payment_matches_checkout"
+  | "merchant_accepted_checkout"
+  | "payment_processed"
+  | "mandates_reported_not_revoked"
+  | "prior_undisputed_transactions"
+  | "device_or_network_match"
+  | "agent_identity"
+  | "delivery_or_access"
+  | "item_matched_description"
+  | "return_or_refund_handling";
+
+/**
+ * `supported`: verified evidence inside the anchored Pack speaks to the fact.
+ * `contradicted`: verified evidence inside the Pack points the other way.
+ * `not_established`: the Pack cannot show the fact, for example because it is
+ * unresolved or the comparison is not possible.
+ * `outside_pack`: AP2 v0.2.0 evidence does not carry this fact; it must come
+ * from merchant, platform or carrier records.
+ */
+export type Ap2DisputePacketFactState = "supported" | "contradicted" | "not_established" | "outside_pack";
+
+export interface Ap2DisputePacketFact {
+  readonly fact: Ap2DisputePacketFactName;
+  readonly state: Ap2DisputePacketFactState;
+  /** Kinds of the Pack artifacts that the state rests on; empty for outside_pack. */
+  readonly evidence: readonly Ap2DisputeArtifactKind[];
+}
+
+export interface Ap2DisputePacketAttachment {
+  readonly kind: Ap2DisputeArtifactKind;
+  readonly digest: Sha256Digest;
+}
+
+export type Ap2DisputePacketContribution = "supports_listed_facts" | "partial" | "contradicting" | "none";
+
+/**
+ * A metadata-only answer sheet for one dispute category. It says which facts
+ * the anchored AP2 Evidence Pack supports, contradicts or cannot show, and
+ * which facts must come from outside the Pack. It never carries amounts,
+ * party identifiers, items, instruments or tokens, never files anything, and
+ * never states a dispute outcome.
+ */
+export interface Ap2DisputeResponsePacket {
+  readonly schemaId: "MandateBoundAp2DisputeResponsePacket/v1";
+  readonly releaseVersion: typeof AP2_DISPUTE_FORMAT_RELEASE;
+  readonly category: Ap2DisputePacketCategory;
+  readonly networkLabels: readonly Ap2DisputeNetworkLabel[];
+  readonly transactionId: string | null;
+  readonly packDigest: Sha256Digest | null;
+  readonly verificationStatus: "verified" | "unresolved";
+  readonly verificationReportDigest: Sha256Digest;
+  readonly reconciliationDigest: Sha256Digest;
+  readonly facts: readonly Ap2DisputePacketFact[];
+  readonly attachments: readonly Ap2DisputePacketAttachment[];
+  readonly packContribution: Ap2DisputePacketContribution;
+  readonly agentSpecificNetworkRule: "none-modelled";
+  readonly disputeOutcome: "not-determined";
+  readonly legalEffect: typeof LEGAL_EFFECT;
+  readonly packetDigest: Sha256Digest;
+}
+
+export interface BuildAp2DisputeResponsePacketOptions extends VerifyAp2DisputeEvidencePackOptions {
+  readonly category: Ap2DisputePacketCategory;
+}
+
+const PACKET_FACTS: Readonly<Record<Ap2DisputePacketCategory, {
+  readonly inPack: readonly Ap2DisputePacketFactName[];
+  readonly outsidePack: readonly Ap2DisputePacketFactName[];
+}>> = Object.freeze({
+  not_authorized: Object.freeze({
+    inPack: Object.freeze([
+      "user_approved_signed_checkout",
+      "payment_authorized_for_checkout",
+      "payment_matches_checkout",
+      "payment_processed",
+      "mandates_reported_not_revoked",
+    ] as const),
+    outsidePack: Object.freeze([
+      "prior_undisputed_transactions",
+      "device_or_network_match",
+      "agent_identity",
+    ] as const),
+  }),
+  not_received: Object.freeze({
+    inPack: Object.freeze([
+      "user_approved_signed_checkout",
+      "merchant_accepted_checkout",
+      "payment_processed",
+    ] as const),
+    outsidePack: Object.freeze(["delivery_or_access"] as const),
+  }),
+  not_as_described: Object.freeze({
+    inPack: Object.freeze([
+      "user_approved_signed_checkout",
+      "merchant_accepted_checkout",
+      "payment_matches_checkout",
+    ] as const),
+    outsidePack: Object.freeze([
+      "item_matched_description",
+      "return_or_refund_handling",
+    ] as const),
+  }),
+});
+
+function isPacketCategory(value: unknown): value is Ap2DisputePacketCategory {
+  return typeof value === "string" &&
+    (AP2_DISPUTE_PACKET_CATEGORIES as readonly string[]).includes(value);
+}
+
+function receiptState(
+  artifact: Ap2DisputeSelectedArtifact | undefined,
+): Ap2DisputePacketFactState {
+  if (artifact === undefined || artifact.receiptStatus === undefined) return "not_established";
+  return artifact.receiptStatus === "Success" ? "supported" : "contradicted";
+}
+
+function inPackFact(
+  fact: Ap2DisputePacketFactName,
+  verified: boolean,
+  selected: ReadonlyMap<Ap2DisputeArtifactKind, Ap2DisputeSelectedArtifact>,
+  verification: Ap2DisputeEvidencePackVerification,
+  reconciliation: Ap2PaymentReconciliation,
+): Ap2DisputePacketFact {
+  const make = (
+    state: Ap2DisputePacketFactState,
+    evidence: readonly Ap2DisputeArtifactKind[],
+  ): Ap2DisputePacketFact => Object.freeze({
+    fact,
+    state: verified ? state : "not_established",
+    evidence: Object.freeze(verified ? [...evidence] : []),
+  });
+  switch (fact) {
+    case "user_approved_signed_checkout":
+      return make(selected.has("checkout_mandate") ? "supported" : "not_established", ["checkout_mandate"]);
+    case "payment_authorized_for_checkout":
+      return make(selected.has("payment_mandate") ? "supported" : "not_established", ["payment_mandate"]);
+    case "payment_matches_checkout":
+      return make(
+        reconciliation.summary === "consistent"
+          ? "supported"
+          : reconciliation.summary === "inconsistent" ? "contradicted" : "not_established",
+        ["checkout_mandate", "payment_mandate"],
+      );
+    case "merchant_accepted_checkout":
+      return make(receiptState(selected.get("checkout_receipt")), ["checkout_receipt"]);
+    case "payment_processed":
+      return make(receiptState(selected.get("payment_receipt")), ["payment_receipt"]);
+    case "mandates_reported_not_revoked":
+      return make(
+        verification.reportedRevocationState === "not_revoked"
+          ? "supported"
+          : verification.reportedRevocationState === "revoked" ? "contradicted" : "not_established",
+        ["checkout_mandate", "payment_mandate"],
+      );
+    default:
+      return make("not_established", []);
+  }
+}
+
+/**
+ * Build a metadata-only dispute response packet for one dispute category from
+ * an AP2 Evidence Pack anchored by an independently retained digest. The
+ * packet maps the verified Pack to the facts a card-absent dispute response
+ * usually needs, marks the facts AP2 evidence cannot carry as outside_pack,
+ * and lists the artifact digests to cite. Verified Pack claims are read only
+ * when the Pack digest and anchor match and its resolution is
+ * evidence_verified; otherwise every in-Pack fact is not_established.
+ */
+export function buildAp2DisputeResponsePacket(
+  value: unknown,
+  options: BuildAp2DisputeResponsePacketOptions,
+): Ap2DisputeResponsePacket {
+  if (options === null || typeof options !== "object" || !isPacketCategory(options.category)) {
+    throw new TypeError("AP2 dispute packet category is invalid");
+  }
+  const anchor = { expectedPackDigest: options.expectedPackDigest };
+  const verification = verifyAp2DisputeEvidencePack(value, anchor);
+  const reconciliation = reconcileAp2DisputeEvidencePack(value, anchor);
+  const resolution = verification.resolution;
+  const verified = verification.status === "verified" &&
+    verification.digestValid &&
+    verification.anchorMatched &&
+    resolution !== null &&
+    resolution.status === "evidence_verified" &&
+    reconciliation.verificationReportDigest === verification.reportDigest;
+  const selected = new Map(
+    (verified && resolution !== null ? resolution.selectedArtifacts : [])
+      .map((artifact) => [artifact.kind, artifact] as const),
+  );
+  const plan = PACKET_FACTS[options.category];
+  const inPack = plan.inPack.map((fact) =>
+    inPackFact(fact, verified, selected, verification, reconciliation));
+  const outside = plan.outsidePack.map((fact) => Object.freeze({
+    fact,
+    state: "outside_pack" as const,
+    evidence: Object.freeze([] as Ap2DisputeArtifactKind[]),
+  }));
+  const contribution: Ap2DisputePacketContribution = !verified
+    ? "none"
+    : inPack.some((entry) => entry.state === "contradicted")
+      ? "contradicting"
+      : inPack.every((entry) => entry.state === "supported") ? "supports_listed_facts" : "partial";
+  const attachments = [...selected.values()]
+    .map((artifact) => Object.freeze({ kind: artifact.kind, digest: artifact.digest }))
+    .sort((left, right) => compareCodeUnits(left.kind, right.kind));
+  const material = Object.freeze({
+    schemaId: "MandateBoundAp2DisputeResponsePacket/v1" as const,
+    releaseVersion: AP2_DISPUTE_FORMAT_RELEASE,
+    category: options.category,
+    networkLabels: AP2_DISPUTE_NETWORK_LABELS[options.category],
+    transactionId: resolution?.transactionId ?? null,
+    packDigest: verification.packDigest,
+    verificationStatus: verification.status,
+    verificationReportDigest: verification.reportDigest,
+    reconciliationDigest: reconciliation.reconciliationDigest,
+    facts: Object.freeze([...inPack, ...outside]),
+    attachments: Object.freeze(attachments),
+    packContribution: contribution,
+    agentSpecificNetworkRule: "none-modelled" as const,
+    disputeOutcome: "not-determined" as const,
+    legalEffect: LEGAL_EFFECT,
+  });
+  return Object.freeze({ ...material, packetDigest: sha256Digest(material) });
+}
+
+const PACKET_FACT_TEXT: Readonly<Record<Ap2DisputePacketFactName, string>> = Object.freeze({
+  user_approved_signed_checkout: "The user's Checkout Mandate approves the merchant-signed Checkout",
+  payment_authorized_for_checkout: "The user's Payment Mandate authorizes payment for that Checkout",
+  payment_matches_checkout: "The paid payee, currency and amount match the signed Checkout",
+  merchant_accepted_checkout: "The Checkout Receipt reports Success",
+  payment_processed: "The Payment Receipt reports Success",
+  mandates_reported_not_revoked: "Imported revocation reports say neither Mandate was revoked",
+  prior_undisputed_transactions: "Earlier undisputed transactions by the same cardholder",
+  device_or_network_match: "Device ID, IP address or login matches earlier activity",
+  agent_identity: "Identity of the agent platform that placed the order",
+  delivery_or_access: "Delivery to the agreed address, or access to the service or digital goods",
+  item_matched_description: "The delivered item matched the description presented before purchase",
+  return_or_refund_handling: "Disclosed return or refund terms and how they were applied",
+});
+
+const PACKET_NOTICE =
+  "This packet maps verified AP2 evidence to facts a dispute response may need. It does not choose a reason code, " +
+  "file a response, or determine any dispute outcome or legal effect. Network labels are references only; no " +
+  "agent-specific network rule is modelled.";
+
+/**
+ * Render a dispute response packet as Markdown for a case file. It builds the
+ * packet itself from the Pack and the retained anchor and never accepts a
+ * supplied packet.
+ */
+export function renderAp2DisputeResponsePacketMarkdown(
+  pack: Ap2DisputeEvidencePack,
+  options: BuildAp2DisputeResponsePacketOptions,
+): string {
+  const packet = buildAp2DisputeResponsePacket(pack, options);
+  const lines = [
+    "# AP2 Dispute Response Packet",
+    "",
+    `- Category: ${markdownText(packet.category)}`,
+    ...packet.networkLabels.map((label) =>
+      `- ${markdownText(label.network)} ${markdownText(label.reasonCode)}: ${markdownText(label.label)} ` +
+      `(${markdownText(label.sourceEdition)}; ${markdownText(label.sourceStatus)})`),
+    `- Transaction: ${markdownText(packet.transactionId ?? "unknown")}`,
+    `- Pack verification: ${markdownText(packet.verificationStatus)}`,
+    `- Pack contribution: ${markdownText(packet.packContribution)}`,
+    "",
+    markdownText(PACKET_NOTICE),
+    "",
+    "## Facts",
+    "",
+    "| Fact | State | Evidence |",
+    "| --- | --- | --- |",
+    ...packet.facts.map((entry) => `| ${[
+      PACKET_FACT_TEXT[entry.fact],
+      entry.state,
+      entry.evidence.join(", ") || "-",
+    ].map(markdownText).join(" | ")} |`),
+    "",
+    "## Attachments to cite",
+    "",
+    ...(packet.attachments.length === 0
+      ? ["None."]
+      : packet.attachments.map((entry) => `- ${markdownText(entry.kind)}: ${markdownText(entry.digest)}`)),
+    "",
+    "## Digests",
+    "",
+    `- Pack digest: ${markdownText(packet.packDigest ?? "invalid")}`,
+    `- Verification report digest: ${markdownText(packet.verificationReportDigest)}`,
+    `- Reconciliation digest: ${markdownText(packet.reconciliationDigest)}`,
+    `- Packet digest: ${markdownText(packet.packetDigest)}`,
+    `- Dispute outcome: ${markdownText(packet.disputeOutcome)}`,
+    `- Legal effect: ${markdownText(packet.legalEffect)}`,
+  ];
+  return `${lines.join("\n")}\n`;
+}

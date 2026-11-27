@@ -30,6 +30,10 @@ import {
   createAp2EvidenceTimeline,
   packAp2DisputeEvidence,
   reconcileAp2DisputeEvidencePack,
+  buildAp2DisputeResponsePacket,
+  renderAp2DisputeResponsePacketMarkdown,
+  AP2_DISPUTE_PACKET_CATEGORIES,
+  type Ap2DisputePacketCategory,
   renderAp2EvidenceTimelineCsv,
   renderAp2EvidenceTimelineHtml,
   renderAp2EvidenceTimelineMarkdown,
@@ -147,6 +151,7 @@ const VALUE_OPTIONS = new Set([
   "--input",
   "--format",
   "--expected-pack-digest",
+  "--category",
   "--expected-receipt-digest",
 ]);
 const FLAG_OPTIONS = new Set(["--help", "--version"]);
@@ -195,7 +200,7 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 const CASEPACK_ACTIONS = Object.freeze(["build", "verify", "unpack", "diff"] as const);
 const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
 const AP2_DISPUTE_ACTIONS = Object.freeze([
-  "resolve", "pack", "verify", "render", "batch", "reconcile",
+  "resolve", "pack", "verify", "render", "batch", "reconcile", "packet",
 ] as const);
 const OPERATOR_ACTIONS = Object.freeze([
   "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
@@ -218,7 +223,7 @@ const CLI_COMMANDS = Object.freeze([
   { name: "case-report", summary: "Render CasePack reports, coverage CSV, findings-csv or envelopes-csv" },
   {
     name: "ap2-dispute",
-    summary: "Resolve, pack, verify, render, batch-verify or reconcile AP2 dispute evidence",
+    summary: "Resolve, pack, verify, render, batch-verify, reconcile or packet AP2 dispute evidence",
     actions: AP2_DISPUTE_ACTIONS,
   },
   { name: "conformance", summary: "Print the bounded capability statement" },
@@ -498,6 +503,18 @@ function requireExpectedPackDigest(args: ParsedArgs): Sha256Digest {
     );
   }
   return value;
+}
+
+function requirePacketCategory(args: ParsedArgs): Ap2DisputePacketCategory {
+  const value = args.options["category"];
+  if (typeof value !== "string" || !(AP2_DISPUTE_PACKET_CATEGORIES as readonly string[]).includes(value)) {
+    throw new CliError(
+      "ALB_CLI_USAGE",
+      CLI_EXIT.USAGE,
+      `AP2 dispute packet requires --category with one of: ${AP2_DISPUTE_PACKET_CATEGORIES.join(", ")}.`,
+    );
+  }
+  return value as Ap2DisputePacketCategory;
 }
 
 function parsePort(value: string | boolean | undefined): number {
@@ -945,17 +962,22 @@ export async function runCli(
         const invocation = requireSubcommandInput(args, AP2_DISPUTE_ACTIONS);
         const needsPackAnchor = invocation.action === "verify" ||
           invocation.action === "render" ||
-          invocation.action === "reconcile";
+          invocation.action === "reconcile" ||
+          invocation.action === "packet";
         assertAllowedOptions(
           args,
-          needsPackAnchor ? ["input", "expected-pack-digest"] : ["input"],
+          invocation.action === "packet"
+            ? ["input", "expected-pack-digest", "category"]
+            : needsPackAnchor ? ["input", "expected-pack-digest"] : ["input"],
         );
         const verificationOptions = needsPackAnchor
           ? { expectedPackDigest: requireExpectedPackDigest(args) }
           : null;
         const format = assertOutputFormat(
           args,
-          invocation.action === "render" ? ["json", "html", "markdown", "csv"] : ["json"],
+          invocation.action === "render"
+            ? ["json", "html", "markdown", "csv"]
+            : invocation.action === "packet" ? ["json", "markdown"] : ["json"],
         );
         const input = asObject(await readInput(invocation.path, stdin, MAX_AP2_CLI_INPUT_BYTES));
         if (invocation.action === "batch") {
@@ -1021,6 +1043,28 @@ export async function runCli(
         const packInput = hasExactKeys(input, ["ok", "result"]) && input["ok"] === true
           ? input["result"]
           : input;
+        if (invocation.action === "packet") {
+          const category = requirePacketCategory(args);
+          const packetOptions = { ...verificationOptions, category };
+          const packet = buildAp2DisputeResponsePacket(packInput, packetOptions);
+          if (packet.packDigest === null) {
+            if (format !== "json") {
+              throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "AP2 Evidence Pack input is invalid.");
+            }
+            writeJson(stdout, { ok: false, result: packet });
+            return CLI_EXIT.INVALID;
+          }
+          const exit = packet.packContribution === "supports_listed_facts" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+          if (format === "markdown") {
+            stdout.write(renderAp2DisputeResponsePacketMarkdown(
+              packInput as Parameters<typeof renderAp2DisputeResponsePacketMarkdown>[0],
+              packetOptions,
+            ));
+          } else {
+            writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: packet });
+          }
+          return exit;
+        }
         if (invocation.action === "reconcile") {
           const reconciliation = reconcileAp2DisputeEvidencePack(packInput, verificationOptions);
           const exit = reconciliation.packDigest === null

@@ -12,6 +12,7 @@ in [Protocol v1](docs/PROTOCOL.md).
 
 ### Improvements
 
+- Add `ap2-dispute packet` and `buildAp2DisputeResponsePacket`. For one dispute category (`not_authorized`, `not_received` or `not_as_described`), the packet marks each fact a card-absent dispute response may need as `supported`, `contradicted`, `not_established` or `outside_pack`, and lists the artifact digests to cite. It carries Visa and Mastercard reason codes as reference labels only, never chooses a reason code, and keeps the dispute outcome and legal effect not determined. `renderAp2DisputeResponsePacketMarkdown` prints it for a case file.
 - Ship an offline evidence atlas with source-linked module dependencies, three workflow views, JSON route exports, and a comparison of the documented synthetic outcomes.
 - Add findings and envelope metadata CSV exports. Each carries the assessment status and assurance boundaries even for an empty collection.
 - Normalize Unicode line and paragraph separators in single-line Markdown report fields.

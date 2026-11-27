@@ -18,7 +18,8 @@
       "verify",
       "render",
       "batch",
-      "reconcile"
+      "reconcile",
+      "packet"
     ],
     "evaluatedConstraints": [
       "checkout.allowed_merchants",
@@ -99,6 +100,7 @@
     "test/ap2-dispute-v12.test.mjs",
     "test/ap2-dispute-constraints.test.mjs",
     "test/ap2-dispute-tools.test.mjs",
+    "test/ap2-dispute-packet.test.mjs",
     "test/policy-tools-v11.test.mjs",
     "test/conformance-v12.test.mjs",
     "test/review-external.test.mjs"
