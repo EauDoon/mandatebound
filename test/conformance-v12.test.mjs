@@ -4,6 +4,10 @@ import test from "node:test";
 import { AP2_DISPUTE_CONSTRAINT_SUPPORT } from "../dist/ap2-dispute.js";
 import { compareCasePackStatus } from "../dist/casepack-tools.js";
 import { getConformanceStatement } from "../dist/conformance.js";
+import {
+  VERIFIABLE_INTENT_CONSTRAINT_SUPPORT,
+  VERIFIABLE_INTENT_PROFILE,
+} from "../dist/verifiable-intent.js";
 import { RELEASE_VERSION } from "../dist/version.js";
 
 // The release under test comes from package.json, and its declaration lives in
@@ -37,6 +41,11 @@ test("conformance statement names the exact evidence-import profile and its limi
   assert.match(
     byId.get("external_evidence_review_v1").boundary,
     /never re-verified here/u,
+  );
+  assert.equal(byId.get("verifiable_intent_0_1_chain_evidence").status, "supported");
+  assert.match(
+    byId.get("verifiable_intent_0_1_chain_evidence").boundary,
+    /network-enforced constraints are never evaluated/u,
   );
   assert.equal(byId.get("ucp_mcp_transport").status, "deferred");
   assert.equal(byId.get("ucp_a2a_transport").status, "deferred");
@@ -80,6 +89,17 @@ test("published capability declaration for this release matches the runtime stat
   // still rejects, exactly as the library exports them.
   assert.deepEqual(published.disputeProfile.evaluatedConstraints, AP2_DISPUTE_CONSTRAINT_SUPPORT.evaluated);
   assert.deepEqual(published.disputeProfile.failClosedConstraints, AP2_DISPUTE_CONSTRAINT_SUPPORT.failClosed);
+  // The Verifiable Intent profile is the one the library verifies against.
+  assert.equal(published.verifiableIntentProfile.id, VERIFIABLE_INTENT_PROFILE.id);
+  assert.equal(published.verifiableIntentProfile.commit, VERIFIABLE_INTENT_PROFILE.commit);
+  assert.equal(published.verifiableIntentProfile.mandatePairs, VERIFIABLE_INTENT_PROFILE.mandatePairs);
+  assert.equal(published.verifiableIntentProfile.legalEffect, "not-determined");
+  assert.deepEqual(published.verifiableIntentProfile.evaluatedConstraints, VERIFIABLE_INTENT_CONSTRAINT_SUPPORT.evaluated);
+  assert.deepEqual(
+    published.verifiableIntentProfile.networkEnforcedConstraints,
+    VERIFIABLE_INTENT_CONSTRAINT_SUPPORT.networkEnforced,
+  );
+  assert.ok(existsSync(new URL(`../${published.verifiableIntentProfile.goldenFixture}`, import.meta.url)));
   // Every runtime capability, in order, with the status the runtime declares.
   assert.deepEqual(
     published.capabilities,
@@ -105,6 +125,7 @@ test("published fixture list is exactly what npm run conformance executes", () =
   }
   // The supported external review capability is backed by its fixture file.
   assert.ok(executed.includes("test/review-external.test.mjs"));
+  assert.ok(executed.includes("test/verifiable-intent.test.mjs"));
 });
 
 test("CasePack assurance status ordering is stable", () => {

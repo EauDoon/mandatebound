@@ -127,6 +127,7 @@ Build first, then use the local `dist/cli.js` binary or the installed `mandatebo
 | CasePack | `casepack build`, `casepack verify`, `casepack unpack`, `casepack diff`, `case-report` | [`docs/V1_1.md`](docs/V1_1.md) |
 | Policy tools | `policy validate`, `policy test`, `policy diff` | [`BRIEF.md`](BRIEF.md) |
 | AP2 dispute evidence | `ap2-dispute resolve`, `ap2-dispute pack`, `ap2-dispute verify`, `ap2-dispute render`, `ap2-dispute batch`, `ap2-dispute reconcile`, `ap2-dispute packet` | [`docs/V1_2.md`](docs/V1_2.md) |
+| Verifiable Intent chain evidence | `verifiable-intent verify` | [`docs/VERIFIABLE_INTENT.md`](docs/VERIFIABLE_INTENT.md) |
 | Capability statement | `conformance` | [`conformance/v2.1/README.md`](conformance/v2.1/README.md) |
 | Help and version | `help`, `version` (also `--help`, `-h`, `--version`) | [`docs/CLI.md`](docs/CLI.md#conformance-help-and-version) |
 
@@ -152,6 +153,7 @@ Read the [`DISCLAIMER.md`](DISCLAIMER.md), [legal boundary](docs/LEGAL_BOUNDARY.
 - [Architecture](docs/ARCHITECTURE.md): components, trust boundaries, and determinism requirements.
 - [V1.1 profile](docs/V1_1.md): exact import profile, CasePack, readiness, and replay.
 - [V1.2 profile](docs/V1_2.md): AP2 dispute resolver, Evidence Pack, and metadata-only timeline.
+- [Verifiable Intent](docs/VERIFIABLE_INTENT.md): pinned VI v0.1 chain verification and constraint evaluation for dispute evidence.
 - [CLI reference](docs/CLI.md): every command's input, output, limits, and exit codes, including `review` and `serve`.
 - [Operator workflows](docs/OPERATOR_WORKFLOWS.md): triage, checklists, queues, comparisons, receipts, and audits.
 - [Evidence operations](docs/EVIDENCE_OPERATIONS.md): collection, chronology, mappings, checkpoints, and batch analysis.

@@ -23,7 +23,8 @@ guides with worked examples are linked from each section.
   is written to stderr as one JSON line with `"level": "error"`. Messages never
   reflect paths, input values or exception text.
 - `--format json` is accepted everywhere JSON is the output. Only
-  `case-report`, `ap2-dispute render` and `operator queue` offer other formats.
+  `case-report`, `ap2-dispute render`, `ap2-dispute packet` and
+  `operator queue` offer other formats.
 
 ### Input limits
 
@@ -245,6 +246,24 @@ marks each fact for that category `supported`, `contradicted`,
 `markdown`. It exits 0 when the Pack verifies and supports every in-Pack fact,
 5 for an unverified Pack or a contradicted or unestablished fact, and 3 for a
 Pack that is not well formed. See [V1.2 profile](V1_2.md).
+
+## verifiable-intent
+
+Actions: `verify`. It reads one Verifiable Intent v0.1 chain as
+`{l1, l2, issuerKeySnapshot, expectedIssuerKeySourceDigest, asOf}` plus the
+optional `l2PaymentPresentation`, `l2CheckoutPresentation`, `l3Payment`,
+`l3Checkout`, `merchantKeySnapshot`, `expectedMerchantKeySourceDigest` and
+`expected` (`l2Audience`, `l2Nonce`, `l3PaymentAudience`, `l3PaymentNonce`,
+`l3CheckoutAudience`, `l3CheckoutNonce`). Each presentation is the exact
+`~`-separated string the recipient received, and `asOf` is the instant it was
+presented. Any other key exits 3.
+
+It prints a `MandateBoundVerifiableIntentChainReport/v1` with gates, the
+constraint evaluation and presentation digests, never the presentations. It
+exits 0 when the chain is `verified` and its constraints are `satisfied` or not
+applicable, 5 when the chain is `ineligible` or verified with `violated` or
+`incomplete` constraints, and 3 when the chain is `invalid`. See
+[Verifiable Intent](VERIFIABLE_INTENT.md).
 
 ## operator
 

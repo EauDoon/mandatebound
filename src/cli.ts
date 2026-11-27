@@ -74,6 +74,8 @@ import type { DecisionAppealStore } from "./store.js";
 import { JsonlStore, MemoryStore, StoreError } from "./store.js";
 import { AP2_DISPUTE_FORMAT_RELEASE, ENGINE_VERSION, PROTOCOL_VERSION, RELEASE_VERSION } from "./version.js";
 import { validateArtifact } from "./validation.js";
+import { verifyVerifiableIntentChain } from "./verifiable-intent.js";
+import type { VerifyVerifiableIntentChainInput } from "./verifiable-intent.js";
 
 export const CLI_EXIT = Object.freeze({
   SUCCESS: 0,
@@ -202,6 +204,12 @@ const POLICY_ACTIONS = Object.freeze(["validate", "test", "diff"] as const);
 const AP2_DISPUTE_ACTIONS = Object.freeze([
   "resolve", "pack", "verify", "render", "batch", "reconcile", "packet",
 ] as const);
+const VERIFIABLE_INTENT_ACTIONS = Object.freeze(["verify"] as const);
+const VERIFIABLE_INTENT_INPUT_KEYS = Object.freeze([
+  "l1", "l2", "l2PaymentPresentation", "l2CheckoutPresentation", "l3Payment", "l3Checkout",
+  "issuerKeySnapshot", "expectedIssuerKeySourceDigest", "merchantKeySnapshot",
+  "expectedMerchantKeySourceDigest", "asOf", "expected",
+]);
 const OPERATOR_ACTIONS = Object.freeze([
   "triage", "checklist", "batch", "compare", "audit", "inventory", "queue", "coverage-diff",
   "envelope-diff", "finding-diff", "anchor-diff", "receipt", "receipt-verify", "collect",
@@ -225,6 +233,11 @@ const CLI_COMMANDS = Object.freeze([
     name: "ap2-dispute",
     summary: "Resolve, pack, verify, render, batch-verify, reconcile or packet AP2 dispute evidence",
     actions: AP2_DISPUTE_ACTIONS,
+  },
+  {
+    name: "verifiable-intent",
+    summary: "Verify one preserved Verifiable Intent v0.1 chain for dispute evidence",
+    actions: VERIFIABLE_INTENT_ACTIONS,
   },
   { name: "conformance", summary: "Print the bounded capability statement" },
   {
@@ -250,7 +263,7 @@ const CLI_EXIT_HELP = Object.freeze(Object.fromEntries(
   ]),
 ));
 const CLI_USAGE =
-  "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|conformance|operator> [--input PATH] [--format json|html|markdown|csv|findings-csv|envelopes-csv]";
+  "mandatebound <verify|decide|preview|explain|appeal|replay|simulate|review|serve|casepack|policy|case-report|ap2-dispute|verifiable-intent|conformance|operator> [--input PATH] [--format json|html|markdown|csv|findings-csv|envelopes-csv]";
 const CLI_INPUT_HELP =
   "JSON commands read one document from --input PATH, a positional path, or stdin (-). Empty documents are rejected. Interactive terminals require an explicit path instead of implicit stdin.";
 
@@ -1109,6 +1122,26 @@ export async function runCli(
           });
         }
         return verification.status === "verified" ? CLI_EXIT.SUCCESS : CLI_EXIT.CONFLICT;
+      }
+      case "verifiable-intent": {
+        const invocation = requireSubcommandInput(args, VERIFIABLE_INTENT_ACTIONS);
+        assertAllowedOptions(args, ["input"]);
+        assertOutputFormat(args, ["json"]);
+        const input = asObject(await readInput(invocation.path, stdin));
+        if (
+          !hasExactKeys(input, ["l1", "l2", "issuerKeySnapshot", "expectedIssuerKeySourceDigest", "asOf"], VERIFIABLE_INTENT_INPUT_KEYS)
+        ) {
+          throw new CliError("ALB_CLI_INPUT", CLI_EXIT.INVALID, "Verifiable Intent chain input is invalid.");
+        }
+        const report = verifyVerifiableIntentChain(input as unknown as VerifyVerifiableIntentChainInput);
+        const exit = report.chainStatus === "invalid"
+          ? CLI_EXIT.INVALID
+          : report.chainStatus === "verified" &&
+              (report.constraintsResult === "satisfied" || report.constraintsResult === "not_applicable")
+            ? CLI_EXIT.SUCCESS
+            : CLI_EXIT.CONFLICT;
+        writeJson(stdout, { ok: exit === CLI_EXIT.SUCCESS, result: report });
+        return exit;
       }
       case "conformance": {
         assertOutputFormat(args, ["json"]);

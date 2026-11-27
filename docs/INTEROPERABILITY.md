@@ -32,6 +32,10 @@ The Receipt reference uses one named SDK-compatible profile, `sha256-terminal-co
 
 [RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) standardizes base Selective Disclosure for JWTs. Other AP2-adjacent delegation and SD-JWT VC profiles may still be drafts and require separate version pins.
 
+## Verifiable Intent
+
+[Verifiable Intent](https://github.com/agent-intent/verifiable-intent) is a layered SD-JWT format for user and agent purchase intent, maintained by Mastercard. Its v0.1 fields align with AP2 (`checkout_jwt`, `checkout_hash`, `transaction_id`, `payment_amount`), but its credentials, layer bindings and constraint vocabulary are its own, so MandateBound verifies it under a separate profile pinned to commit [`356c29635f1c44df7de02edb58699ca9f29bece6`](https://github.com/agent-intent/verifiable-intent/tree/356c29635f1c44df7de02edb58699ca9f29bece6). The verifier replays one preserved chain against pinned keys, checks signatures over exact segments, and evaluates disclosed constraints without claiming an outcome for those it cannot see. VI does not silently track its default branch either. See [`VERIFIABLE_INTENT.md`](VERIFIABLE_INTENT.md).
+
 ## SAFR
 
 The public Singapore framework describes mandate, policy, risk-boundary, validation, and audit checkpoints. It is useful as a conceptual source for runtime evidence, but it is not treated here as a published machine protocol or certification scheme.
