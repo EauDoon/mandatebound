@@ -1270,3 +1270,46 @@ test("source checkpoint proofs reject bad bindings and keys, and stay domain sep
   assert.equal(verifyWith(fromObject.signature), true);
   assert.equal(verifyWith(crossProtocol), false, "a bare-digest signature must not verify as a checkpoint proof");
 });
+
+test("an invalid verification instant leaves time-bound statuses unknown, never satisfied", () => {
+  const base = fixture();
+  const snapshot = sealExternalTrustSnapshot({
+    format: "MandateBoundExternalTrustSnapshot/v1",
+    snapshotId: "external.snapshot.1",
+    issuedAt: "2026-07-22T00:00:00.000Z",
+    expiresAt: "2027-07-22T00:00:00.000Z",
+    trustEffect: "discovery_only",
+    nativeTrustPromotion: "forbidden",
+    discoveryMaterials: [],
+    keys: [],
+  });
+  const pack = resealPack({ ...base.pack, externalTrustSnapshot: snapshot });
+  const anchors = { ...base.anchors, externalTrustSnapshotDigest: snapshot.snapshotDigest };
+  const accepted = verifyMandateBoundCasePack(pack, anchors);
+  assert.equal(accepted.valid, true);
+  assert.equal(accepted.delegationStatus, "satisfied");
+  assert.equal(accepted.externalTrustStatus, "satisfied");
+
+  // None of these is the canonical millisecond UTC form the anchor requires.
+  // An unparseable instant compares false against every window bound, so the
+  // window checks must not run on it.
+  for (const asOf of ["not-a-time", "", "2026-07-23T00:00:00Z", "2026-07-23T02:00:00.000+02:00", 1_784_764_800]) {
+    const report = verifyMandateBoundCasePack(pack, { ...anchors, asOf });
+    assert.equal(report.valid, false, String(asOf));
+    assert.ok(report.issues.some((issue) => issue.code === "MBCP_ANCHOR_INVALID"), String(asOf));
+    assert.equal(report.coverageStatus, "unknown", String(asOf));
+    assert.equal(report.delegationStatus, "unknown", String(asOf));
+    assert.equal(report.externalTrustStatus, "unknown", String(asOf));
+    assert.equal(report.evidenceEligibilityStatus, "missing", String(asOf));
+    assert.equal(report.issues.some((issue) => issue.code === "MBCP_DELEGATION_EXPIRED"), false, String(asOf));
+    assert.equal(report.issues.some((issue) => issue.code === "MBCP_EXTERNAL_TRUST_STALE"), false, String(asOf));
+  }
+
+  // A pin mismatch is independent of the instant and stays conflicting.
+  const mismatched = verifyMandateBoundCasePack(pack, {
+    ...anchors,
+    asOf: "not-a-time",
+    externalTrustSnapshotDigest: sha256Digest({ other: "snapshot" }),
+  });
+  assert.equal(mismatched.externalTrustStatus, "conflicting");
+});
