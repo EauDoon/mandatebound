@@ -382,7 +382,7 @@ test("help lists every dispatcher action, the simulate scenarios and the exit co
   const help = JSON.parse((await invoke(["--help"], "")).stdout).result;
 
   const withActions = help.commands.filter((command) => command.actions !== undefined);
-  assert.deepEqual(withActions.map((command) => command.name), ["casepack", "policy", "ap2-dispute", "operator"]);
+  assert.deepEqual(withActions.map((command) => command.name), ["casepack", "policy", "ap2-dispute", "verifiable-intent", "operator"]);
   for (const command of withActions) {
     assert.equal(new Set(command.actions).size, command.actions.length, command.name);
     for (const action of command.actions) {

@@ -39,6 +39,32 @@
     "builtInNetworkAccess": false,
     "legalEffect": "not-determined"
   },
+  "verifiableIntentProfile": {
+    "id": "verifiable-intent-v0.1+356c29635f1c44df7de02edb58699ca9f29bece6",
+    "repository": "agent-intent/verifiable-intent",
+    "commit": "356c29635f1c44df7de02edb58699ca9f29bece6",
+    "specVersion": "0.1",
+    "modes": [
+      "immediate",
+      "autonomous"
+    ],
+    "mandatePairs": 1,
+    "evaluatedConstraints": [
+      "mandate.checkout.allowed_merchants",
+      "mandate.checkout.line_items",
+      "mandate.payment.allowed_payees",
+      "mandate.payment.amount_range",
+      "mandate.payment.reference"
+    ],
+    "networkEnforcedConstraints": [
+      "mandate.payment.agent_recurrence",
+      "mandate.payment.budget",
+      "mandate.payment.recurrence"
+    ],
+    "goldenFixture": "test/fixtures/verifiable-intent-v0.1-reference-sdk-golden.json",
+    "builtInNetworkAccess": false,
+    "legalEffect": "not-determined"
+  },
   "capabilities": [
     {
       "id": "native_evidence_bundle_v1",
@@ -73,6 +99,10 @@
       "status": "supported"
     },
     {
+      "id": "verifiable_intent_0_1_chain_evidence",
+      "status": "supported"
+    },
+    {
       "id": "ucp_mcp_transport",
       "status": "deferred"
     },
@@ -101,6 +131,7 @@
     "test/ap2-dispute-constraints.test.mjs",
     "test/ap2-dispute-tools.test.mjs",
     "test/ap2-dispute-packet.test.mjs",
+    "test/verifiable-intent.test.mjs",
     "test/policy-tools-v11.test.mjs",
     "test/conformance-v12.test.mjs",
     "test/review-external.test.mjs"

@@ -73,6 +73,12 @@ const CAPABILITIES: readonly CapabilityDeclaration[] = Object.freeze([
     boundary: "Source truth stays unknown, legal effect stays not determined, and upstream validity remains a caller assertion; source signatures are never re-verified here.",
   }),
   Object.freeze({
+    id: "verifiable_intent_0_1_chain_evidence",
+    status: "supported",
+    scope: "Verify one preserved Verifiable Intent v0.1 chain, Immediate or Autonomous with one mandate pair, against pinned keys, and evaluate its disclosed constraints.",
+    boundary: "Pinned to the reference repository commit, not a numbered VI release; network-enforced constraints are never evaluated, and no dispute outcome or legal effect is determined.",
+  }),
+  Object.freeze({
     id: "ucp_mcp_transport",
     status: "deferred",
     scope: "UCP transport over MCP.",

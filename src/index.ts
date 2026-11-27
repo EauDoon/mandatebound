@@ -22,6 +22,7 @@ export * from "./strict-json.js";
 export * from "./trust.js";
 export * from "./ucp-ap2.js";
 export * from "./validation.js";
+export * from "./verifiable-intent.js";
 export * from "./version.js";
 
 export {
