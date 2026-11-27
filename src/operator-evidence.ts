@@ -136,7 +136,10 @@ export function inspectCaseValidityWindows(input: CaseAssessmentInput) {
   const windows = declared.map((item) => ({ ...item,
     state: assessmentMillis === null ? "unknown" : assessmentMillis < Date.parse(item.from) ? "not_yet_valid"
       : assessmentMillis >= Date.parse(item.until) ? "expired" : "within_window",
-    remainingSeconds: assessmentMillis === null ? null : Math.max(0, (Date.parse(item.until) - assessmentMillis) / 1_000),
+    // Whole seconds, rounded down: a fraction is not protocol JSON (the strict
+    // reader and the canonical form accept safe integers only), and rounding
+    // up would overstate the remaining validity.
+    remainingSeconds: assessmentMillis === null ? null : Math.max(0, Math.floor((Date.parse(item.until) - assessmentMillis) / 1_000)),
   })).sort((a, b) => Date.parse(a.until) - Date.parse(b.until) || (`${a.kind}:${a.id}` < `${b.kind}:${b.id}` ? -1 : 1));
   return { format: "MandateBoundValidityWindows/v1" as const, ...boundary, windows,
     findings: report.findings.map(({ code, path }) => ({ code, path })),

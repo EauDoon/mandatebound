@@ -259,12 +259,14 @@ function decodeUtf8(bytes: Uint8Array): string {
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const first = argv[0];
-  const command = first === "--help" ? "help" : first === "--version" ? "version" : first;
+  const command = first === "--help" || first === "-h" ? "help" : first === "--version" ? "version" : first;
   const positionals: string[] = [];
   const options: Record<string, string | boolean> = Object.create(null) as Record<string, string | boolean>;
   for (let index = 1; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === undefined) continue;
+    const given = argv[index];
+    if (given === undefined) continue;
+    // -h is the one short option: the conventional alias for --help.
+    const argument = given === "-h" ? "--help" : given;
     if (VALUE_OPTIONS.has(argument)) {
       const value = argv[index + 1];
       if (value === undefined || value.startsWith("--")) {

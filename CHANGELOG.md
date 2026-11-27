@@ -16,11 +16,14 @@ in [Protocol v1](docs/PROTOCOL.md).
 - Add findings and envelope metadata CSV exports. Each carries the assessment status and assurance boundaries even for an empty collection.
 - Normalize Unicode line and paragraph separators in single-line Markdown report fields.
 - Include native-bundle verification and trust-check counts in HTML and Markdown reports, and preserve per-envelope evidence results in Markdown exports.
+- Accept `-h` as an alias for `--help`, as the first argument or after a command.
 
 ### Fixed
 
 - The next patch clarifies empty HTML and Markdown coverage results. A failed assessment without coverage rows no longer displays a reassuring zero-review count. JSON and CSV formats remain unchanged.
 - Validate an appeal's first filing with the same replay rules as later events before storing it. Store verification and JSONL reopen now also reject previously stored filings that appeal replay marks conflicted.
+- Keep CasePack `delegationStatus` and `externalTrustStatus` as `unknown` when the caller's `asOf` anchor is not a canonical timestamp. The window checks used to run on the rejected instant, and an unparseable one reported both as `satisfied`. `valid` was already `false` in this case and stays `false`; no delegation or external trust expiry finding is derived from a rejected instant.
+- Report `remainingSeconds` in `operator windows` (`inspectCaseValidityWindows`) as whole seconds rounded down. An `asOf` with nonzero milliseconds used to produce a fraction, which the package's own strict JSON reader and canonical form reject.
 - Render control and invisible Unicode format characters visibly in Markdown exports to prevent terminal control and bidirectional display spoofing; signed evidence and replay bytes are unchanged.
 
 ## [2.1.0] - 2026-10-30

@@ -299,9 +299,14 @@ export function verifyMandateBoundCasePack(
   let integrityStatus: CasePackStatus = issues.length === 0 ? "satisfied" : "conflicting";
 
   const contract = pack.coverageContract;
+  // Every window check below compares against this instant. An instant that
+  // is not a canonical timestamp parses to NaN or to a different moment, and
+  // NaN compares false against both window bounds, so a time-bound status
+  // would read as satisfied. Those statuses stay unknown instead.
+  const asOfValid = isTimestamp(anchors.asOf);
   let coverageTrustStatus: CasePackStatus = "satisfied";
   if (
-    !isTimestamp(anchors.asOf)
+    !asOfValid
     || !isSha256Digest(anchors.coveragePolicyDigest)
     || !isSha256Digest(anchors.coverageContractDigest)
   ) {
@@ -331,6 +336,8 @@ export function verifyMandateBoundCasePack(
     } else if (snapshot.snapshotDigest !== anchors.externalTrustSnapshotDigest) {
       externalTrustStatus = "conflicting";
       addIssue(issues, "$.externalTrustSnapshot", "MBCP_EXTERNAL_TRUST_PIN_MISMATCH", "External trust snapshot does not match caller-owned pin");
+    } else if (!asOfValid) {
+      externalTrustStatus = "unknown";
     } else if (
       timestampMillis(anchors.asOf) < timestampMillis(snapshot.issuedAt)
       || timestampMillis(anchors.asOf) >= timestampMillis(snapshot.expiresAt)
@@ -344,7 +351,9 @@ export function verifyMandateBoundCasePack(
   }
 
   let delegationStatus: CasePackStatus = "satisfied";
-  if (
+  if (!asOfValid) {
+    delegationStatus = "unknown";
+  } else if (
     timestampMillis(anchors.asOf) < timestampMillis(pack.delegationContext.validFrom)
     || timestampMillis(anchors.asOf) >= timestampMillis(pack.delegationContext.validUntil)
   ) {

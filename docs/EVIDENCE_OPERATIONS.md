@@ -69,8 +69,9 @@ window to the caller's explicit `asOf`, never the machine clock. Starts are incl
 ends exclusive. States are `not_yet_valid`, `within_window`, `expired`, or `unknown`
 for an unusable assessment instant. As with the timeline, parseable noncanonical
 dates remain unknown; `remainingSeconds` is `null`, and verifier code/path findings
-are retained. Remaining seconds are clamped to zero after
-expiry. Window membership grants no authority and does not validate a key or proof.
+are retained. Remaining seconds are whole seconds rounded down, so a window in
+its final second reports `0` while still `within_window`, and are clamped to zero
+after expiry. Window membership grants no authority and does not validate a key or proof.
 
 ## Reused content
 
