@@ -259,7 +259,7 @@ requires `--expected-receipt-digest`.
 published declaration for this release, which a test keeps equal to it, is
 described in [the conformance README](../conformance/v2.1/README.md).
 
-`help` (or `--help`) and `version` (or `--version`) take no input and exit 0.
+`help` (or `--help`, `-h`) and `version` (or `--version`) take no input and exit 0.
 Both print `name`, `version`, `protocolVersion`, `releaseVersion`,
 `engineVersion` and `ap2PackFormatRelease`. `version` is kept as an alias of
 `protocolVersion` for existing callers; `releaseVersion` is the package release

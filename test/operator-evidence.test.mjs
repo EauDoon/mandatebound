@@ -357,3 +357,25 @@ test("assessment receipts digest CasePacks inside the format canonical budget", 
   assert.equal(receipt.valid, false);
   assert.match(receipt.receiptDigest, /^sha256:[a-f0-9]{64}$/);
 });
+
+test("validity windows report whole remaining seconds that the strict JSON reader accepts", async () => {
+  const value = input();
+  // 500 ms into a second: every window end is on a whole second, so the
+  // remaining time is not a whole number of seconds.
+  const midSecond = { ...value, anchors: { ...value.anchors, asOf: "2026-07-23T00:00:00.500Z" } };
+  const report = sdk.inspectCaseValidityWindows(midSecond);
+  assert.ok(report.windows.length > 0);
+  for (const item of report.windows) {
+    assert.equal(item.state, "within_window");
+    assert.ok(Number.isSafeInteger(item.remainingSeconds), `${item.kind} ${String(item.remainingSeconds)}`);
+    // Rounded down, never up: the report must not overstate remaining validity.
+    assert.equal(
+      item.remainingSeconds,
+      Math.floor((Date.parse(item.until) - Date.parse(midSecond.anchors.asOf)) / 1_000),
+    );
+  }
+  assert.doesNotThrow(() => sdk.canonicalize(report));
+  const printed = await cli("windows", midSecond);
+  assert.equal(printed.code, 0);
+  assert.doesNotThrow(() => sdk.parseStrictJson(JSON.stringify(printed.body)));
+});

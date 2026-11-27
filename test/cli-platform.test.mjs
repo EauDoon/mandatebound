@@ -999,3 +999,15 @@ test("simulate command runs a named synthetic scenario", async () => {
   assert.equal(ambiguous.code, CLI_EXIT.USAGE);
   assert.equal(JSON.parse(ambiguous.stdout).error.code, "ALB_CLI_USAGE");
 });
+
+test("-h prints the same help as --help, first or after a command", async () => {
+  const long = await invoke(["--help"], "");
+  for (const argv of [["-h"], ["simulate", "-h"], ["casepack", "verify", "-h"]]) {
+    const short = await invoke(argv, "");
+    assert.equal(short.code, CLI_EXIT.SUCCESS, argv.join(" "));
+    assert.equal(short.stdout, long.stdout, argv.join(" "));
+    assert.equal(short.stderr, "", argv.join(" "));
+  }
+  const repeated = await invoke(["simulate", "-h", "--help"], "");
+  assert.equal(repeated.code, CLI_EXIT.USAGE);
+});
